@@ -90,6 +90,20 @@ public static class PixelArtService
         return SkinService.CreateAvatarFromSkin(pixels);
     }
 
+    /// <summary>The accountless placeholder face: the bundled default Alex head.</summary>
+    public static WriteableBitmap CreateAlexAvatarBitmap()
+    {
+        try
+        {
+            using var stream = AssetLoader.Open(new Uri("avares://NegiCraftLauncher.App/Assets/skin_alex.png"));
+            return SkinService.CreateAvatarFromSkin(SkinService.LoadSkinPixelsFromStream(stream));
+        }
+        catch
+        {
+            return SkinService.CreateAvatarFromSkin(SkinService.CreateDefaultSteveSkin());
+        }
+    }
+
     public static WriteableBitmap CreateBackgroundBitmap(bool dark)
     {
         int w = 240;
