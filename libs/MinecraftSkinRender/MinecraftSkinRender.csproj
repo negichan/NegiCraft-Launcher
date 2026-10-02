@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <TargetFramework>net10.0</TargetFramework>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <Nullable>enable</Nullable>
+        <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+        <!-- Vendored from Coloryr/MinecraftSkinRender (MIT) @ 8da2c913, released as 1.2.0. See VENDOR.md. -->
+        <IsPackable>false</IsPackable>
+        <GenerateDocumentationFile>false</GenerateDocumentationFile>
+        <!-- Upstream code was written without nullable annotations; keep its warnings out of our build. -->
+        <NoWarn>$(NoWarn);CS8618</NoWarn>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <PackageReference Include="SkiaSharp" Version="3.119.2" />
+    </ItemGroup>
+</Project>
