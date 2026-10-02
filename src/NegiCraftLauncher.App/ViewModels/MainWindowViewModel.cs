@@ -203,8 +203,13 @@ public partial class MainWindowViewModel : ViewModelBase
 
     public ObservableCollection<AccountModel> Accounts { get; } = new();
 
+    public bool HasAccounts => Accounts.Count > 0;
+
     [ObservableProperty]
     private AccountModel? _currentAccount;
+
+    /// <summary>Drives the home 3D preview: with no account there is nobody to render.</summary>
+    public bool HasAccount => CurrentAccount is not null;
 
     [ObservableProperty]
     private bool _isAccPopOpen;
@@ -212,7 +217,8 @@ public partial class MainWindowViewModel : ViewModelBase
     partial void OnCurrentAccountChanged(AccountModel? value)
     {
         foreach (var a in Accounts) a.IsCurrent = ReferenceEquals(a, value);
-        AvatarBitmap = value?.AvatarBitmap;
+        AvatarBitmap = value?.AvatarBitmap ?? NoAccountAvatar;
+        OnPropertyChanged(nameof(HasAccount));
     }
 
     [RelayCommand]
@@ -283,10 +289,14 @@ public partial class MainWindowViewModel : ViewModelBase
         }
 
         CurrentAccount = Accounts.FirstOrDefault(a => a.Id == currentId) ?? Accounts.FirstOrDefault();
-        AvatarBitmap = CurrentAccount?.AvatarBitmap;
+        AvatarBitmap = CurrentAccount?.AvatarBitmap ?? NoAccountAvatar;
+        OnPropertyChanged(nameof(HasAccounts));
     }
 
     private static IImage DefaultAvatar { get; } = PixelArtService.CreateAvatarBitmap();
+
+    /// <summary>Shown in the sidebar while there is no account at all.</summary>
+    private static IImage NoAccountAvatar { get; } = PixelArtService.CreateAlexAvatarBitmap();
 
     private async Task LoadAvatarAsync(AccountModel model)
     {
@@ -515,6 +525,8 @@ public partial class MainWindowViewModel : ViewModelBase
         if (CurrentAccount is not { } account)
         {
             ShowBanner("请先添加一个账户。");
+            IsAccPopOpen = true;
+            IsInstPopOpen = false;
             return;
         }
 

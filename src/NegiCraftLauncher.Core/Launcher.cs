@@ -41,11 +41,6 @@ public sealed class Launcher
     public void Initialize()
     {
         Accounts.Load();
-        if (Accounts.Current is null)
-        {
-            Accounts.AddOffline("Steve");
-        }
-
         Instances.Load();
     }
 

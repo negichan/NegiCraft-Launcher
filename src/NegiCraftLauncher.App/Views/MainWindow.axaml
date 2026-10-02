@@ -509,7 +509,7 @@
                 <!-- PAGE 1: HOME -->
                 <Panel IsVisible="{Binding IsOnHome}" Margin="-100,-22,-28,-22">
                     <!-- .stage: top: 44px; left: 92px; width: 160px; height: 250px; -->
-                    <Canvas>
+                    <Canvas IsVisible="{Binding HasAccount}">
                         <controls:MinecraftSkinPreview x:Name="SkinPreview"
                                                        Canvas.Left="92" Canvas.Top="44"
                                                        PlayerName="{Binding CurrentAccount.Name}"/>
@@ -1154,7 +1154,7 @@
                     </ScrollViewer>
 
                     <!-- Separator -->
-                    <Rectangle Height="1" Fill="#26262b" Margin="0,6"/>
+                    <Rectangle Height="1" Fill="#26262b" Margin="0,6" IsVisible="{Binding HasAccounts}"/>
 
                     <Button Classes="MenuItem" Command="{Binding AddOfflineAccountCommand}">
                         <StackPanel Orientation="Horizontal" Spacing="10">

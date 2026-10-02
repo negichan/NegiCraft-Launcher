@@ -14,7 +14,6 @@ public static class SkinService
 
     public static uint[] LoadSkinPixelsFromFile(string filePath)
     {
-        var pixels = new uint[64 * 64];
         if (!File.Exists(filePath))
         {
             return CreateDefaultSteveSkin();
@@ -23,6 +22,20 @@ public static class SkinService
         try
         {
             using var stream = File.OpenRead(filePath);
+            return LoadSkinPixelsFromStream(stream);
+        }
+        catch
+        {
+            return CreateDefaultSteveSkin();
+        }
+    }
+
+    /// <summary>Decodes a 64x64 skin texture from any PNG stream (file on disk or embedded asset).</summary>
+    public static uint[] LoadSkinPixelsFromStream(Stream stream)
+    {
+        var pixels = new uint[64 * 64];
+        try
+        {
             var bmp = new Bitmap(stream);
             var wb = new WriteableBitmap(new PixelSize(64, 64), new Vector(96, 96), PixelFormat.Bgra8888, AlphaFormat.Premul);
             using (var fb = wb.Lock())
