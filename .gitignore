@@ -1,0 +1,9 @@
+bin/
+obj/
+.vs/
+*.user
+
+# 设计稿、mockup 与截图验证产物
+design/
+# 内部分析文档
+docs/
