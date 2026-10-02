@@ -1,0 +1,28 @@
+<ResourceDictionary xmlns="https://github.com/avaloniaui"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <!--
+        NegiCraftLauncher design tokens (shadcn/ui "zinc", dark).
+        Values mirror design/mockup.html :root[data-theme="dark"].
+    -->
+    <Color x:Key="AppColor">#09090B</Color>
+    <Color x:Key="CardColor">#111114</Color>
+    <Color x:Key="AccentColor">#1C1C21</Color>
+    <Color x:Key="BorderColor">#26262B</Color>
+    <Color x:Key="RingColor">#52525B</Color>
+    <Color x:Key="ForegroundColor">#FAFAFA</Color>
+    <Color x:Key="MutedForegroundColor">#A1A1AA</Color>
+    <Color x:Key="PrimaryColor">#FAFAFA</Color>
+    <Color x:Key="PrimaryForegroundColor">#18181B</Color>
+    <Color x:Key="MutedColor">#27272A</Color>
+
+    <SolidColorBrush x:Key="AppBackgroundBrush" Color="{StaticResource AppColor}" />
+    <SolidColorBrush x:Key="CardBackgroundBrush" Color="{StaticResource CardColor}" />
+    <SolidColorBrush x:Key="AccentBrush" Color="{StaticResource AccentColor}" />
+    <SolidColorBrush x:Key="BorderLineBrush" Color="{StaticResource BorderColor}" />
+    <SolidColorBrush x:Key="RingBrush" Color="{StaticResource RingColor}" />
+    <SolidColorBrush x:Key="ForegroundBrush" Color="{StaticResource ForegroundColor}" />
+    <SolidColorBrush x:Key="MutedForegroundBrush" Color="{StaticResource MutedForegroundColor}" />
+    <SolidColorBrush x:Key="PrimaryBrush" Color="{StaticResource PrimaryColor}" />
+    <SolidColorBrush x:Key="PrimaryForegroundBrush" Color="{StaticResource PrimaryForegroundColor}" />
+    <SolidColorBrush x:Key="MutedBrush" Color="{StaticResource MutedColor}" />
+</ResourceDictionary>

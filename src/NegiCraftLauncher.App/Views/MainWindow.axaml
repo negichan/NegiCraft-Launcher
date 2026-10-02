@@ -1,0 +1,1393 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:NegiCraftLauncher.App.ViewModels"
+        xmlns:models="using:NegiCraftLauncher.App.Models"
+        xmlns:controls="using:NegiCraftLauncher.App.Controls"
+        xmlns:pop="using:NegiCraftLauncher.App.Views"
+        xmlns:materialIcons="clr-namespace:Material.Icons.Avalonia;assembly=Material.Icons.Avalonia"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        mc:Ignorable="d" d:DesignWidth="1180" d:DesignHeight="720"
+        x:Class="NegiCraftLauncher.App.Views.MainWindow"
+        x:DataType="vm:MainWindowViewModel"
+        Width="1180" Height="720"
+        MinWidth="960" MinHeight="620"
+        WindowStartupLocation="CenterScreen"
+        WindowDecorations="None"
+        Background="Transparent"
+        TransparencyLevelHint="Transparent"
+        Icon="avares://NegiCraftLauncher.App/Assets/app.ico"
+        KeyDown="OnWindowKeyDown"
+        KeyUp="OnWindowKeyUp"
+        Title="NegiCraft Launcher">
+
+    <Window.Resources>
+        <!-- One download-task row, shared by the popover and the settings 下载中心 list.
+             Action buttons reach the window VM because the row's own type is DownloadTaskModel. -->
+        <DataTemplate x:Key="DownloadRowTemplate" x:DataType="models:DownloadTaskModel">
+            <Border BorderBrush="#26262b" BorderThickness="0,0,0,1" Padding="12,10">
+                <StackPanel Spacing="8">
+                    <Grid ColumnDefinitions="* Auto">
+                        <StackPanel Grid.Column="0" Spacing="3" VerticalAlignment="Center">
+                            <TextBlock Text="{Binding Name}" FontWeight="Bold" FontSize="13"
+                                       Foreground="#fafafa" TextTrimming="CharacterEllipsis"/>
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <TextBlock Text="{Binding Status}" FontSize="12" Foreground="#a1a1aa"/>
+                                <TextBlock Text="{Binding PercentText}" FontSize="12" Foreground="#71717a"/>
+                            </StackPanel>
+                        </StackPanel>
+                        <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                            <Button Classes="BtnSm BtnOutline" Content="暂停" Height="26" FontSize="12" Padding="10,0"
+                                    IsVisible="{Binding IsRunning}"
+                                    Command="{Binding $parent[Window].((vm:MainWindowViewModel)DataContext).PauseDownloadTaskCommand}"
+                                    CommandParameter="{Binding .}"/>
+                            <Button Classes="BtnSm BtnOutline" Content="取消" Height="26" FontSize="12" Padding="10,0"
+                                    IsVisible="{Binding IsRunning}"
+                                    Command="{Binding $parent[Window].((vm:MainWindowViewModel)DataContext).CancelDownloadTaskCommand}"
+                                    CommandParameter="{Binding .}"/>
+                            <Button Classes="BtnSm BtnOutline" Content="继续" Height="26" FontSize="12" Padding="10,0"
+                                    IsVisible="{Binding CanResume}"
+                                    Command="{Binding $parent[Window].((vm:MainWindowViewModel)DataContext).ResumeDownloadTaskCommand}"
+                                    CommandParameter="{Binding .}"/>
+                        </StackPanel>
+                    </Grid>
+                    <ProgressBar Value="{Binding Progress}" Maximum="100" Height="4"
+                                 CornerRadius="999" Foreground="#fafafa" Background="#26262b"/>
+                    <TextBlock Text="{Binding Detail}" FontSize="12" Foreground="#71717a"
+                               TextTrimming="CharacterEllipsis"/>
+                </StackPanel>
+            </Border>
+        </DataTemplate>
+    </Window.Resources>
+
+    <Window.Styles>
+        <!-- Nav Button: 42x42, radius 12, icon 20x20 -->
+        <Style Selector="Button.NavBtn">
+            <Setter Property="Width" Value="42"/>
+            <Setter Property="Height" Value="42"/>
+            <Setter Property="CornerRadius" Value="12"/>
+            <Setter Property="Padding" Value="0"/>
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Foreground" Value="#a1a1aa"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="HorizontalContentAlignment" Value="Center"/>
+            <Setter Property="VerticalContentAlignment" Value="Center"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Transitions">
+                <Transitions>
+                    <BrushTransition Property="Background" Duration="0:0:0.15"/>
+                    <BrushTransition Property="Foreground" Duration="0:0:0.15"/>
+                </Transitions>
+            </Setter>
+        </Style>
+        <Style Selector="Button.NavBtn:pointerover">
+            <Setter Property="Background" Value="#1c1c21"/>
+            <Setter Property="Foreground" Value="#fafafa"/>
+        </Style>
+        <Style Selector="Button.NavBtn.Active">
+            <Setter Property="Background" Value="#fafafa"/>
+            <Setter Property="Foreground" Value="#18181b"/>
+        </Style>
+        <Style Selector="Button.NavBtn.Active:pointerover">
+            <Setter Property="Background" Value="#fafafa"/>
+            <Setter Property="Foreground" Value="#18181b"/>
+        </Style>
+
+        <!-- Sidebar on Home translucency -->
+        <Style Selector="Border.Sidebar">
+            <Setter Property="Background" Value="#111114"/>
+            <Setter Property="BorderBrush" Value="#26262b"/>
+        </Style>
+        <Style Selector="Border.Sidebar.OnHome">
+            <Setter Property="Background" Value="#8C0E0E12"/>
+            <Setter Property="BorderBrush" Value="#17FFFFFF"/>
+        </Style>
+        <Style Selector="Border.Sidebar.OnHome Button.NavBtn:not(.Active)">
+            <Setter Property="Foreground" Value="#fafafa"/>
+            <Setter Property="Opacity" Value="0.75"/>
+        </Style>
+        <Style Selector="Border.Sidebar.OnHome Button.NavBtn:not(.Active):pointerover">
+            <Setter Property="Background" Value="#2E7F7F7F"/>
+            <Setter Property="Foreground" Value="#ffffff"/>
+            <Setter Property="Opacity" Value="1.0"/>
+        </Style>
+
+        <!-- Window Control Button: 32x32 square, radius 9 -->
+        <Style Selector="Button.WinCtrl">
+            <Setter Property="Width" Value="32"/>
+            <Setter Property="Height" Value="32"/>
+            <Setter Property="CornerRadius" Value="9"/>
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Foreground" Value="#a1a1aa"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Padding" Value="0"/>
+            <Setter Property="HorizontalContentAlignment" Value="Center"/>
+            <Setter Property="VerticalContentAlignment" Value="Center"/>
+            <Setter Property="Cursor" Value="Hand"/>
+        </Style>
+        <Style Selector="Button.WinCtrl:pointerover">
+            <Setter Property="Background" Value="#1c1c21"/>
+            <Setter Property="Foreground" Value="#fafafa"/>
+        </Style>
+        <Style Selector="Button.WinCtrl.Close:pointerover">
+            <Setter Property="Background" Value="#e81123"/>
+            <Setter Property="Foreground" Value="#ffffff"/>
+        </Style>
+
+        <!-- General Shadcn Button Styles -->
+        <Style Selector="Button.Btn">
+            <Setter Property="Height" Value="36"/>
+            <Setter Property="Padding" Value="16,0"/>
+            <Setter Property="CornerRadius" Value="10"/>
+            <Setter Property="FontWeight" Value="Medium"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="HorizontalContentAlignment" Value="Center"/>
+            <Setter Property="VerticalContentAlignment" Value="Center"/>
+        </Style>
+        <Style Selector="Button.BtnSm">
+            <Setter Property="Height" Value="32"/>
+            <Setter Property="Padding" Value="12,0"/>
+            <Setter Property="FontSize" Value="13"/>
+            <Setter Property="CornerRadius" Value="10"/>
+            <Setter Property="FontWeight" Value="Medium"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="HorizontalContentAlignment" Value="Center"/>
+            <Setter Property="VerticalContentAlignment" Value="Center"/>
+        </Style>
+        <Style Selector="Button.BtnPrimary">
+            <Setter Property="Background" Value="#fafafa"/>
+            <Setter Property="Foreground" Value="#18181b"/>
+        </Style>
+        <Style Selector="Button.BtnPrimary:pointerover">
+            <Setter Property="Opacity" Value="0.9"/>
+        </Style>
+        <Style Selector="Button.BtnOutline">
+            <Setter Property="Background" Value="#111114"/>
+            <Setter Property="Foreground" Value="#fafafa"/>
+            <Setter Property="BorderBrush" Value="#26262b"/>
+            <Setter Property="BorderThickness" Value="1"/>
+        </Style>
+        <Style Selector="Button.BtnOutline:pointerover">
+            <Setter Property="Background" Value="#1c1c21"/>
+        </Style>
+
+        <!-- Instance Selector in Dock -->
+        <Style Selector="Button.InstSelect">
+            <Setter Property="Height" Value="52"/>
+            <Setter Property="Padding" Value="6,0,10,0"/>
+            <Setter Property="CornerRadius" Value="12"/>
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+            <Setter Property="VerticalContentAlignment" Value="Center"/>
+            <Setter Property="RenderTransformOrigin" Value="50%,50%"/>
+            <Setter Property="RenderTransform" Value="none"/>
+            <Setter Property="Transitions">
+                <Transitions>
+                    <BrushTransition Property="Background" Duration="0:0:0.16" Easing="CubicEaseOut"/>
+                    <TransformOperationsTransition Property="RenderTransform" Duration="0:0:0.16" Easing="CubicEaseOut"/>
+                </Transitions>
+            </Setter>
+        </Style>
+        <Style Selector="Button.InstSelect:pointerover">
+            <Setter Property="Background" Value="#297F7F7F"/>
+            <Setter Property="RenderTransform" Value="scale(1.02)"/>
+        </Style>
+
+        <!-- Launch button: colours live here (not inline) so :pointerover can override them -->
+        <Style Selector="Button.LaunchBtn">
+            <Setter Property="Background" Value="#fafafa"/>
+            <Setter Property="Foreground" Value="#18181b"/>
+            <Setter Property="RenderTransformOrigin" Value="50%,50%"/>
+            <Setter Property="RenderTransform" Value="none"/>
+            <Setter Property="Transitions">
+                <Transitions>
+                    <BrushTransition Property="Background" Duration="0:0:0.16" Easing="CubicEaseOut"/>
+                    <TransformOperationsTransition Property="RenderTransform" Duration="0:0:0.18" Easing="CubicEaseOut"/>
+                </Transitions>
+            </Setter>
+        </Style>
+        <Style Selector="Button.LaunchBtn:pointerover">
+            <Setter Property="Background" Value="#ffffff"/>
+            <Setter Property="RenderTransform" Value="scale(1.03)"/>
+        </Style>
+
+        <!-- Popovers stay in the tree (hidden by opacity + not hit-testable) because toggling IsVisible
+             would drop them out of layout. Views/Pop.cs drives the whole motion, opacity included:
+             Avalonia has no animator for RenderTransform, so the stages cannot be a transition. -->
+        <Style Selector="Border.Popover">
+            <Setter Property="Opacity" Value="0"/>
+            <Setter Property="IsHitTestVisible" Value="False"/>
+        </Style>
+        <Style Selector="Border.Popover.Open">
+            <Setter Property="IsHitTestVisible" Value="True"/>
+        </Style>
+
+        <!-- Instance Grid Card -->
+        <Style Selector="Button.InstCard">
+            <Setter Property="Padding" Value="14"/>
+            <Setter Property="CornerRadius" Value="14"/>
+            <Setter Property="Background" Value="#111114"/>
+            <Setter Property="BorderBrush" Value="#26262b"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+            <Setter Property="VerticalContentAlignment" Value="Center"/>
+        </Style>
+        <Style Selector="Button.InstCard:pointerover">
+            <Setter Property="BorderBrush" Value="#52525b"/>
+        </Style>
+        <Style Selector="Button.InstCard.Current">
+            <Setter Property="BorderBrush" Value="#fafafa"/>
+        </Style>
+
+        <!-- Segmented Tab Button: 28px height, 7px radius -->
+        <Style Selector="Button.SegmentBtn">
+            <Setter Property="Height" Value="28"/>
+            <Setter Property="Padding" Value="12,0"/>
+            <Setter Property="CornerRadius" Value="7"/>
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Foreground" Value="#a1a1aa"/>
+            <Setter Property="FontSize" Value="13"/>
+            <Setter Property="FontWeight" Value="Medium"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="HorizontalContentAlignment" Value="Center"/>
+            <Setter Property="VerticalContentAlignment" Value="Center"/>
+        </Style>
+        <Style Selector="Button.SegmentBtn:pointerover">
+            <Setter Property="Foreground" Value="#fafafa"/>
+        </Style>
+        <Style Selector="Button.SegmentBtn.On">
+            <Setter Property="Background" Value="#111114"/>
+            <Setter Property="Foreground" Value="#fafafa"/>
+        </Style>
+
+        <!-- Setting Nav Button -->
+        <Style Selector="Button.SetNavBtn">
+            <Setter Property="Height" Value="34"/>
+            <Setter Property="Padding" Value="12,0"/>
+            <Setter Property="CornerRadius" Value="8"/>
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Foreground" Value="#a1a1aa"/>
+            <Setter Property="FontWeight" Value="Medium"/>
+            <Setter Property="HorizontalContentAlignment" Value="Left"/>
+            <Setter Property="VerticalContentAlignment" Value="Center"/>
+            <Setter Property="HorizontalAlignment" Value="Stretch"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="BorderThickness" Value="0"/>
+        </Style>
+        <Style Selector="Button.SetNavBtn:pointerover">
+            <Setter Property="Background" Value="#1c1c21"/>
+            <Setter Property="Foreground" Value="#fafafa"/>
+        </Style>
+        <Style Selector="Button.SetNavBtn.On">
+            <Setter Property="Background" Value="#1c1c21"/>
+            <Setter Property="Foreground" Value="#fafafa"/>
+        </Style>
+
+        <!-- Menu Item in Popover -->
+        <Style Selector="Button.MenuItem">
+            <Setter Property="Padding" Value="8"/>
+            <Setter Property="CornerRadius" Value="8"/>
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+            <Setter Property="HorizontalAlignment" Value="Stretch"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="BorderThickness" Value="0"/>
+        </Style>
+        <Style Selector="Button.MenuItem:pointerover">
+            <Setter Property="Background" Value="#1c1c21"/>
+        </Style>
+    </Window.Styles>
+
+    <!-- Outermost Window Shell: 22px border radius, background #09090b -->
+    <Border x:Name="Shell"
+            Background="#09090b"
+            CornerRadius="22"
+            ClipToBounds="True"
+            BoxShadow="0 30 80 -20 #CC000000">
+
+        <Panel>
+            <!-- ========================================== -->
+            <!-- 1. PIXEL BACKGROUND & SHADE (Home only)    -->
+            <!-- ========================================== -->
+            <Panel IsVisible="{Binding IsOnHome}">
+                <!-- The generated 240x146 scene is stretched to fill and kept crisp; a picked photo
+                     is cropped to the shell and interpolated. RenderOptions cannot be bound, so the
+                     two cases are separate elements. -->
+                <Panel x:Name="BgLayer">
+                    <Panel.Effect>
+                        <BlurEffect Radius="{Binding BgBlur}"/>
+                    </Panel.Effect>
+                    <Image Source="{Binding BgBitmap}"
+                           Stretch="Fill"
+                           RenderOptions.BitmapInterpolationMode="None"
+                           IsVisible="{Binding !IsCustomBackground}"/>
+                    <Image Source="{Binding BgBitmap}"
+                           Stretch="UniformToFill"
+                           IsVisible="{Binding IsCustomBackground}"/>
+                </Panel>
+
+                <!-- 亮度: negative dims the art under a black wash, positive lifts it with a white one -->
+                <Border Background="#ffffff" Opacity="{Binding BgLightOpacity}" IsHitTestVisible="False"/>
+                <Border Background="#000000" Opacity="{Binding BgDarkOpacity}" IsHitTestVisible="False"/>
+
+                <!-- .shade gradient overlay -->
+                <Panel>
+                    <Border>
+                        <Border.Background>
+                            <LinearGradientBrush StartPoint="0%,100%" EndPoint="0%,68%">
+                                <GradientStop Color="#73000000" Offset="0.0"/>
+                                <GradientStop Color="#00000000" Offset="1.0"/>
+                            </LinearGradientBrush>
+                        </Border.Background>
+                    </Border>
+                    <Border>
+                        <Border.Background>
+                            <LinearGradientBrush StartPoint="100%,0%" EndPoint="55%,0%">
+                                <GradientStop Color="#33000000" Offset="0.0"/>
+                                <GradientStop Color="#00000000" Offset="1.0"/>
+                            </LinearGradientBrush>
+                        </Border.Background>
+                    </Border>
+                </Panel>
+            </Panel>
+
+            <!-- ========================================== -->
+            <!-- 2. TOP DRAG AREA & CONTROLS                -->
+            <!-- ========================================== -->
+            <!-- Draggable Region -->
+            <Border Height="40" Margin="88,0,100,0"
+                    VerticalAlignment="Top"
+                    Background="Transparent"
+                    PointerPressed="OnDragAreaPointerPressed"
+                    ZIndex="25"/>
+
+            <!-- Top Right: ONLY Minimize & Close (1:1 with Material Icons) -->
+            <StackPanel Orientation="Horizontal" Spacing="4"
+                        HorizontalAlignment="Right" VerticalAlignment="Top"
+                        Margin="0,12,14,0" ZIndex="30">
+                <Button Classes="WinCtrl" ToolTip.Tip="最小化" Click="OnMinimizeClick">
+                    <materialIcons:MaterialIcon Kind="WindowMinimize" Width="17" Height="17"/>
+                </Button>
+                <Button Classes="WinCtrl Close" ToolTip.Tip="关闭" Click="OnCloseClick">
+                    <materialIcons:MaterialIcon Kind="Close" Width="17" Height="17"/>
+                </Button>
+            </StackPanel>
+
+            <!-- ========================================== -->
+            <!-- 3. FROSTED BACKDROP UNDER THE SIDEBAR      -->
+            <!-- ========================================== -->
+            <Border HorizontalAlignment="Left" VerticalAlignment="Stretch"
+                    Margin="12" Width="60"
+                    CornerRadius="18"
+                    ClipToBounds="True"
+                    IsHitTestVisible="False"
+                    IsVisible="{Binding IsOnHome}"
+                    ZIndex="19">
+                <Panel>
+                    <!-- the shell art again, offset back to the shell origin so it
+                         registers with what the glass sits on top of -->
+                    <Image Source="{Binding BgBitmap}"
+                           Stretch="Fill"
+                           HorizontalAlignment="Left" VerticalAlignment="Top"
+                           Margin="-12,-12,0,0"
+                           Width="{Binding #Shell.Bounds.Width}"
+                           Height="{Binding #Shell.Bounds.Height}"
+                           RenderOptions.BitmapInterpolationMode="None"
+                           IsVisible="{Binding !IsCustomBackground}">
+                        <Image.Effect>
+                            <BlurEffect Radius="18"/>
+                        </Image.Effect>
+                    </Image>
+                    <Image Source="{Binding BgBitmap}"
+                           Stretch="UniformToFill"
+                           HorizontalAlignment="Left" VerticalAlignment="Top"
+                           Margin="-12,-12,0,0"
+                           Width="{Binding #Shell.Bounds.Width}"
+                           Height="{Binding #Shell.Bounds.Height}"
+                           IsVisible="{Binding IsCustomBackground}">
+                        <Image.Effect>
+                            <BlurEffect Radius="18"/>
+                        </Image.Effect>
+                    </Image>
+                    <!-- same bottom shade as the art layer, so the glass is not brighter -->
+                    <Border>
+                        <Border.Background>
+                            <LinearGradientBrush StartPoint="0%,100%" EndPoint="0%,68%">
+                                <GradientStop Color="#73000000" Offset="0.0"/>
+                                <GradientStop Color="#00000000" Offset="1.0"/>
+                            </LinearGradientBrush>
+                        </Border.Background>
+                    </Border>
+                </Panel>
+            </Border>
+
+            <!-- ========================================== -->
+            <!-- 4. FLOATING SIDEBAR (60px, radius 18, 12px)-->
+            <!-- ========================================== -->
+            <Border Classes="Sidebar"
+                    Classes.OnHome="{Binding IsOnHome}"
+                    HorizontalAlignment="Left" VerticalAlignment="Stretch"
+                    Margin="12" Width="60"
+                    CornerRadius="18"
+                    BorderThickness="1"
+                    BoxShadow="0 10 30 -12 #B0000000"
+                    Padding="0,12"
+                    ZIndex="20">
+                <Grid RowDefinitions="Auto * Auto Auto">
+                    <Image Grid.Row="0" Source="avares://NegiCraftLauncher.App/Assets/app.png"
+                           Width="36" Height="36" Margin="0,0,0,8"
+                           HorizontalAlignment="Center" IsHitTestVisible="False"/>
+
+                    <!-- Center Nav: Home, Instances, Download, Resources -->
+                    <StackPanel Grid.Row="1" VerticalAlignment="Center" Spacing="8" HorizontalAlignment="Center">
+                        <!-- Home -->
+                        <Button Classes="NavBtn"
+                                Classes.Active="{Binding CurrentPage, Converter={x:Static ObjectConverters.Equal}, ConverterParameter='home'}"
+                                Command="{Binding GoCommand}" CommandParameter="home"
+                                ToolTip.Tip="首页">
+                            <materialIcons:MaterialIcon Kind="Home" Width="20" Height="20"/>
+                        </Button>
+
+                        <!-- Instances -->
+                        <Button Classes="NavBtn"
+                                Classes.Active="{Binding CurrentPage, Converter={x:Static ObjectConverters.Equal}, ConverterParameter='instances'}"
+                                Command="{Binding GoCommand}" CommandParameter="instances"
+                                ToolTip.Tip="实例">
+                            <materialIcons:MaterialIcon Kind="LayersOutline" Width="20" Height="20"/>
+                        </Button>
+
+                        <!-- Download (the version/resource browser; task list hangs off it) -->
+                        <Button Classes="NavBtn"
+                                Classes.Active="{Binding CurrentPage, Converter={x:Static ObjectConverters.Equal}, ConverterParameter='download'}"
+                                Command="{Binding GoCommand}" CommandParameter="download"
+                                ToolTip.Tip="下载">
+                            <materialIcons:MaterialIcon Kind="DownloadOutline" Width="20" Height="20"/>
+                        </Button>
+                    </StackPanel>
+
+                    <!-- Bottom Nav: Settings -->
+                    <Button Grid.Row="2" Classes="NavBtn"
+                            Classes.Active="{Binding CurrentPage, Converter={x:Static ObjectConverters.Equal}, ConverterParameter='settings'}"
+                            Command="{Binding GoCommand}" CommandParameter="settings"
+                            ToolTip.Tip="设置"
+                            HorizontalAlignment="Center">
+                        <materialIcons:MaterialIcon Kind="CogOutline" Width="20" Height="20"/>
+                    </Button>
+
+                    <!-- Bottom Nav: Account Avatar -->
+                    <Button x:Name="AccountAvatar"
+                            Grid.Row="3"
+                            Width="42" Height="42"
+                            CornerRadius="12"
+                            Padding="0"
+                            Background="Transparent"
+                            BorderThickness="0"
+                            Margin="0,6,0,0"
+                            Cursor="Hand"
+                            Command="{Binding ToggleAccPopCommand}"
+                            ToolTip.Tip="账户"
+                            HorizontalAlignment="Center"
+                            HorizontalContentAlignment="Center"
+                            VerticalContentAlignment="Center">
+                        <Image Source="{Binding AvatarBitmap}"
+                               Width="38" Height="38"
+                               RenderOptions.BitmapInterpolationMode="None"/>
+                    </Button>
+                </Grid>
+            </Border>
+
+            <!-- ========================================== -->
+            <!-- 5. CONTENT AREA (Padding: 22 28 22 100)    -->
+            <!-- ========================================== -->
+            <Panel Margin="100,22,28,22" ZIndex="10">
+
+                <!-- PAGE 1: HOME -->
+                <Panel IsVisible="{Binding IsOnHome}" Margin="-100,-22,-28,-22">
+                    <!-- .stage: top: 44px; left: 92px; width: 160px; height: 250px; -->
+                    <Canvas>
+                        <controls:MinecraftSkinPreview x:Name="SkinPreview"
+                                                       Canvas.Left="92" Canvas.Top="44"
+                                                       PlayerName="{Binding CurrentAccount.Name}"/>
+                    </Canvas>
+
+                    <!-- .dock: right: 20px; bottom: 20px; width: 380px; padding: 10px; border-radius: 18px; -->
+                    <Border x:Name="DockCard"
+                            HorizontalAlignment="Right" VerticalAlignment="Bottom"
+                            Margin="0,0,20,20" Width="380"
+                            Background="#8C0E0E12"
+                            BorderBrush="#17FFFFFF"
+                            BorderThickness="1"
+                            CornerRadius="18"
+                            BoxShadow="0 10 30 -12 #B0000000"
+                            Padding="10">
+                        <StackPanel Spacing="0">
+                            <!-- Top row: Instance selector + Launch button -->
+                            <Grid ColumnDefinitions="* Auto">
+                                <!-- .inst-select: height: 52px; padding: 0 10px 0 6px; border-radius: 12px; -->
+                                <Button Grid.Column="0" Classes="InstSelect"
+                                        x:Name="InstSelectBtn"
+                                        Command="{Binding ToggleInstPopCommand}">
+                                    <Panel>
+                                        <Grid ColumnDefinitions="Auto * Auto"
+                                              IsVisible="{Binding CurrentInstance, Converter={x:Static ObjectConverters.IsNotNull}}">
+                                            <!-- 40x40 Block Icon -->
+                                            <Border Grid.Column="0" Width="40" Height="40" CornerRadius="9" ClipToBounds="True" Margin="0,0,10,0">
+                                                <Image Source="{Binding CurrentInstance.IconBitmap}"
+                                                       Width="40" Height="40"
+                                                       RenderOptions.BitmapInterpolationMode="None"/>
+                                            </Border>
+                                            <!-- Instance Meta: Name & Ver/Loader -->
+                                            <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                                <TextBlock Text="{Binding CurrentInstance.Name}"
+                                                           FontSize="14" FontWeight="Bold" Foreground="#fafafa"
+                                                           TextTrimming="CharacterEllipsis"/>
+                                                <TextBlock Text="{Binding CurrentInstance.MetaText}"
+                                                           FontSize="12" Foreground="#a1a1aa"/>
+                                            </StackPanel>
+                                            <!-- ChevronUp matching Image 2 -->
+                                            <materialIcons:MaterialIcon Grid.Column="2" Kind="ChevronUp"
+                                                                       Width="18" Height="18" Foreground="#71717a"
+                                                                       Margin="6,0,0,0"/>
+                                        </Grid>
+
+                                        <!-- First run: nothing installed yet -->
+                                        <Grid ColumnDefinitions="Auto * Auto"
+                                              IsVisible="{Binding CurrentInstance, Converter={x:Static ObjectConverters.IsNull}}">
+                                            <Border Grid.Column="0" Width="40" Height="40" CornerRadius="9" Margin="0,0,10,0"
+                                                    Background="#1c1c21" BorderBrush="#26262b" BorderThickness="1">
+                                                <materialIcons:MaterialIcon Kind="Plus" Width="18" Height="18"
+                                                                            Foreground="#71717a"
+                                                                            HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                            </Border>
+                                            <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                                <TextBlock Text="还没有实例" FontSize="14" FontWeight="Bold" Foreground="#fafafa"/>
+                                                <TextBlock Text="点这里选择一个已有实例" FontSize="12" Foreground="#a1a1aa"/>
+                                            </StackPanel>
+                                            <materialIcons:MaterialIcon Grid.Column="2" Kind="ChevronUp"
+                                                                       Width="18" Height="18" Foreground="#71717a"
+                                                                       Margin="6,0,0,0"/>
+                                        </Grid>
+                                    </Panel>
+                                </Button>
+
+                                <!-- .launch: height: 52px; border-radius: 12px; font-weight: 600; font-size: 15px;
+                                     MinWidth pins the box to the longest label ("游戏运行中") so switching
+                                     launch state never reflows the dock row. -->
+                                <Button Grid.Column="1" Classes="LaunchBtn"
+                                        Height="52" MinWidth="122" Padding="10,0"
+                                        CornerRadius="12"
+                                        FontWeight="SemiBold"
+                                        FontSize="15"
+                                        HorizontalContentAlignment="Center"
+                                        Margin="10,0,0,0"
+                                        Cursor="Hand"
+                                        IsEnabled="{Binding CanLaunch}"
+                                        Command="{Binding LaunchGameCommand}"
+                                        Content="{Binding LaunchBtnText}"/>
+                            </Grid>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- #launchProgress: its own card in the empty bottom-left area, so the dock
+                         does not change height while the game is starting -->
+                    <Border HorizontalAlignment="Left" VerticalAlignment="Bottom"
+                            Margin="100,0,0,20" Width="320"
+                            Background="#8C0E0E12"
+                            BorderBrush="#17FFFFFF"
+                            BorderThickness="1"
+                            CornerRadius="18"
+                            BoxShadow="0 10 30 -12 #B0000000"
+                            Padding="14,12"
+                            IsVisible="{Binding IsLaunching}">
+                        <StackPanel Spacing="8">
+                            <Grid ColumnDefinitions="* Auto">
+                                <TextBlock Grid.Column="0" Text="{Binding LaunchStepText}" FontSize="12" Foreground="#a1a1aa"/>
+                                <TextBlock Grid.Column="1" Text="{Binding LaunchPctText}" FontSize="12" Foreground="#a1a1aa"/>
+                            </Grid>
+                            <ProgressBar Value="{Binding LaunchProgress}" Maximum="100" Height="4"
+                                         CornerRadius="999"
+                                         Foreground="#fafafa"
+                                         Background="#407f7f7f"/>
+                        </StackPanel>
+                    </Border>
+                </Panel>
+
+                <!-- PAGE 2: INSTANCES -->
+                <Panel IsVisible="{Binding CurrentPage, Converter={x:Static ObjectConverters.Equal}, ConverterParameter='instances'}">
+                    <Grid RowDefinitions="Auto *">
+                        <!-- .page-head -->
+                        <Grid Grid.Row="0" ColumnDefinitions="* Auto Auto" Height="36" Margin="0,0,84,16">
+                            <TextBlock Grid.Column="0" Text="实例" FontSize="20" FontWeight="SemiBold" VerticalAlignment="Center" Foreground="#fafafa"/>
+                            <!-- Search -->
+                            <Panel Grid.Column="1" Width="240" Height="36" Margin="0,0,12,0">
+                                <TextBox CornerRadius="10"
+                                         Background="#111114" BorderBrush="#26262b"
+                                         PlaceholderText="搜索"
+                                         Text="{Binding InstanceSearch}"
+                                         Padding="34,0,10,0" VerticalAlignment="Stretch"/>
+                                <materialIcons:MaterialIcon Kind="Magnify" Width="16" Height="16"
+                                                            Foreground="#a1a1aa"
+                                                            HorizontalAlignment="Left" VerticalAlignment="Center"
+                                                            Margin="11,0,0,0" IsHitTestVisible="False"/>
+                            </Panel>
+                            <!-- New Button -->
+                            <Button Grid.Column="2" Classes="BtnSm BtnPrimary"
+                                    Command="{Binding NewInstanceCommand}">
+                                <StackPanel Orientation="Horizontal" Spacing="6">
+                                    <materialIcons:MaterialIcon Kind="Plus" Width="14" Height="14"/>
+                                    <TextBlock Text="新建" VerticalAlignment="Center"/>
+                                </StackPanel>
+                            </Button>
+                        </Grid>
+
+                        <!-- .inst-grid -->
+                        <ScrollViewer Grid.Row="1" IsVisible="{Binding HasInstances}">
+                            <ItemsControl ItemsSource="{Binding VisibleInstances}">
+                                <ItemsControl.ItemsPanel>
+                                    <ItemsPanelTemplate>
+                                        <WrapPanel Orientation="Horizontal" Margin="0,0,-12,0"/>
+                                    </ItemsPanelTemplate>
+                                </ItemsControl.ItemsPanel>
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate x:DataType="models:InstanceModel">
+                                        <Button Classes="InstCard"
+                                                Classes.Current="{Binding IsCurrent}"
+                                                Width="200" Margin="0,0,12,12"
+                                                Command="{Binding $parent[Window].((vm:MainWindowViewModel)DataContext).SelectInstanceCommand}"
+                                                CommandParameter="{Binding .}">
+                                            <Button.ContextMenu>
+                                                <ContextMenu>
+                                                    <MenuItem Header="设为当前"
+                                                              Command="{Binding $parent[Window].((vm:MainWindowViewModel)DataContext).SelectInstanceCommand}"
+                                                              CommandParameter="{Binding .}"/>
+                                                    <MenuItem Header="重命名"
+                                                              Command="{Binding $parent[Window].((vm:MainWindowViewModel)DataContext).RenameInstanceCommand}"
+                                                              CommandParameter="{Binding .}"/>
+                                                    <MenuItem Header="打开游戏目录"
+                                                              Command="{Binding $parent[Window].((vm:MainWindowViewModel)DataContext).OpenInstanceFolderCommand}"
+                                                              CommandParameter="{Binding .}"/>
+                                                    <Separator/>
+                                                    <MenuItem Header="删除"
+                                                              Command="{Binding $parent[Window].((vm:MainWindowViewModel)DataContext).DeleteInstanceCommand}"
+                                                              CommandParameter="{Binding .}"/>
+                                                </ContextMenu>
+                                            </Button.ContextMenu>
+                                            <StackPanel Orientation="Horizontal" Spacing="12">
+                                                <Border Width="40" Height="40" CornerRadius="9" ClipToBounds="True">
+                                                    <Image Source="{Binding IconBitmap}"
+                                                           Width="40" Height="40"
+                                                           RenderOptions.BitmapInterpolationMode="None"/>
+                                                </Border>
+                                                <StackPanel VerticalAlignment="Center" Spacing="2">
+                                                    <TextBlock Text="{Binding Name}" FontWeight="Bold" FontSize="13" Foreground="#fafafa" TextTrimming="CharacterEllipsis" MaxWidth="140"/>
+                                                    <TextBlock Text="{Binding MetaText}" FontSize="12" Foreground="#a1a1aa"/>
+                                                </StackPanel>
+                                            </StackPanel>
+                                        </Button>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </ScrollViewer>
+
+                        <StackPanel Grid.Row="1" IsVisible="{Binding !HasInstances}"
+                                    HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="10">
+                            <materialIcons:MaterialIcon Kind="LayersOutline" Width="36" Height="36"
+                                                        Foreground="#3f3f46" HorizontalAlignment="Center"/>
+                            <TextBlock Text="还没有实例" FontSize="14" Foreground="#a1a1aa" HorizontalAlignment="Center"/>
+                            <TextBlock Text="点右上角「新建」安装一个 Minecraft 版本" FontSize="12"
+                                       Foreground="#71717a" HorizontalAlignment="Center"/>
+                        </StackPanel>
+                    </Grid>
+                </Panel>
+
+                <!-- PAGE 3: DOWNLOAD (version/resource browser; the task list is a popover) -->
+                <Panel IsVisible="{Binding CurrentPage, Converter={x:Static ObjectConverters.Equal}, ConverterParameter='download'}">
+                    <Grid RowDefinitions="Auto *">
+                        <!-- .page-head -->
+                        <Grid Grid.Row="0" ColumnDefinitions="Auto Auto * Auto Auto" Height="36" Margin="0,0,84,16">
+                            <TextBlock Grid.Column="0" Text="下载" FontSize="20" FontWeight="SemiBold" VerticalAlignment="Center" Foreground="#fafafa" Margin="0,0,8,0"/>
+                            <!-- .tabs: 游戏, 模组, 整合包, 资源包, 光影 -->
+                            <Border Grid.Column="1" Background="#1c1c21" CornerRadius="10" Padding="3">
+                                <StackPanel Orientation="Horizontal" Spacing="2">
+                                    <Button Classes="SegmentBtn" Content="游戏"
+                                            Classes.On="{Binding CurrentResCategory, Converter={x:Static ObjectConverters.Equal}, ConverterParameter='game'}"
+                                            Command="{Binding SelectResCategoryCommand}" CommandParameter="game"/>
+                                    <Button Classes="SegmentBtn" Content="模组"
+                                            Classes.On="{Binding CurrentResCategory, Converter={x:Static ObjectConverters.Equal}, ConverterParameter='mod'}"
+                                            Command="{Binding SelectResCategoryCommand}" CommandParameter="mod"/>
+                                    <Button Classes="SegmentBtn" Content="整合包"
+                                            Classes.On="{Binding CurrentResCategory, Converter={x:Static ObjectConverters.Equal}, ConverterParameter='pack'}"
+                                            Command="{Binding SelectResCategoryCommand}" CommandParameter="pack"/>
+                                    <Button Classes="SegmentBtn" Content="资源包"
+                                            Classes.On="{Binding CurrentResCategory, Converter={x:Static ObjectConverters.Equal}, ConverterParameter='rp'}"
+                                            Command="{Binding SelectResCategoryCommand}" CommandParameter="rp"/>
+                                    <Button Classes="SegmentBtn" Content="光影"
+                                            Classes.On="{Binding CurrentResCategory, Converter={x:Static ObjectConverters.Equal}, ConverterParameter='shader'}"
+                                            Command="{Binding SelectResCategoryCommand}" CommandParameter="shader"/>
+                                </StackPanel>
+                            </Border>
+
+                            <!-- Task list popover trigger -->
+                            <Button Grid.Column="3" x:Name="DlPopBtn" Classes="BtnSm BtnOutline"
+                                    Content="下载任务" Command="{Binding ToggleDlPopCommand}"
+                                    Margin="0,0,8,0" VerticalAlignment="Center"/>
+
+                            <!-- Search -->
+                            <Panel Grid.Column="4" Width="240" Height="36">
+                                <TextBox CornerRadius="10"
+                                         Background="#111114" BorderBrush="#26262b"
+                                         PlaceholderText="搜索"
+                                         Text="{Binding ResourceSearch}"
+                                         Padding="34,0,10,0" VerticalAlignment="Stretch"/>
+                                <materialIcons:MaterialIcon Kind="Magnify" Width="16" Height="16"
+                                                            Foreground="#a1a1aa"
+                                                            HorizontalAlignment="Left" VerticalAlignment="Center"
+                                                            Margin="11,0,0,0" IsHitTestVisible="False"/>
+                            </Panel>
+                        </Grid>
+
+                        <!-- .list -->
+                        <ScrollViewer Grid.Row="1" IsVisible="{Binding HasResources}">
+                            <Border Background="#111114" BorderBrush="#26262b" BorderThickness="1" CornerRadius="14" ClipToBounds="True" VerticalAlignment="Top">
+                                <ItemsControl ItemsSource="{Binding FilteredResources}">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate x:DataType="models:ResourceModel">
+                                            <!-- .list-item -->
+                                            <Border BorderBrush="#26262b" BorderThickness="0,0,0,1" Padding="16,12">
+                                                <Grid ColumnDefinitions="Auto * Auto Auto">
+                                                    <!-- 36x36 Pixel Icon -->
+                                                    <Border Grid.Column="0" Width="36" Height="36" CornerRadius="8" ClipToBounds="True" Margin="0,0,14,0">
+                                                        <Image Source="{Binding IconBitmap}"
+                                                               Width="36" Height="36"
+                                                               RenderOptions.BitmapInterpolationMode="None"/>
+                                                    </Border>
+
+                                                    <!-- .grow: b + desc -->
+                                                    <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
+                                                        <TextBlock Text="{Binding Name}" FontWeight="Bold" FontSize="13" Foreground="#fafafa"/>
+                                                        <TextBlock Text="{Binding Desc}" FontSize="12" Foreground="#a1a1aa" TextTrimming="CharacterEllipsis"/>
+                                                    </StackPanel>
+
+                                                    <!-- .stat -->
+                                                    <TextBlock Grid.Column="2" Text="{Binding Stat}"
+                                                               FontSize="12" Foreground="#a1a1aa"
+                                                               VerticalAlignment="Center" Margin="16,0"/>
+
+                                                    <!-- .btn .btn-outline .btn-sm -->
+                                                    <Button Grid.Column="3" Classes="BtnSm BtnOutline"
+                                                            Content="{Binding ActionText}"
+                                                            IsEnabled="{Binding IsActionEnabled}"
+                                                            Command="{Binding $parent[Window].((vm:MainWindowViewModel)DataContext).InstallResourceCommand}"
+                                                            CommandParameter="{Binding .}"/>
+                                                </Grid>
+                                            </Border>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </Border>
+                        </ScrollViewer>
+
+                        <StackPanel Grid.Row="1" IsVisible="{Binding !HasResources}"
+                                    HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="12">
+                            <ProgressBar IsIndeterminate="True" Width="120" Height="4" CornerRadius="999"
+                                         Foreground="#fafafa" Background="#26262b"
+                                         HorizontalAlignment="Center"
+                                         IsVisible="{Binding IsLoadingResources}"/>
+                            <TextBlock Text="{Binding ResourceEmptyText}" FontSize="13" Foreground="#a1a1aa"
+                                       HorizontalAlignment="Center" TextAlignment="Center" MaxWidth="420"
+                                       TextWrapping="Wrap"/>
+                        </StackPanel>
+                    </Grid>
+                </Panel>
+
+                <!-- PAGE 5: SETTINGS -->
+                <Panel IsVisible="{Binding CurrentPage, Converter={x:Static ObjectConverters.Equal}, ConverterParameter='settings'}">
+                    <Grid RowDefinitions="Auto *">
+                        <TextBlock Grid.Row="0" Text="设置" FontSize="20" FontWeight="SemiBold" Height="36" VerticalAlignment="Center" Foreground="#fafafa" Margin="0,0,0,16"/>
+
+                        <!-- .settings: 2 columns 160px 1fr -->
+                        <Grid Grid.Row="1" ColumnDefinitions="160 24 *">
+                            <!-- .set-nav -->
+                            <StackPanel Grid.Column="0" Spacing="4">
+                                <Button Classes="SetNavBtn" Content="游戏"
+                                        Classes.On="{Binding CurrentSettingsTab, Converter={x:Static ObjectConverters.Equal}, ConverterParameter='游戏'}"
+                                        Command="{Binding SelectSettingsTabCommand}" CommandParameter="游戏"/>
+                                <Button Classes="SetNavBtn" Content="Java"
+                                        Classes.On="{Binding CurrentSettingsTab, Converter={x:Static ObjectConverters.Equal}, ConverterParameter='Java'}"
+                                        Command="{Binding SelectSettingsTabCommand}" CommandParameter="Java"/>
+                                <Button Classes="SetNavBtn" Content="下载"
+                                        Classes.On="{Binding CurrentSettingsTab, Converter={x:Static ObjectConverters.Equal}, ConverterParameter='下载'}"
+                                        Command="{Binding SelectSettingsTabCommand}" CommandParameter="下载"/>
+                                <Button Classes="SetNavBtn" Content="外观"
+                                        Classes.On="{Binding CurrentSettingsTab, Converter={x:Static ObjectConverters.Equal}, ConverterParameter='外观'}"
+                                        Command="{Binding SelectSettingsTabCommand}" CommandParameter="外观"/>
+                                <Button Classes="SetNavBtn" Content="关于"
+                                        Classes.On="{Binding CurrentSettingsTab, Converter={x:Static ObjectConverters.Equal}, ConverterParameter='关于'}"
+                                        Command="{Binding SelectSettingsTabCommand}" CommandParameter="关于"/>
+                            </StackPanel>
+
+                            <!-- .set-card: one card per tab, so each group ends on a borderless row -->
+                            <Panel Grid.Column="2" VerticalAlignment="Top">
+
+                                <!-- 游戏 -->
+                                <Border Background="#111114" BorderBrush="#26262b" BorderThickness="1" CornerRadius="14" Padding="18,0"
+                                        IsVisible="{Binding CurrentSettingsTab, Converter={x:Static ObjectConverters.Equal}, ConverterParameter='游戏'}">
+                                    <StackPanel>
+                                        <Border Height="58" BorderBrush="#26262b" BorderThickness="0,0,0,1">
+                                            <Grid ColumnDefinitions="* Auto">
+                                                <StackPanel VerticalAlignment="Center" Spacing="2">
+                                                    <TextBlock Text="最大内存" FontWeight="Medium" Foreground="#fafafa"/>
+                                                    <TextBlock Text="分配给游戏的堆内存，建议不超过物理内存的一半。"
+                                                               FontSize="12" Foreground="#71717a"/>
+                                                </StackPanel>
+                                                <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="12" Width="280" VerticalAlignment="Center">
+                                                    <Slider Value="{Binding MaxMemoryGb}" Minimum="1" Maximum="32" Width="210"/>
+                                                    <TextBlock Text="{Binding MaxMemoryGb, StringFormat='{}{0} GB'}"
+                                                               Width="48" TextAlignment="Right" VerticalAlignment="Center"
+                                                               Foreground="#fafafa"/>
+                                                </StackPanel>
+                                            </Grid>
+                                        </Border>
+
+                                        <Border Height="58" BorderBrush="#26262b" BorderThickness="0,0,0,1">
+                                            <Grid ColumnDefinitions="* Auto">
+                                                <StackPanel VerticalAlignment="Center" Spacing="2">
+                                                    <TextBlock Text="版本隔离" FontWeight="Medium" Foreground="#fafafa"/>
+                                                    <TextBlock Text="每个实例有独立的存档、Mod 和配置文件。"
+                                                               FontSize="12" Foreground="#71717a"/>
+                                                </StackPanel>
+                                                <ToggleSwitch Grid.Column="1" IsChecked="{Binding VersionIsolation}" OnContent="" OffContent=""/>
+                                            </Grid>
+                                        </Border>
+
+                                        <Border Height="58" BorderBrush="#26262b" BorderThickness="0,0,0,1">
+                                            <Grid ColumnDefinitions="* Auto">
+                                                <StackPanel VerticalAlignment="Center" Spacing="2">
+                                                    <TextBlock Text="启动后隐藏启动器" FontWeight="Medium" Foreground="#fafafa"/>
+                                                    <TextBlock Text="游戏退出后会自动恢复。" FontSize="12" Foreground="#71717a"/>
+                                                </StackPanel>
+                                                <ToggleSwitch Grid.Column="1" IsChecked="{Binding HideOnLaunch}" OnContent="" OffContent=""/>
+                                            </Grid>
+                                        </Border>
+
+                                        <Border Height="58">
+                                            <Grid ColumnDefinitions="* Auto">
+                                                <StackPanel VerticalAlignment="Center" Spacing="2" Margin="0,0,16,0">
+                                                    <TextBlock Text="游戏目录" FontWeight="Medium" Foreground="#fafafa"/>
+                                                    <TextBlock Text="{Binding GameRoot}" FontSize="12" Foreground="#71717a"
+                                                               TextTrimming="CharacterEllipsis"/>
+                                                </StackPanel>
+                                                <Button Grid.Column="1" Classes="BtnSm BtnOutline" VerticalAlignment="Center"
+                                                        Command="{Binding OpenGameRootCommand}">
+                                                    <StackPanel Orientation="Horizontal" Spacing="6">
+                                                        <materialIcons:MaterialIcon Kind="FolderOpenOutline" Width="14" Height="14"/>
+                                                        <TextBlock Text="打开" VerticalAlignment="Center"/>
+                                                    </StackPanel>
+                                                </Button>
+                                            </Grid>
+                                        </Border>
+                                    </StackPanel>
+                                </Border>
+
+                                <!-- Java -->
+                                <Border Background="#111114" BorderBrush="#26262b" BorderThickness="1" CornerRadius="14" Padding="18,0"
+                                        IsVisible="{Binding CurrentSettingsTab, Converter={x:Static ObjectConverters.Equal}, ConverterParameter='Java'}">
+                                    <StackPanel>
+                                        <Border Height="58" BorderBrush="#26262b" BorderThickness="0,0,0,1">
+                                            <Grid ColumnDefinitions="* Auto">
+                                                <StackPanel VerticalAlignment="Center" Spacing="2">
+                                                    <TextBlock Text="Java 运行时" FontWeight="Medium" Foreground="#fafafa"/>
+                                                    <TextBlock Text="自动模式会按版本要求挑选合适的 Java。" FontSize="12" Foreground="#71717a"/>
+                                                </StackPanel>
+                                                <Button Grid.Column="1" Classes="BtnSm BtnOutline" Width="240"
+                                                        HorizontalContentAlignment="Stretch"
+                                                        Command="{Binding ToggleJavaChooserCommand}">
+                                                    <Grid ColumnDefinitions="* Auto">
+                                                        <TextBlock Text="{Binding JavaLabel}" VerticalAlignment="Center"
+                                                                   TextTrimming="CharacterEllipsis"/>
+                                                        <materialIcons:MaterialIcon Grid.Column="1" Kind="ChevronDown"
+                                                                                    Width="14" Height="14" Foreground="#71717a"/>
+                                                    </Grid>
+                                                </Button>
+                                            </Grid>
+                                        </Border>
+
+                                        <Border Padding="0,8" IsVisible="{Binding IsJavaChooserOpen}">
+                                            <StackPanel Spacing="2">
+                                                <ItemsControl ItemsSource="{Binding JavaOptions}">
+                                                    <ItemsControl.ItemTemplate>
+                                                        <DataTemplate x:DataType="models:JavaOptionModel">
+                                                            <Button Classes="MenuItem"
+                                                                    Command="{Binding $parent[Window].((vm:MainWindowViewModel)DataContext).SelectJavaCommand}"
+                                                                    CommandParameter="{Binding .}">
+                                                                <Grid ColumnDefinitions="* Auto">
+                                                                    <TextBlock Text="{Binding Label}" FontSize="13" Foreground="#fafafa"
+                                                                               VerticalAlignment="Center" TextTrimming="CharacterEllipsis"/>
+                                                                    <materialIcons:MaterialIcon Grid.Column="1" Kind="Check" Width="16" Height="16"
+                                                                                                Foreground="#fafafa" IsVisible="{Binding IsSelected}"/>
+                                                                </Grid>
+                                                            </Button>
+                                                        </DataTemplate>
+                                                    </ItemsControl.ItemTemplate>
+                                                </ItemsControl>
+
+                                                <Button Classes="MenuItem" Click="OnPickJavaClick">
+                                                    <StackPanel Orientation="Horizontal" Spacing="10">
+                                                        <materialIcons:MaterialIcon Kind="FolderSearchOutline" Width="18" Height="18"
+                                                                                    Foreground="#a1a1aa" Margin="7,0"/>
+                                                        <TextBlock Text="浏览 javaw.exe…" FontSize="13" Foreground="#fafafa" VerticalAlignment="Center"/>
+                                                    </StackPanel>
+                                                </Button>
+                                            </StackPanel>
+                                        </Border>
+
+                                        <Border Height="58">
+                                            <TextBlock Text="缺少合适的 Java 时，启动会失败并提示需要的版本。"
+                                                       FontSize="12" Foreground="#71717a" VerticalAlignment="Center"
+                                                       TextWrapping="Wrap"/>
+                                        </Border>
+                                    </StackPanel>
+                                </Border>
+
+                                <!-- 下载 -->
+                                <Border Background="#111114" BorderBrush="#26262b" BorderThickness="1" CornerRadius="14" Padding="18,0"
+                                        IsVisible="{Binding CurrentSettingsTab, Converter={x:Static ObjectConverters.Equal}, ConverterParameter='下载'}">
+                                    <StackPanel>
+                                        <Border Height="58" BorderBrush="#26262b" BorderThickness="0,0,0,1">
+                                            <Grid ColumnDefinitions="* Auto">
+                                                <TextBlock Text="下载源" FontWeight="Medium" VerticalAlignment="Center" Foreground="#fafafa"/>
+                                                <Border Grid.Column="1" Background="#1c1c21" CornerRadius="10" Padding="3">
+                                                    <StackPanel Orientation="Horizontal" Spacing="2">
+                                                        <Button Classes="SegmentBtn" Content="官方"
+                                                                Classes.On="{Binding DownloadSource, Converter={x:Static ObjectConverters.Equal}, ConverterParameter='官方'}"
+                                                                Command="{Binding SetDownloadSourceCommand}" CommandParameter="官方"/>
+                                                        <Button Classes="SegmentBtn" Content="BMCLAPI"
+                                                                Classes.On="{Binding DownloadSource, Converter={x:Static ObjectConverters.Equal}, ConverterParameter='BMCLAPI'}"
+                                                                Command="{Binding SetDownloadSourceCommand}" CommandParameter="BMCLAPI"/>
+                                                        <Button Classes="SegmentBtn" Content="自动"
+                                                                Classes.On="{Binding DownloadSource, Converter={x:Static ObjectConverters.Equal}, ConverterParameter='自动'}"
+                                                                Command="{Binding SetDownloadSourceCommand}" CommandParameter="自动"/>
+                                                    </StackPanel>
+                                                </Border>
+                                            </Grid>
+                                        </Border>
+
+                                        <!-- BMCLAPI's terms require the sponsor to be credited wherever the mirror is
+                                             offered, so the line stays put no matter which source is selected. -->
+                                        <Border Padding="0,14" BorderBrush="#26262b" BorderThickness="0,0,0,1">
+                                            <StackPanel Spacing="6">
+                                                <TextBlock Text="{Binding SourceHint}" FontSize="12" Foreground="#71717a"
+                                                           TextWrapping="Wrap"/>
+                                                <TextBlock Text="BMCLAPI 由 bangbang93 赞助提供。" FontSize="12"
+                                                           Foreground="#71717a" TextWrapping="Wrap"/>
+                                            </StackPanel>
+                                        </Border>
+
+                                        <Border Height="58" BorderBrush="#26262b" BorderThickness="0,0,0,1">
+                                            <Grid ColumnDefinitions="* Auto">
+                                                <StackPanel VerticalAlignment="Center" Spacing="2">
+                                                    <TextBlock Text="下载线程" FontWeight="Medium" Foreground="#fafafa"/>
+                                                    <TextBlock Text="同时下载的连接数，大文件会拆成多段并行。"
+                                                               FontSize="12" Foreground="#71717a"/>
+                                                </StackPanel>
+                                                <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="12" Width="280" VerticalAlignment="Center">
+                                                    <Slider Value="{Binding DownloadThreads}" Minimum="1" Maximum="64" Width="210"/>
+                                                    <TextBlock Text="{Binding DownloadThreads, StringFormat='{}{0}'}"
+                                                               Width="48" TextAlignment="Right" VerticalAlignment="Center"
+                                                               Foreground="#fafafa"/>
+                                                </StackPanel>
+                                            </Grid>
+                                        </Border>
+
+                                        <Border Padding="0,16,0,18">
+                                            <StackPanel Spacing="10">
+                                                <Grid ColumnDefinitions="* Auto">
+                                                    <TextBlock Text="下载中心" FontWeight="Medium" Foreground="#fafafa"
+                                                               VerticalAlignment="Center"/>
+                                                    <Button Grid.Column="1" Classes="BtnSm BtnOutline" Content="清除已完成"
+                                                            Command="{Binding ClearDownloadsCommand}"/>
+                                                </Grid>
+                                                <Border BorderBrush="#26262b" BorderThickness="1" CornerRadius="10"
+                                                        ClipToBounds="True" IsVisible="{Binding HasDownloads}">
+                                                    <ScrollViewer MaxHeight="320">
+                                                        <ItemsControl ItemsSource="{Binding Downloads}"
+                                                                      ItemTemplate="{StaticResource DownloadRowTemplate}"/>
+                                                    </ScrollViewer>
+                                                </Border>
+                                                <TextBlock Text="暂无下载任务" IsVisible="{Binding !HasDownloads}"
+                                                           FontSize="13" Foreground="#71717a"
+                                                           HorizontalAlignment="Center" Margin="0,16"/>
+                                            </StackPanel>
+                                        </Border>
+                                    </StackPanel>
+                                </Border>
+
+                                <!-- 外观 -->
+                                <Border Background="#111114" BorderBrush="#26262b" BorderThickness="1" CornerRadius="14" Padding="18,0"
+                                        IsVisible="{Binding CurrentSettingsTab, Converter={x:Static ObjectConverters.Equal}, ConverterParameter='外观'}">
+                                    <StackPanel>
+                                        <Border Height="58" BorderBrush="#26262b" BorderThickness="0,0,0,1">
+                                            <Grid ColumnDefinitions="* Auto">
+                                                <TextBlock Text="主题" FontWeight="Medium" VerticalAlignment="Center" Foreground="#fafafa"/>
+                                                <Button Grid.Column="1" Classes="BtnSm BtnOutline" Command="{Binding ToggleThemeCommand}">
+                                                    <StackPanel Orientation="Horizontal" Spacing="6">
+                                                        <materialIcons:MaterialIcon Kind="WeatherSunny" Width="14" Height="14"/>
+                                                        <TextBlock Text="切换深浅色" VerticalAlignment="Center"/>
+                                                    </StackPanel>
+                                                </Button>
+                                            </Grid>
+                                        </Border>
+
+                                        <Border Height="58">
+                                            <Grid ColumnDefinitions="* Auto">
+                                                <TextBlock Text="背景图片" FontWeight="Medium" VerticalAlignment="Center" Foreground="#fafafa"/>
+                                                <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                                                    <!-- current background, so the picked image is identifiable at a glance -->
+                                                    <Border Width="52" Height="34" CornerRadius="8" ClipToBounds="True"
+                                                            BorderBrush="#26262b" BorderThickness="1"
+                                                            IsVisible="{Binding IsCustomBackground}">
+                                                        <Panel>
+                                                            <Image Source="{Binding BgBitmap}" Stretch="UniformToFill"/>
+                                                            <Border Background="#ffffff" Opacity="{Binding BgLightOpacity}"/>
+                                                            <Border Background="#000000" Opacity="{Binding BgDarkOpacity}"/>
+                                                        </Panel>
+                                                    </Border>
+                                                    <Button Classes="BtnSm BtnOutline" Content="调整"
+                                                            Command="{Binding OpenBgPopCommand}"
+                                                            IsVisible="{Binding IsCustomBackground}"/>
+                                                    <Button Classes="BtnSm BtnOutline" Content="恢复默认"
+                                                            Command="{Binding ResetBackgroundCommand}"
+                                                            IsVisible="{Binding IsCustomBackground}"/>
+                                                    <Button Classes="BtnSm BtnOutline" Click="OnPickBackgroundClick">
+                                                        <StackPanel Orientation="Horizontal" Spacing="6">
+                                                            <materialIcons:MaterialIcon Kind="ImageFrame" Width="14" Height="14"/>
+                                                            <TextBlock Text="选择图片" VerticalAlignment="Center"/>
+                                                        </StackPanel>
+                                                    </Button>
+                                                </StackPanel>
+                                            </Grid>
+                                        </Border>
+                                    </StackPanel>
+                                </Border>
+
+                                <!-- 关于 -->
+                                <Border Background="#111114" BorderBrush="#26262b" BorderThickness="1" CornerRadius="14" Padding="18,18"
+                                        IsVisible="{Binding CurrentSettingsTab, Converter={x:Static ObjectConverters.Equal}, ConverterParameter='关于'}">
+                                    <StackPanel Spacing="14">
+                                        <StackPanel Orientation="Horizontal" Spacing="12">
+                                            <Image Source="avares://NegiCraftLauncher.App/Assets/app.png" Width="40" Height="40"/>
+                                            <StackPanel VerticalAlignment="Center" Spacing="2">
+                                                <TextBlock Text="NegiCraft Launcher" FontSize="16" FontWeight="SemiBold" Foreground="#fafafa"/>
+                                                <TextBlock Text="{Binding LauncherVersion, StringFormat='版本 {0}'}"
+                                                           FontSize="12" Foreground="#a1a1aa"/>
+                                            </StackPanel>
+                                        </StackPanel>
+                                        <TextBlock FontSize="12" Foreground="#71717a" TextWrapping="Wrap" LineHeight="20"
+                                                   Text="本项目与 Mojang Studios 及 Microsoft 无关联。Minecraft 是 Mojang Studios 的商标。"/>
+                                    </StackPanel>
+                                </Border>
+                            </Panel>
+                        </Grid>
+                    </Grid>
+                </Panel>
+            </Panel>
+
+            <!-- ========================================== -->
+            <!-- 6. POPOVER DISMISS OVERLAY (Click outside) -->
+            <!-- ========================================== -->
+            <Panel Background="Transparent"
+                   ZIndex="45"
+                   PointerPressed="OnPopoverBackgroundPointerPressed"
+                   IsVisible="{Binding HasOpenPopover}"/>
+
+            <!-- ========================================== -->
+            <!-- 7. POPOVERS (1:1 with Image 2 & mockup)    -->
+            <!-- ========================================== -->
+            <!-- #accPop: left: 84px; bottom: 12px; width: 260px; -->
+            <Border HorizontalAlignment="Left" VerticalAlignment="Bottom"
+                    Margin="84,0,0,12" Width="260"
+                    Background="#111114" BorderBrush="#26262b" BorderThickness="1"
+                    CornerRadius="14" Padding="6"
+                    BoxShadow="0 30 80 -20 #EE000000"
+                    Classes="Popover"
+                    pop:Pop.Anchor="BottomLeft"
+                    pop:Pop.Trigger="{Binding #AccountAvatar}"
+                    pop:Pop.IsOpen="{Binding IsAccPopOpen}"
+                    Classes.Open="{Binding IsAccPopOpen}"
+                    ZIndex="50">
+                <StackPanel Spacing="2">
+                    <ScrollViewer MaxHeight="260">
+                        <ItemsControl ItemsSource="{Binding Accounts}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="models:AccountModel">
+                                    <Button Classes="MenuItem"
+                                            Command="{Binding $parent[Window].((vm:MainWindowViewModel)DataContext).SelectAccountCommand}"
+                                            CommandParameter="{Binding .}">
+                                        <Button.ContextMenu>
+                                            <ContextMenu>
+                                                <MenuItem Header="删除账户"
+                                                          Command="{Binding $parent[Window].((vm:MainWindowViewModel)DataContext).RemoveAccountCommand}"
+                                                          CommandParameter="{Binding .}"/>
+                                            </ContextMenu>
+                                        </Button.ContextMenu>
+                                        <Grid ColumnDefinitions="Auto * Auto">
+                                            <Border Grid.Column="0" Width="30" Height="30" CornerRadius="8" ClipToBounds="True" Margin="0,0,10,0">
+                                                <Image Source="{Binding AvatarBitmap}" Width="30" Height="30" RenderOptions.BitmapInterpolationMode="None"/>
+                                            </Border>
+                                            <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                                <TextBlock Text="{Binding Name}" FontWeight="Bold" FontSize="13" Foreground="#fafafa"/>
+                                                <TextBlock Text="{Binding Type}" FontSize="12" Foreground="#a1a1aa"/>
+                                            </StackPanel>
+                                            <!-- Checkmark if active -->
+                                            <materialIcons:MaterialIcon Grid.Column="2" Kind="Check" Width="16" Height="16" Foreground="#fafafa"
+                                                                       IsVisible="{Binding IsCurrent}"/>
+                                        </Grid>
+                                    </Button>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </ScrollViewer>
+
+                    <!-- Separator -->
+                    <Rectangle Height="1" Fill="#26262b" Margin="0,6"/>
+
+                    <Button Classes="MenuItem" Command="{Binding AddOfflineAccountCommand}">
+                        <StackPanel Orientation="Horizontal" Spacing="10">
+                            <materialIcons:MaterialIcon Kind="AccountPlusOutline" Width="18" Height="18" Foreground="#a1a1aa" Margin="7,0"/>
+                            <TextBlock Text="添加离线账户" FontSize="13" Foreground="#fafafa" VerticalAlignment="Center"/>
+                        </StackPanel>
+                    </Button>
+
+                    <!-- Reserved until an Azure application id is available; the command explains why -->
+                    <Button Classes="MenuItem" Command="{Binding AddMicrosoftAccountCommand}">
+                        <StackPanel Orientation="Horizontal" Spacing="10">
+                            <materialIcons:MaterialIcon Kind="Microsoft" Width="18" Height="18" Foreground="#a1a1aa" Margin="7,0"/>
+                            <TextBlock Text="添加微软账户" FontSize="13" Foreground="#71717a" VerticalAlignment="Center"/>
+                        </StackPanel>
+                    </Button>
+                </StackPanel>
+            </Border>
+
+            <!-- #instPop: exactly 8px above dock (bottom: 100px), width: 380px (1:1 with Image 2) -->
+            <Border HorizontalAlignment="Right" VerticalAlignment="Bottom"
+                    Margin="0,0,20,100" Width="380"
+                    Background="#111114" BorderBrush="#26262b" BorderThickness="1"
+                    CornerRadius="14" Padding="6"
+                    BoxShadow="0 30 80 -20 #EE000000"
+                    Classes="Popover"
+                    pop:Pop.Anchor="BottomLeft"
+                    pop:Pop.Trigger="{Binding #InstSelectBtn}"
+                    pop:Pop.IsOpen="{Binding IsInstPopOpen}"
+                    Classes.Open="{Binding IsInstPopOpen}"
+                    ZIndex="50">
+                <StackPanel Spacing="2">
+                    <ScrollViewer MaxHeight="300">
+                        <ItemsControl ItemsSource="{Binding Instances}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="models:InstanceModel">
+                                    <Button Classes="MenuItem"
+                                            Command="{Binding $parent[Window].((vm:MainWindowViewModel)DataContext).SelectInstanceCommand}"
+                                            CommandParameter="{Binding .}">
+                                        <Grid ColumnDefinitions="Auto * Auto">
+                                            <!-- 32x32 Block icon with 7px radius (matching Image 2) -->
+                                            <Border Grid.Column="0" Width="32" Height="32" CornerRadius="7" ClipToBounds="True" Margin="0,0,10,0">
+                                                <Image Source="{Binding IconBitmap}" Width="32" Height="32" RenderOptions.BitmapInterpolationMode="None"/>
+                                            </Border>
+                                            <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                                <TextBlock Text="{Binding Name}" FontWeight="Bold" FontSize="13" Foreground="#fafafa"/>
+                                                <TextBlock Text="{Binding MetaText}" FontSize="12" Foreground="#a1a1aa"/>
+                                            </StackPanel>
+                                            <!-- Checkmark if active (matching Image 2) -->
+                                            <materialIcons:MaterialIcon Grid.Column="2" Kind="Check" Width="16" Height="16" Foreground="#fafafa"
+                                                                       IsVisible="{Binding IsCurrent}"/>
+                                        </Grid>
+                                    </Button>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </ScrollViewer>
+
+                    <Rectangle Height="1" Fill="#26262b" Margin="0,6" IsVisible="{Binding HasInstances}"/>
+
+                    <Button Classes="MenuItem" Command="{Binding NewInstanceCommand}">
+                        <StackPanel Orientation="Horizontal" Spacing="10">
+                            <materialIcons:MaterialIcon Kind="Plus" Width="18" Height="18" Foreground="#a1a1aa" Margin="7,0"/>
+                            <TextBlock Text="安装新版本" FontSize="13" Foreground="#fafafa" VerticalAlignment="Center"/>
+                        </StackPanel>
+                    </Button>
+                </StackPanel>
+            </Border>
+
+            <!-- ========================================== -->
+            <!-- 7b. DOWNLOAD TASKS POPOVER (hangs off the  -->
+            <!--       download page's 下载任务 button)      -->
+            <!-- ========================================== -->
+            <Border HorizontalAlignment="Right" VerticalAlignment="Top"
+                    Margin="0,64,112,0" Width="440"
+                    Background="#111114" BorderBrush="#26262b" BorderThickness="1"
+                    CornerRadius="14" Padding="4" ClipToBounds="True"
+                    BoxShadow="0 30 80 -20 #EE000000"
+                    Classes="Popover"
+                    pop:Pop.Anchor="TopRight"
+                    pop:Pop.Trigger="{Binding #DlPopBtn}"
+                    pop:Pop.IsOpen="{Binding IsDlPopOpen}"
+                    Classes.Open="{Binding IsDlPopOpen}"
+                    ZIndex="50">
+                <Grid RowDefinitions="Auto *">
+                    <Grid Grid.Row="0" ColumnDefinitions="* Auto" Margin="10,8,10,10">
+                        <TextBlock Grid.Column="0" Text="下载任务" FontWeight="SemiBold" FontSize="13"
+                                   Foreground="#fafafa" VerticalAlignment="Center"/>
+                        <Button Grid.Column="1" Classes="BtnSm BtnOutline" Content="清除已完成"
+                                Command="{Binding ClearDownloadsCommand}"/>
+                    </Grid>
+
+                    <ScrollViewer Grid.Row="1" MaxHeight="380" IsVisible="{Binding HasDownloads}">
+                        <ItemsControl ItemsSource="{Binding Downloads}"
+                                      ItemTemplate="{StaticResource DownloadRowTemplate}"/>
+                    </ScrollViewer>
+
+                    <TextBlock Grid.Row="1" Text="暂无下载任务" IsVisible="{Binding !HasDownloads}"
+                               FontSize="13" Foreground="#a1a1aa"
+                               HorizontalAlignment="Center" VerticalAlignment="Center" Margin="0,28"/>
+                </Grid>
+            </Border>
+
+            <!-- ========================================== -->
+            <!-- 8. BACKGROUND PREVIEW POPUP                -->
+            <!--      (home art stays visible behind it)    -->
+            <!-- ========================================== -->
+            <Panel ZIndex="55" IsHitTestVisible="{Binding IsBgPopOpen}">
+                <Panel Background="Transparent" PointerPressed="OnBgPopBackdropPointerPressed"/>
+                <Border HorizontalAlignment="Center" VerticalAlignment="Bottom"
+                        Margin="0,0,0,28" Width="480"
+                        Background="#F2111114" BorderBrush="#26262b" BorderThickness="1"
+                        CornerRadius="14" Padding="18,14"
+                        Classes="Popover"
+                        pop:Pop.Anchor="BottomCenter"
+                        pop:Pop.IsOpen="{Binding IsBgPopOpen}"
+                        Classes.Open="{Binding IsBgPopOpen}"
+                        BoxShadow="0 30 80 -20 #EE000000">
+                    <StackPanel Spacing="8">
+                        <Grid ColumnDefinitions="* Auto">
+                            <TextBlock Text="背景预览" FontWeight="SemiBold" Foreground="#fafafa" VerticalAlignment="Center"/>
+                            <TextBlock Grid.Column="1" Text="首页效果" FontSize="11" Foreground="#71717a" VerticalAlignment="Center"/>
+                        </Grid>
+
+                        <Grid ColumnDefinitions="44 * 62">
+                            <TextBlock Text="亮度" VerticalAlignment="Center" Foreground="#a1a1aa" FontSize="13"/>
+                            <Slider Grid.Column="1" Minimum="-100" Maximum="100" Value="{Binding BgBrightness}"
+                                    IsSnapToTickEnabled="True" TickFrequency="1"/>
+                            <TextBox Grid.Column="2" Text="{Binding BgBrightness, Mode=TwoWay}"
+                                     Width="46" Height="28" MinHeight="0" Padding="4,0" HorizontalAlignment="Right"
+                                     TextAlignment="Right" HorizontalContentAlignment="Right"
+                                     VerticalAlignment="Center" VerticalContentAlignment="Center"
+                                     Background="#1c1c21" BorderBrush="#26262b" BorderThickness="1"
+                                     CornerRadius="8" FontSize="13" Foreground="#fafafa"/>
+                        </Grid>
+
+                        <Grid ColumnDefinitions="44 * 62">
+                            <TextBlock Text="模糊" VerticalAlignment="Center" Foreground="#a1a1aa" FontSize="13"/>
+                            <Slider Grid.Column="1" Minimum="0" Maximum="40" Value="{Binding BgBlur}"
+                                    IsSnapToTickEnabled="True" TickFrequency="1"/>
+                            <TextBox Grid.Column="2" Text="{Binding BgBlur, Mode=TwoWay}"
+                                     Width="46" Height="28" MinHeight="0" Padding="4,0" HorizontalAlignment="Right"
+                                     TextAlignment="Right" HorizontalContentAlignment="Right"
+                                     VerticalAlignment="Center" VerticalContentAlignment="Center"
+                                     Background="#1c1c21" BorderBrush="#26262b" BorderThickness="1"
+                                     CornerRadius="8" FontSize="13" Foreground="#fafafa"/>
+                        </Grid>
+
+                        <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right" Margin="0,4,0,0">
+                            <Button Classes="BtnSm BtnOutline" Content="恢复默认" Command="{Binding ResetBackgroundCommand}"/>
+                            <Button Classes="BtnSm BtnPrimary" Content="完成" Command="{Binding CloseBgPopCommand}"/>
+                        </StackPanel>
+                    </StackPanel>
+                </Border>
+            </Panel>
+
+            <!-- ========================================== -->
+            <!-- 9. BANNER (transient status message)       -->
+            <!-- ========================================== -->
+            <!-- The launch dock owns the bottom-right band, so the toast hangs from the top edge
+                 where nothing else lives instead of colliding with it. -->
+            <Border HorizontalAlignment="Center" VerticalAlignment="Top"
+                    Margin="0,20,0,0" MaxWidth="520"
+                    Background="#F2111114" BorderBrush="#26262b" BorderThickness="1"
+                    CornerRadius="12" Padding="14,10"
+                    BoxShadow="0 20 50 -16 #DD000000"
+                    Classes="Popover"
+                    pop:Pop.Anchor="TopCenter"
+                    pop:Pop.IsOpen="{Binding IsBannerOpen}"
+                    Classes.Open="{Binding IsBannerOpen}"
+                    ZIndex="65">
+                <Grid ColumnDefinitions="Auto * Auto">
+                    <materialIcons:MaterialIcon Grid.Column="0" Kind="InformationOutline" Width="16" Height="16"
+                                                Foreground="#a1a1aa" VerticalAlignment="Center" Margin="0,0,10,0"/>
+                    <TextBlock Grid.Column="1" Text="{Binding BannerText}" FontSize="13" Foreground="#fafafa"
+                               VerticalAlignment="Center" TextWrapping="Wrap"/>
+                    <Button Grid.Column="2" Classes="WinCtrl" Width="22" Height="22" CornerRadius="6"
+                            Margin="10,0,0,0" VerticalAlignment="Center"
+                            Command="{Binding DismissBannerCommand}" ToolTip.Tip="关闭">
+                        <materialIcons:MaterialIcon Kind="Close" Width="13" Height="13"/>
+                    </Button>
+                </Grid>
+            </Border>
+
+            <!-- ========================================== -->
+            <!-- 10. DIALOG (in-window prompt / confirm)    -->
+            <!-- ========================================== -->
+            <Panel ZIndex="70">
+                <Border Background="#A6000000" IsVisible="{Binding IsDialogOpen}"
+                        PointerPressed="OnDialogBackdropPointerPressed"/>
+
+                <Border HorizontalAlignment="Center" VerticalAlignment="Center"
+                        Width="400"
+                        Background="#111114" BorderBrush="#26262b" BorderThickness="1"
+                        CornerRadius="16" Padding="22,20"
+                        BoxShadow="0 30 80 -20 #EE000000"
+                        Classes="Popover"
+                        pop:Pop.Anchor="Center"
+                        pop:Pop.IsOpen="{Binding IsDialogOpen}"
+                        Classes.Open="{Binding IsDialogOpen}">
+                    <StackPanel Spacing="14">
+                        <TextBlock Text="{Binding DialogTitle}" FontSize="16" FontWeight="SemiBold" Foreground="#fafafa"/>
+
+                        <TextBlock Text="{Binding DialogMessage}" FontSize="13" Foreground="#a1a1aa"
+                                   TextWrapping="Wrap" LineHeight="20"
+                                   IsVisible="{Binding HasDialogMessage}"/>
+
+                        <TextBox x:Name="DialogInputBox"
+                                 Text="{Binding DialogInput, Mode=TwoWay}"
+                                 PlaceholderText="{Binding DialogPlaceholder}"
+                                 IsVisible="{Binding DialogHasInput}"
+                                 Background="#1c1c21" BorderBrush="#26262b" BorderThickness="1"
+                                 CornerRadius="10" Foreground="#fafafa"
+                                 KeyDown="OnDialogInputKeyDown"/>
+
+                        <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right">
+                            <Button Classes="BtnSm BtnOutline" Content="取消" Command="{Binding CancelDialogCommand}"/>
+                            <Button Classes="BtnSm BtnPrimary" Content="{Binding DialogConfirmText}"
+                                    Command="{Binding ConfirmDialogCommand}"/>
+                        </StackPanel>
+                    </StackPanel>
+                </Border>
+            </Panel>
+
+            <!-- ========================================== -->
+            <!-- 11. WINDOW OUTLINE (on top of everything:  -->
+            <!--     the full-bleed home art hides a stroke -->
+            <!--     drawn by the shell border itself)      -->
+            <!-- ========================================== -->
+            <Border IsHitTestVisible="False"
+                    CornerRadius="22"
+                    BorderThickness="1"
+                    BorderBrush="#3f3f46"
+                    ZIndex="80"/>
+        </Panel>
+    </Border>
+</Window>

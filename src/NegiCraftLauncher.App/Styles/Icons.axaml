@@ -1,0 +1,20 @@
+<ResourceDictionary xmlns="https://github.com/avaloniaui"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <!-- Exact SVG Geometries from mockup.html -->
+    <StreamGeometry x:Key="IconHome">M3 10.5 12 3l9 7.5 M5 9.5V21h14V9.5 M10 21v-6h4v6</StreamGeometry>
+    <StreamGeometry x:Key="IconLayers">M12 2 22 7 12 12 2 7z M2 17 12 22 22 17 M2 12 12 17 22 12</StreamGeometry>
+    <StreamGeometry x:Key="IconDownload">M12 3v12 M7 10l5 5 5-5 M5 21h14</StreamGeometry>
+    <StreamGeometry x:Key="IconBox">M21 8 12 3 3 8v8l9 5 9-5z M3 8l9 5 9-5 M12 13v8</StreamGeometry>
+    <StreamGeometry x:Key="IconSettings">M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z</StreamGeometry>
+    <StreamGeometry x:Key="IconMin">M5 12h14</StreamGeometry>
+    <StreamGeometry x:Key="IconX">M6 6l12 12 M18 6 6 18</StreamGeometry>
+    <StreamGeometry x:Key="IconPlay">M7 4v16l13-8z</StreamGeometry>
+    <StreamGeometry x:Key="IconChev">M7 15l5-5 5 5</StreamGeometry>
+    <StreamGeometry x:Key="IconChevDown">M7 9l5 5 5-5</StreamGeometry>
+    <StreamGeometry x:Key="IconSearch">M11 4a7 7 0 1 0 0 14 7 7 0 0 0 0-14z M21 21l-4.3-4.3</StreamGeometry>
+    <StreamGeometry x:Key="IconPlus">M12 5v14 M5 12h14</StreamGeometry>
+    <StreamGeometry x:Key="IconCheck">M5 12l5 5L20 7</StreamGeometry>
+    <StreamGeometry x:Key="IconUserPlus">M9 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8z M2 21a7 7 0 0 1 14 0 M19 8v6 M16 11h6</StreamGeometry>
+    <StreamGeometry x:Key="IconSun">M12 16a4 4 0 1 0 0-8 4 4 0 0 0 0 8z M12 2v2 M12 20v2 M4.9 4.9l1.4 1.4 M17.7 17.7l1.4 1.4 M2 12h2 M20 12h2 M4.9 19.1l1.4-1.4 M17.7 6.3l1.4-1.4</StreamGeometry>
+</ResourceDictionary>
