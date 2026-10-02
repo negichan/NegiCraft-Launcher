@@ -12,7 +12,7 @@ namespace NegiCraftLauncher.App.Views;
 
 /// <summary>
 ///     Grows a card out of the control that opened it: the card starts exactly on the trigger's
-///     rectangle and expands into place without squashing its content.
+///     rectangle, expands into place slightly past its size, dips back under it and rests.
 ///     Attached to a popover with <see cref="TriggerProperty" /> and <see cref="IsOpenProperty" />.
 /// </summary>
 public class Pop
@@ -67,8 +67,17 @@ public class Pop
 
     private sealed class Runner
     {
-        private static readonly TimeSpan Duration = TimeSpan.FromMilliseconds(300);
-        private static readonly TimeSpan CloseTime = TimeSpan.FromMilliseconds(200);
+        // One gesture: the expansion decelerates straight into the overshoot, then the card dips
+        // under its size and rests. Every leg needs ~100ms to read as motion; shorter legs read
+        // as a shake. The travel itself stays short so the departure feels crisp.
+        private const double TravelMs = 150;
+        private const double DipMs = 110;
+        private const double RestMs = 110;
+        private const double TotalMs = TravelMs + DipMs + RestMs;
+        private const double CloseMs = 160;
+
+        private const double Peak = 1.05;
+        private const double Dip = 0.987;
 
         // Used when there is no trigger to grow out of.
         private const double FallbackScale = 0.8;
@@ -87,9 +96,8 @@ public class Pop
         private double _reveal0;   // visible height, in screen units, at the start of the travel
         private double _anchorY = 1;
 
-        // Where the travel is right now, and the run in flight: closing replays the same curve
-        // backwards from whatever progress was reached, so interrupts never jump.
-        private double _t;
+        // Position on the open timeline, in ms: interrupts resume from wherever the card is.
+        private double _p;
         private double _from;
         private double _spanMs;
         private bool _closing;
@@ -116,73 +124,104 @@ public class Pop
             _target.IsHitTestVisible = false;
 
             _closing = false;
-            _from = _t;
-            _spanMs = Math.Max(80, Duration.TotalMilliseconds * (1 - _from));
+            _from = _p;
+            _spanMs = Math.Max(100, TotalMs - _from);
             _clock.Restart();
             _timer.Stop();
             _timer.Start();
-            Apply(_from);
+            ApplyTimeline(_from);
         }
 
         public void Close()
         {
             _closing = true;
-            _from = _t;
             _target.IsHitTestVisible = false;
+
+            // The retract skips the settle: it plays the expansion back from plain full size.
+            _from = Math.Min(_p, TravelMs);
             if (_from <= 0)
             {
                 Rest();
                 return;
             }
 
-            _spanMs = Math.Max(60, CloseTime.TotalMilliseconds * _from);
+            _spanMs = Math.Max(80, CloseMs * _from / TravelMs);
             _clock.Restart();
             _timer.Stop();
             _timer.Start();
-            Apply(_from);
+            ApplyTravel(_from / TravelMs, 1.0);
         }
 
         private void Step()
         {
-            var u = Math.Min(1, _clock.Elapsed.TotalMilliseconds / _spanMs);
-            if (u >= 1)
+            var ms = _clock.Elapsed.TotalMilliseconds;
+            if (_closing)
             {
-                _timer.Stop();
-                if (_closing)
+                var k = Math.Min(1, ms / _spanMs);
+                if (k >= 1)
                 {
+                    _timer.Stop();
                     Rest();
-                }
-                else
-                {
-                    _t = 1;
-                    _target.RenderTransform = null;
-                    _target.Clip = null;
-                    _target.ClearValue(InputElement.IsHitTestVisibleProperty);
+                    return;
                 }
 
+                ApplyTravel(_from * (1 - k) / TravelMs, 1.0);
                 return;
             }
 
-            Apply(_closing ? _from * (1 - u) : _from + (1 - _from) * u);
+            var done = Math.Min(1, ms / _spanMs);
+            if (done >= 1)
+            {
+                _timer.Stop();
+                _p = TotalMs;
+                _target.RenderTransform = null;
+                _target.Clip = null;
+                _target.ClearValue(InputElement.IsHitTestVisibleProperty);
+                return;
+            }
+
+            ApplyTimeline(_from + (TotalMs - _from) * done);
         }
 
-        // Avalonia applies RenderTransformOrigin as translate(origin) * transform * translate(-origin),
-        // so the translation below moves the pinned corner in unscaled units.
-        private void Apply(double t)
+        private void ApplyTimeline(double p)
         {
-            var e = 1 - Math.Pow(1 - t, 3);
-            var scale = Lerp(_scale0, 1, e);
-            var visible = Lerp(_reveal0, _popH, e);
+            _p = p;
+            if (p <= TravelMs)
+            {
+                ApplyTravel(p / TravelMs, Peak);
+                return;
+            }
+
+            const double dipEnds = DipMs / (TotalMs - TravelMs);
+            var q = (p - TravelMs) / (TotalMs - TravelMs);
+            var scale = q <= dipEnds
+                ? Smooth(Peak, Dip, q / dipEnds)
+                : Smooth(Dip, 1, (q - dipEnds) / (1 - dipEnds));
+
+            _target.RenderTransform = new MatrixTransform(new Matrix(scale, 0, 0, scale, 0, 0));
+            _target.Opacity = 1;
+            _target.Clip = null;
+        }
+
+        // The card riding its pinned corner out of the trigger. Avalonia applies
+        // RenderTransformOrigin as translate(origin) * transform * translate(-origin), so the
+        // translation below moves that corner in unscaled units. The travel ends at `top`:
+        // the overshoot while opening, plain full size while retracting.
+        private void ApplyTravel(double u, double top)
+        {
+            _p = u * TravelMs;
+            var e = 1 - Math.Pow(1 - u, 2);
+            var scale = Lerp(_scale0, top, e);
+            var local = Lerp(_reveal0 / _scale0, _popH, e);
 
             _target.RenderTransform = new MatrixTransform(new Matrix(scale, 0, 0, scale, _offsetX * (1 - e), _offsetY * (1 - e)));
             _target.Opacity = 1;
-            _target.Clip = ClipFor(visible / scale);
-            _t = t;
+            _target.Clip = ClipFor(local);
         }
 
         private void Rest()
         {
-            _t = 0;
+            _p = 0;
             _target.RenderTransform = null;
             _target.Clip = null;
             _target.ClearValue(Visual.OpacityProperty);
@@ -267,6 +306,8 @@ public class Pop
             "Center" => (0.5, 0.5),
             _ => (0, 1)
         };
+
+        private static double Smooth(double from, double to, double u) => from + (to - from) * (u * u * (3 - 2 * u));
 
         private static double Lerp(double from, double to, double t) => from + (to - from) * t;
     }
