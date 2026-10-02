@@ -1,0 +1,477 @@
+<ResourceDictionary xmlns="https://github.com/avaloniaui"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <!--
+        NegiCraftLauncher in-house control themes.
+        Only the templated controls the app actually uses are implemented here;
+        libs/ShadUI is kept on disk purely as a styling reference.
+        Each theme is keyed x:Key="{x:Type X}" so it applies implicitly.
+    -->
+
+    <!-- ============ Slider helper themes (declared before Slider for StaticResource) ============ -->
+    <ControlTheme TargetType="Thumb" x:Key="{x:Type Thumb}">
+        <Setter Property="Template">
+            <ControlTemplate>
+                <Border Background="{DynamicResource MutedBrush}" CornerRadius="999" />
+            </ControlTemplate>
+        </Setter>
+    </ControlTheme>
+
+    <ControlTheme TargetType="RepeatButton" x:Key="{x:Type RepeatButton}">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="Template">
+            <ControlTemplate>
+                <Border Background="{TemplateBinding Background}" />
+            </ControlTemplate>
+        </Setter>
+    </ControlTheme>
+
+    <ControlTheme TargetType="RepeatButton" x:Key="SliderTrackButtonTheme">
+        <Setter Property="Template">
+            <ControlTemplate>
+                <Border Background="{TemplateBinding Background}"
+                        CornerRadius="999"
+                        Height="6"
+                        VerticalAlignment="Center" />
+            </ControlTemplate>
+        </Setter>
+    </ControlTheme>
+
+    <ControlTheme TargetType="Thumb" x:Key="SliderThumbTheme">
+        <Setter Property="Template">
+            <ControlTemplate>
+                <Border Background="{DynamicResource CardBackgroundBrush}"
+                        BorderBrush="{DynamicResource PrimaryBrush}"
+                        BorderThickness="2"
+                        CornerRadius="999" />
+            </ControlTemplate>
+        </Setter>
+        <Style Selector="^:pointerover">
+            <Setter Property="Cursor" Value="Hand" />
+        </Style>
+    </ControlTheme>
+
+    <!-- ============ Button ============ -->
+    <ControlTheme TargetType="Button" x:Key="{x:Type Button}">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="Foreground" Value="{DynamicResource ForegroundBrush}" />
+        <Setter Property="BorderBrush" Value="Transparent" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="CornerRadius" Value="10" />
+        <Setter Property="Padding" Value="16,0" />
+        <Setter Property="HorizontalContentAlignment" Value="Center" />
+        <Setter Property="VerticalContentAlignment" Value="Center" />
+        <Setter Property="Template">
+            <ControlTemplate>
+                <Border Background="{TemplateBinding Background}"
+                        BorderBrush="{TemplateBinding BorderBrush}"
+                        BorderThickness="{TemplateBinding BorderThickness}"
+                        CornerRadius="{TemplateBinding CornerRadius}"
+                        Padding="{TemplateBinding Padding}"
+                        ClipToBounds="True"
+                        TextElement.Foreground="{TemplateBinding Foreground}"
+                        Name="Root">
+                    <ContentPresenter Content="{TemplateBinding Content}"
+                                      ContentTemplate="{TemplateBinding ContentTemplate}"
+                                      HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                      VerticalAlignment="{TemplateBinding VerticalContentAlignment}"
+                                      RecognizesAccessKey="True"
+                                      Name="PART_ContentPresenter" />
+                </Border>
+            </ControlTemplate>
+        </Setter>
+        <Style Selector="^:disabled">
+            <Setter Property="Opacity" Value="0.5" />
+        </Style>
+    </ControlTheme>
+
+    <!-- ============ TextBox ============ -->
+    <ControlTheme TargetType="TextBox" x:Key="{x:Type TextBox}">
+        <Setter Property="Background" Value="{DynamicResource CardBackgroundBrush}" />
+        <Setter Property="Foreground" Value="{DynamicResource ForegroundBrush}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource BorderLineBrush}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="CornerRadius" Value="10" />
+        <Setter Property="Padding" Value="12,0" />
+        <Setter Property="MinHeight" Value="36" />
+        <Setter Property="VerticalContentAlignment" Value="Center" />
+        <Setter Property="CaretBrush" Value="{DynamicResource ForegroundBrush}" />
+        <Setter Property="SelectionBrush" Value="{DynamicResource RingBrush}" />
+        <Setter Property="SelectionForegroundBrush" Value="{DynamicResource ForegroundBrush}" />
+        <Setter Property="FocusAdorner" Value="{x:Null}" />
+        <Setter Property="Template">
+            <ControlTemplate>
+                <Border Background="{TemplateBinding Background}"
+                        BorderBrush="{TemplateBinding BorderBrush}"
+                        BorderThickness="{TemplateBinding BorderThickness}"
+                        CornerRadius="{TemplateBinding CornerRadius}"
+                        MinHeight="{TemplateBinding MinHeight}"
+                        TextElement.Foreground="{TemplateBinding Foreground}"
+                        Name="Border">
+                    <ScrollViewer AllowAutoHide="{TemplateBinding (ScrollViewer.AllowAutoHide)}"
+                                  HorizontalScrollBarVisibility="{TemplateBinding (ScrollViewer.HorizontalScrollBarVisibility)}"
+                                  VerticalScrollBarVisibility="{TemplateBinding (ScrollViewer.VerticalScrollBarVisibility)}"
+                                  Name="PART_ScrollViewer">
+                        <Panel Name="TextContainer">
+                            <TextBlock Foreground="{DynamicResource MutedForegroundBrush}"
+                                       HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                       IsVisible="{TemplateBinding Text, Converter={x:Static StringConverters.IsNullOrEmpty}}"
+                                       Margin="{TemplateBinding Padding}"
+                                       Name="Watermark"
+                                       Text="{TemplateBinding Watermark}"
+                                       VerticalAlignment="{TemplateBinding VerticalContentAlignment}" />
+                            <TextPresenter CaretBrush="{TemplateBinding CaretBrush}"
+                                           CaretIndex="{TemplateBinding CaretIndex}"
+                                           HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                           Margin="{TemplateBinding Padding}"
+                                           Name="PART_TextPresenter"
+                                           PasswordChar="{TemplateBinding PasswordChar}"
+                                           RevealPassword="{TemplateBinding RevealPassword}"
+                                           SelectionBrush="{TemplateBinding SelectionBrush}"
+                                           SelectionEnd="{TemplateBinding SelectionEnd}"
+                                           SelectionForegroundBrush="{TemplateBinding SelectionForegroundBrush}"
+                                           SelectionStart="{TemplateBinding SelectionStart}"
+                                           Text="{TemplateBinding Text, Mode=TwoWay}"
+                                           TextAlignment="{TemplateBinding TextAlignment}"
+                                           TextWrapping="{TemplateBinding TextWrapping}"
+                                           VerticalAlignment="{TemplateBinding VerticalContentAlignment}" />
+                        </Panel>
+                    </ScrollViewer>
+                </Border>
+            </ControlTemplate>
+        </Setter>
+        <Style Selector="^:pointerover /template/ Border#Border">
+            <Setter Property="BorderBrush" Value="{DynamicResource RingBrush}" />
+        </Style>
+        <Style Selector="^:focus /template/ Border#Border">
+            <Setter Property="BorderBrush" Value="{DynamicResource RingBrush}" />
+        </Style>
+        <Style Selector="^:disabled">
+            <Setter Property="Opacity" Value="0.5" />
+        </Style>
+    </ControlTheme>
+
+    <!-- ============ ToggleSwitch ============ -->
+    <ControlTheme TargetType="ToggleSwitch" x:Key="{x:Type ToggleSwitch}">
+        <Setter Property="Foreground" Value="{DynamicResource ForegroundBrush}" />
+        <Setter Property="OnContent" Value="" />
+        <Setter Property="OffContent" Value="" />
+        <Setter Property="HorizontalAlignment" Value="Left" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+        <Setter Property="HorizontalContentAlignment" Value="Left" />
+        <Setter Property="VerticalContentAlignment" Value="Center" />
+        <Setter Property="FontSize" Value="14" />
+        <Setter Property="Template">
+            <ControlTemplate>
+                <StackPanel Name="PART_Container" Orientation="Horizontal" Spacing="8">
+                    <Panel>
+                        <ContentPresenter Content="{TemplateBinding OffContent}"
+                                          ContentTemplate="{TemplateBinding OffContentTemplate}"
+                                          HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                          VerticalAlignment="{TemplateBinding VerticalContentAlignment}"
+                                          x:Name="PART_OffContentPresenter" />
+                        <ContentPresenter Content="{TemplateBinding OnContent}"
+                                          ContentTemplate="{TemplateBinding OnContentTemplate}"
+                                          HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                          VerticalAlignment="{TemplateBinding VerticalContentAlignment}"
+                                          x:Name="PART_OnContentPresenter" />
+                    </Panel>
+                    <Grid Background="Transparent" Name="PART_ToggleContainer" RowDefinitions="Auto,*">
+                        <ContentPresenter Content="{TemplateBinding Content}"
+                                          ContentTemplate="{TemplateBinding ContentTemplate}"
+                                          Grid.Row="0"
+                                          RecognizesAccessKey="True"
+                                          VerticalAlignment="Top"
+                                          x:Name="PART_ContentPresenter" />
+                        <Grid Grid.Row="1"
+                              HorizontalAlignment="Left"
+                              RowDefinitions="2,Auto,2"
+                              VerticalAlignment="Top">
+                            <Border Background="{DynamicResource MutedBrush}"
+                                    CornerRadius="999"
+                                    Grid.Row="1"
+                                    Height="20"
+                                    Name="Track"
+                                    Width="36">
+                                <Border.Transitions>
+                                    <Transitions>
+                                        <BrushTransition Duration="0:0:0.15" Property="Background" />
+                                    </Transitions>
+                                </Border.Transitions>
+                            </Border>
+                            <Canvas Grid.Row="1"
+                                    Height="16"
+                                    HorizontalAlignment="Left"
+                                    Name="PART_SwitchKnob"
+                                    VerticalAlignment="Center"
+                                    Width="16">
+                                <Border Background="{DynamicResource CardBackgroundBrush}"
+                                        Canvas.Left="2"
+                                        Canvas.Top="0"
+                                        ClipToBounds="True"
+                                        CornerRadius="999"
+                                        Height="16"
+                                        Name="SwitchKnob"
+                                        Width="16">
+                                    <Border.Transitions>
+                                        <Transitions>
+                                            <DoubleTransition Duration="0:0:0.15" Property="Canvas.Left" />
+                                        </Transitions>
+                                    </Border.Transitions>
+                                </Border>
+                                <Grid x:Name="PART_MovingKnobs" />
+                            </Canvas>
+                        </Grid>
+                    </Grid>
+                </StackPanel>
+            </ControlTemplate>
+        </Setter>
+        <Style Selector="^[IsEnabled=False] /template/ StackPanel#PART_Container">
+            <Setter Property="Opacity" Value="0.5" />
+        </Style>
+        <Style Selector="^[IsEnabled=True] /template/ Grid#PART_ToggleContainer:pointerover">
+            <Setter Property="Cursor" Value="Hand" />
+        </Style>
+        <Style Selector="^:unchecked">
+            <Style Selector="^ /template/ Border#SwitchKnob">
+                <Setter Property="Canvas.Left" Value="2" />
+            </Style>
+            <Style Selector="^ /template/ ContentPresenter#PART_OffContentPresenter">
+                <Setter Property="IsVisible" Value="True" />
+            </Style>
+            <Style Selector="^ /template/ ContentPresenter#PART_OnContentPresenter">
+                <Setter Property="IsVisible" Value="False" />
+            </Style>
+        </Style>
+        <Style Selector="^:checked">
+            <Style Selector="^ /template/ Border#Track">
+                <Setter Property="Background" Value="{DynamicResource PrimaryBrush}" />
+            </Style>
+            <Style Selector="^ /template/ Border#SwitchKnob">
+                <Setter Property="Canvas.Left" Value="18" />
+            </Style>
+            <Style Selector="^ /template/ ContentPresenter#PART_OffContentPresenter">
+                <Setter Property="IsVisible" Value="False" />
+            </Style>
+            <Style Selector="^ /template/ ContentPresenter#PART_OnContentPresenter">
+                <Setter Property="IsVisible" Value="True" />
+            </Style>
+        </Style>
+    </ControlTheme>
+
+    <!-- ============ Slider ============ -->
+    <ControlTheme TargetType="Slider" x:Key="{x:Type Slider}">
+        <Setter Property="Background" Value="{DynamicResource MutedBrush}" />
+        <Setter Property="Foreground" Value="{DynamicResource PrimaryBrush}" />
+        <Setter Property="MinHeight" Value="16" />
+        <Setter Property="Template">
+            <ControlTemplate>
+                <Grid Background="Transparent" Margin="{TemplateBinding Padding}" Name="SliderContainer">
+                    <Track IsDirectionReversed="{TemplateBinding IsDirectionReversed}"
+                           Maximum="{TemplateBinding Maximum}"
+                           Minimum="{TemplateBinding Minimum}"
+                           Name="PART_Track"
+                           Orientation="Horizontal"
+                           Value="{TemplateBinding Value, Mode=TwoWay}"
+                           VerticalAlignment="Center">
+                        <Track.DecreaseButton>
+                            <RepeatButton Background="{DynamicResource MutedBrush}"
+                                          Focusable="False"
+                                          Name="PART_DecreaseButton"
+                                          Theme="{StaticResource SliderTrackButtonTheme}" />
+                        </Track.DecreaseButton>
+                        <Track.IncreaseButton>
+                            <RepeatButton Background="{DynamicResource MutedBrush}"
+                                          Focusable="False"
+                                          Name="PART_IncreaseButton"
+                                          Theme="{StaticResource SliderTrackButtonTheme}" />
+                        </Track.IncreaseButton>
+                        <Thumb Height="16"
+                               Name="Thumb"
+                               Theme="{StaticResource SliderThumbTheme}"
+                               Width="16" />
+                    </Track>
+                </Grid>
+            </ControlTemplate>
+        </Setter>
+        <Style Selector="^:disabled">
+            <Setter Property="Opacity" Value="0.5" />
+        </Style>
+    </ControlTheme>
+
+    <!-- ============ ProgressBar ============ -->
+    <ControlTheme TargetType="ProgressBar" x:Key="{x:Type ProgressBar}">
+        <Setter Property="Background" Value="{DynamicResource MutedBrush}" />
+        <Setter Property="Foreground" Value="{DynamicResource PrimaryBrush}" />
+        <Setter Property="CornerRadius" Value="999" />
+        <Setter Property="MinHeight" Value="4" />
+        <Setter Property="Template">
+            <ControlTemplate>
+                <Border Background="{TemplateBinding Background}"
+                        BorderBrush="{TemplateBinding BorderBrush}"
+                        BorderThickness="{TemplateBinding BorderThickness}"
+                        ClipToBounds="True"
+                        CornerRadius="{TemplateBinding CornerRadius}"
+                        Name="PART_Track">
+                    <Border Background="{TemplateBinding Foreground}"
+                            CornerRadius="{TemplateBinding CornerRadius}"
+                            HorizontalAlignment="Left"
+                            Name="PART_Indicator" />
+                </Border>
+            </ControlTemplate>
+        </Setter>
+    </ControlTheme>
+
+    <!-- ============ ScrollBar ============ -->
+    <ControlTheme TargetType="ScrollBar" x:Key="{x:Type ScrollBar}">
+        <Setter Property="AllowAutoHide" Value="False" />
+        <Style Selector="^:vertical">
+            <Setter Property="Width" Value="10" />
+            <Setter Property="Template">
+                <ControlTemplate>
+                    <Border Background="Transparent">
+                        <Track IsDirectionReversed="True"
+                               Maximum="{TemplateBinding Maximum}"
+                               Minimum="{TemplateBinding Minimum}"
+                               Orientation="{TemplateBinding Orientation}"
+                               Value="{TemplateBinding Value, Mode=TwoWay}"
+                               ViewportSize="{TemplateBinding ViewportSize}">
+                            <Track.DecreaseButton>
+                                <RepeatButton Background="Transparent"
+                                              BorderThickness="0"
+                                              Focusable="False"
+                                              Name="PART_PageUpButton" />
+                            </Track.DecreaseButton>
+                            <Track.IncreaseButton>
+                                <RepeatButton Background="Transparent"
+                                              BorderThickness="0"
+                                              Focusable="False"
+                                              Name="PART_PageDownButton" />
+                            </Track.IncreaseButton>
+                            <Thumb Name="thumb">
+                                <Thumb.Template>
+                                    <ControlTemplate>
+                                        <Border Background="{DynamicResource MutedBrush}"
+                                                CornerRadius="999"
+                                                HorizontalAlignment="Center"
+                                                Margin="0,3"
+                                                Width="4" />
+                                    </ControlTemplate>
+                                </Thumb.Template>
+                            </Thumb>
+                        </Track>
+                    </Border>
+                </ControlTemplate>
+            </Setter>
+        </Style>
+        <Style Selector="^:horizontal">
+            <Setter Property="Height" Value="10" />
+            <Setter Property="Template">
+                <ControlTemplate>
+                    <Border Background="Transparent">
+                        <Track IsDirectionReversed="False"
+                               Maximum="{TemplateBinding Maximum}"
+                               Minimum="{TemplateBinding Minimum}"
+                               Orientation="{TemplateBinding Orientation}"
+                               Value="{TemplateBinding Value, Mode=TwoWay}"
+                               ViewportSize="{TemplateBinding ViewportSize}">
+                            <Track.DecreaseButton>
+                                <RepeatButton Background="Transparent"
+                                              BorderThickness="0"
+                                              Focusable="False"
+                                              Name="PART_PageUpButton" />
+                            </Track.DecreaseButton>
+                            <Track.IncreaseButton>
+                                <RepeatButton Background="Transparent"
+                                              BorderThickness="0"
+                                              Focusable="False"
+                                              Name="PART_PageDownButton" />
+                            </Track.IncreaseButton>
+                            <Thumb Name="thumb">
+                                <Thumb.Template>
+                                    <ControlTemplate>
+                                        <Border Background="{DynamicResource MutedBrush}"
+                                                CornerRadius="999"
+                                                Height="4"
+                                                Margin="3,0"
+                                                VerticalAlignment="Center" />
+                                    </ControlTemplate>
+                                </Thumb.Template>
+                            </Thumb>
+                        </Track>
+                    </Border>
+                </ControlTemplate>
+            </Setter>
+        </Style>
+    </ControlTheme>
+
+    <!-- ============ ItemsControl ============ -->
+    <ControlTheme TargetType="ItemsControl" x:Key="{x:Type ItemsControl}">
+        <Setter Property="Template">
+            <ControlTemplate>
+                <ItemsPresenter ItemsPanel="{TemplateBinding ItemsPanel}"
+                                Margin="{TemplateBinding Padding}"
+                                Name="PART_ItemsPresenter" />
+            </ControlTemplate>
+        </Setter>
+    </ControlTheme>
+
+    <!-- ============ ScrollViewer ============ -->
+    <ControlTheme TargetType="ScrollViewer" x:Key="{x:Type ScrollViewer}">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="Template">
+            <ControlTemplate>
+                <Grid Background="{TemplateBinding Background}"
+                      ColumnDefinitions="*,Auto"
+                      RowDefinitions="*,Auto">
+                    <ScrollContentPresenter Content="{TemplateBinding Content}"
+                                            Grid.Column="0"
+                                            Grid.Row="0"
+                                            HorizontalSnapPointsAlignment="{TemplateBinding HorizontalSnapPointsAlignment}"
+                                            HorizontalSnapPointsType="{TemplateBinding HorizontalSnapPointsType}"
+                                            Name="PART_ContentPresenter"
+                                            Padding="{TemplateBinding Padding}"
+                                            VerticalSnapPointsAlignment="{TemplateBinding VerticalSnapPointsAlignment}"
+                                            VerticalSnapPointsType="{TemplateBinding VerticalSnapPointsType}" />
+                    <ScrollBar Grid.Column="0"
+                               Grid.Row="1"
+                               Name="PART_HorizontalScrollBar"
+                               Orientation="Horizontal" />
+                    <ScrollBar Grid.Column="1"
+                               Grid.Row="0"
+                               Name="PART_VerticalScrollBar"
+                               Orientation="Vertical" />
+                    <Panel Background="Transparent"
+                           Grid.Column="1"
+                           Grid.Row="1"
+                           Name="PART_ScrollBarsSeparator" />
+                </Grid>
+            </ControlTemplate>
+        </Setter>
+    </ControlTheme>
+
+    <!-- ============ ToolTip ============ -->
+    <ControlTheme TargetType="ToolTip" x:Key="{x:Type ToolTip}">
+        <Setter Property="Background" Value="{DynamicResource ForegroundBrush}" />
+        <Setter Property="Foreground" Value="{DynamicResource PrimaryForegroundBrush}" />
+        <Setter Property="FontSize" Value="12" />
+        <Setter Property="Padding" Value="9,5" />
+        <Setter Property="CornerRadius" Value="6" />
+        <Setter Property="MaxWidth" Value="320" />
+        <Setter Property="Template">
+            <ControlTemplate>
+                <Border Background="{TemplateBinding Background}"
+                        BorderBrush="{TemplateBinding BorderBrush}"
+                        BorderThickness="{TemplateBinding BorderThickness}"
+                        CornerRadius="{TemplateBinding CornerRadius}"
+                        Padding="{TemplateBinding Padding}">
+                    <ContentPresenter Content="{TemplateBinding Content}"
+                                      ContentTemplate="{TemplateBinding ContentTemplate}"
+                                      MaxWidth="{TemplateBinding MaxWidth}"
+                                      Name="PART_ContentPresenter"
+                                      TextBlock.Foreground="{TemplateBinding Foreground}"
+                                      TextBlock.TextWrapping="Wrap" />
+                </Border>
+            </ControlTemplate>
+        </Setter>
+    </ControlTheme>
+</ResourceDictionary>
