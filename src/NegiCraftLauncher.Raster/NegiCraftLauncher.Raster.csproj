@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <!-- 零 UI 依赖、零 NuGet 依赖：像素画与软件光栅化都是纯计算，
+         两个平台（WPF / Avalonia）共用同一份源码。 -->
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- 内置默认皮肤（Steve / Alex），供共享层生成默认头像。
+         注意 Skin 工程里也各有一份，是给 GL 渲染栈用的，两边都不互相引用。 -->
+    <EmbeddedResource Include="Assets\skin_alex.png" />
+    <EmbeddedResource Include="Assets\skin_steve.png" />
+  </ItemGroup>
+
+</Project>

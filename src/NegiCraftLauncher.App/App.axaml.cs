@@ -1,8 +1,9 @@
 using Avalonia;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Markup.Xaml;
-using NegiCraftLauncher.App.ViewModels;
+using Avalonia.Styling;
 using NegiCraftLauncher.App.Views;
+using NegiCraftLauncher.ViewModels;
 
 namespace NegiCraftLauncher.App;
 
@@ -19,9 +20,19 @@ public partial class App : Application
         {
             // A bare pet process used to be reachable here via --pet. That is now the standalone
             // NegiPet.exe (src/NegiCraftLauncher.Pet.App), so this entry point only starts the launcher.
+
+            // 共享层不依赖任何 UI 框架：调度器与主题都得由平台侧注入。
+            AppDispatcher.Current = new Services.AvaloniaUiDispatcher();
+
+            var vm = new MainWindowViewModel();
+
+            // The VM applies the saved theme before anyone subscribes, so seed it here.
+            ApplyTheme(vm.IsDark);
+            vm.ThemeChanged += ApplyTheme;
+
             var window = new MainWindow
             {
-                DataContext = new MainWindowViewModel(),
+                DataContext = vm,
             };
             desktop.ShutdownMode = Avalonia.Controls.ShutdownMode.OnExplicitShutdown;
             desktop.MainWindow = window;
@@ -30,4 +41,7 @@ public partial class App : Application
 
         base.OnFrameworkInitializationCompleted();
     }
+
+    private static void ApplyTheme(bool dark) =>
+        Current!.RequestedThemeVariant = dark ? ThemeVariant.Dark : ThemeVariant.Light;
 }

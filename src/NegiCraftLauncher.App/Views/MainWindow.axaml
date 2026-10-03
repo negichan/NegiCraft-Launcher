@@ -1,7 +1,8 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        xmlns:vm="using:NegiCraftLauncher.App.ViewModels"
-        xmlns:models="using:NegiCraftLauncher.App.Models"
+        xmlns:vm="using:NegiCraftLauncher.ViewModels"
+        xmlns:models="using:NegiCraftLauncher.ViewModels"
+        xmlns:conv="using:NegiCraftLauncher.App.Converters"
         xmlns:controls="using:NegiCraftLauncher.Skin.Controls"
         xmlns:pop="using:NegiCraftLauncher.App.Views"
         xmlns:materialIcons="clr-namespace:Material.Icons.Avalonia;assembly=Material.Icons.Avalonia"
@@ -22,6 +23,10 @@
         Title="NegiCraft Launcher">
 
     <Window.Resources>
+        <!-- The VM only carries platform-neutral pixels (NegiCraftLauncher.Raster.PixelBuffer);
+             turning them into an Avalonia Bitmap is the view's job. -->
+        <conv:PixelBufferToBitmapConverter x:Key="PixelsToBitmap"/>
+        <conv:PathToBitmapConverter x:Key="PathToBitmap"/>
         <!-- One download-task row, shared by the popover and the settings 下载中心 list.
              Action buttons reach the window VM because the row's own type is DownloadTaskModel. -->
         <DataTemplate x:Key="DownloadRowTemplate" x:DataType="models:DownloadTaskModel">
@@ -339,11 +344,11 @@
                     <Panel.Effect>
                         <BlurEffect Radius="{Binding BgBlur}"/>
                     </Panel.Effect>
-                    <Image Source="{Binding BgBitmap}"
+                    <Image Source="{Binding BgArt, Converter={StaticResource PixelsToBitmap}}"
                            Stretch="Fill"
                            RenderOptions.BitmapInterpolationMode="None"
                            IsVisible="{Binding !IsCustomBackground}"/>
-                    <Image Source="{Binding BgBitmap}"
+                    <Image Source="{Binding CustomBackgroundPath, Converter={StaticResource PathToBitmap}}"
                            Stretch="UniformToFill"
                            IsVisible="{Binding IsCustomBackground}"/>
                 </Panel>
@@ -408,7 +413,7 @@
                 <Panel>
                     <!-- the shell art again, offset back to the shell origin so it
                          registers with what the glass sits on top of -->
-                    <Image Source="{Binding BgBitmap}"
+                    <Image Source="{Binding BgArt, Converter={StaticResource PixelsToBitmap}}"
                            Stretch="Fill"
                            HorizontalAlignment="Left" VerticalAlignment="Top"
                            Margin="-12,-12,0,0"
@@ -420,7 +425,7 @@
                             <BlurEffect Radius="18"/>
                         </Image.Effect>
                     </Image>
-                    <Image Source="{Binding BgBitmap}"
+                    <Image Source="{Binding CustomBackgroundPath, Converter={StaticResource PathToBitmap}}"
                            Stretch="UniformToFill"
                            HorizontalAlignment="Left" VerticalAlignment="Top"
                            Margin="-12,-12,0,0"
@@ -511,7 +516,7 @@
                             HorizontalAlignment="Center"
                             HorizontalContentAlignment="Center"
                             VerticalContentAlignment="Center">
-                        <Image Source="{Binding AvatarBitmap}"
+                        <Image Source="{Binding AvatarBitmap, Converter={StaticResource PixelsToBitmap}}"
                                Width="38" Height="38"
                                RenderOptions.BitmapInterpolationMode="None"/>
                     </Button>
@@ -555,7 +560,7 @@
                                               IsVisible="{Binding CurrentInstance, Converter={x:Static ObjectConverters.IsNotNull}}">
                                             <!-- 40x40 Block Icon -->
                                             <Border Grid.Column="0" Width="40" Height="40" CornerRadius="9" ClipToBounds="True" Margin="0,0,10,0">
-                                                <Image Source="{Binding CurrentInstance.IconBitmap}"
+                                                <Image Source="{Binding CurrentInstance.IconBitmap, Converter={StaticResource PixelsToBitmap}}"
                                                        Width="40" Height="40"
                                                        RenderOptions.BitmapInterpolationMode="None"/>
                                             </Border>
@@ -700,7 +705,7 @@
                                             </Button.ContextMenu>
                                             <Grid ColumnDefinitions="Auto * Auto">
                                                 <Border Grid.Column="0" Width="40" Height="40" CornerRadius="9" ClipToBounds="True">
-                                                    <Image Source="{Binding IconBitmap}"
+                                                    <Image Source="{Binding IconBitmap, Converter={StaticResource PixelsToBitmap}}"
                                                            Width="40" Height="40"
                                                            RenderOptions.BitmapInterpolationMode="None"/>
                                                 </Border>
@@ -789,7 +794,7 @@
                                                 <Grid ColumnDefinitions="Auto * Auto Auto">
                                                     <!-- 36x36 Pixel Icon -->
                                                     <Border Grid.Column="0" Width="36" Height="36" CornerRadius="8" ClipToBounds="True" Margin="0,0,14,0">
-                                                        <Image Source="{Binding IconBitmap}"
+                                                        <Image Source="{Binding IconBitmap, Converter={StaticResource PixelsToBitmap}}"
                                                                Width="36" Height="36"
                                                                RenderOptions.BitmapInterpolationMode="None"/>
                                                     </Border>
@@ -1079,7 +1084,7 @@
                                                             BorderBrush="#26262b" BorderThickness="1"
                                                             IsVisible="{Binding IsCustomBackground}">
                                                         <Panel>
-                                                            <Image Source="{Binding BgBitmap}" Stretch="UniformToFill"/>
+                                                            <Image Source="{Binding CustomBackgroundPath, Converter={StaticResource PathToBitmap}}" Stretch="UniformToFill"/>
                                                             <Border Background="#ffffff" Opacity="{Binding BgLightOpacity}"/>
                                                             <Border Background="#000000" Opacity="{Binding BgDarkOpacity}"/>
                                                         </Panel>
@@ -1165,7 +1170,7 @@
                                             </Button.ContextMenu>
                                             <Grid ColumnDefinitions="Auto * Auto">
                                                 <Border Grid.Column="0" Width="30" Height="30" CornerRadius="8" ClipToBounds="True" Margin="0,0,10,0">
-                                                    <Image Source="{Binding AvatarBitmap}" Width="30" Height="30" RenderOptions.BitmapInterpolationMode="None"/>
+                                                    <Image Source="{Binding AvatarBitmap, Converter={StaticResource PixelsToBitmap}}" Width="30" Height="30" RenderOptions.BitmapInterpolationMode="None"/>
                                                 </Border>
                                                 <StackPanel Grid.Column="1" VerticalAlignment="Center">
                                                     <TextBlock Text="{Binding Name}" FontWeight="Bold" FontSize="13" Foreground="#fafafa" TextTrimming="CharacterEllipsis"/>
@@ -1232,7 +1237,7 @@
                                         <Grid ColumnDefinitions="Auto * Auto">
                                             <!-- 32x32 Block icon with 7px radius (matching Image 2) -->
                                             <Border Grid.Column="0" Width="32" Height="32" CornerRadius="7" ClipToBounds="True" Margin="0,0,10,0">
-                                                <Image Source="{Binding IconBitmap}" Width="32" Height="32" RenderOptions.BitmapInterpolationMode="None"/>
+                                                <Image Source="{Binding IconBitmap, Converter={StaticResource PixelsToBitmap}}" Width="32" Height="32" RenderOptions.BitmapInterpolationMode="None"/>
                                             </Border>
                                             <StackPanel Grid.Column="1" VerticalAlignment="Center">
                                                 <TextBlock Text="{Binding Name}" FontWeight="Bold" FontSize="13" Foreground="#fafafa"/>
@@ -1434,7 +1439,7 @@
                         <!-- Header -->
                         <Grid Grid.Row="0" ColumnDefinitions="Auto * Auto" Margin="0,0,0,16">
                             <Border Grid.Column="0" Width="36" Height="36" CornerRadius="8" ClipToBounds="True" Margin="0,0,12,0" VerticalAlignment="Center">
-                                <Image Source="{Binding EditingInstance.IconBitmap}" Width="36" Height="36" RenderOptions.BitmapInterpolationMode="None"/>
+                                <Image Source="{Binding EditingInstance.IconBitmap, Converter={StaticResource PixelsToBitmap}}" Width="36" Height="36" RenderOptions.BitmapInterpolationMode="None"/>
                             </Border>
                             <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
                                 <TextBlock Text="配置实例" FontSize="16" FontWeight="SemiBold" Foreground="#fafafa"/>

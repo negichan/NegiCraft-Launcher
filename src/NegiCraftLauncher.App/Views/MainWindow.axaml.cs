@@ -7,7 +7,7 @@ using Avalonia.Interactivity;
 using Avalonia.Platform;
 using Avalonia.Platform.Storage;
 using Avalonia.Threading;
-using NegiCraftLauncher.App.ViewModels;
+using NegiCraftLauncher.ViewModels;
 using NegiCraftLauncher.Pet;
 
 namespace NegiCraftLauncher.App.Views;

@@ -1,12 +1,9 @@
-using System;
-using System.Threading;
-using System.Threading.Tasks;
-using Avalonia.Media;
 using CommunityToolkit.Mvvm.ComponentModel;
 using NegiCraftLauncher.Core.Auth;
 using NegiCraftLauncher.Core.Instances;
+using NegiCraftLauncher.Raster;
 
-namespace NegiCraftLauncher.App.Models;
+namespace NegiCraftLauncher.ViewModels;
 
 /// <summary>A card on the instances page and in the dock selector, backed by a real instance.</summary>
 public partial class InstanceModel : ObservableObject
@@ -27,8 +24,9 @@ public partial class InstanceModel : ObservableObject
 
     public int? MaxMemoryMb => Source.MaxMemoryMb;
 
+    /// <summary>平台中立像素；由视图层转成自己的 Bitmap。</summary>
     [ObservableProperty]
-    private IImage? _iconBitmap;
+    private PixelBuffer? _iconBitmap;
 
     [ObservableProperty]
     private bool _isCurrent;
@@ -58,7 +56,7 @@ public partial class AccountModel : ObservableObject
     public bool IsMicrosoft => Source.Type == GameAccountType.Microsoft;
 
     [ObservableProperty]
-    private IImage? _avatarBitmap;
+    private PixelBuffer? _avatarBitmap;
 
     [ObservableProperty]
     private bool _isCurrent;
@@ -76,7 +74,7 @@ public partial class ResourceModel : ObservableObject
     /// <summary>Tab id: game, mod, pack, rp or shader.</summary>
     public string Category { get; init; } = "";
 
-    public IImage? IconBitmap { get; init; }
+    public PixelBuffer? IconBitmap { get; init; }
 
     /// <summary>Set on the game tab.</summary>
     public string? VersionId { get; init; }
