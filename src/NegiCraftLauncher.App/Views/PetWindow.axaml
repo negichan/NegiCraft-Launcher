@@ -1,6 +1,6 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        xmlns:controls="clr-namespace:NegiCraftLauncher.App.Controls"
+        xmlns:controls="using:NegiCraftLauncher.Skin.Controls"
         xmlns:materialIcons="clr-namespace:Material.Icons.Avalonia;assembly=Material.Icons.Avalonia"
         x:Class="NegiCraftLauncher.App.Views.PetWindow"
         Title="NegiPet"
