@@ -1,0 +1,32 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <!-- Windows 端走原生 WPF；macOS / Linux 继续用 Avalonia 那份（NegiCraftLauncher.App）。
+         两边共用 Core / ViewModels / Raster，只有 view 层不同。 -->
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+    <!-- 软件光栅化器要直接写 WriteableBitmap 的后备缓冲。 -->
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <ApplicationIcon>Assets\app.ico</ApplicationIcon>
+    <AssemblyName>NegiCraftLauncher</AssemblyName>
+    <RootNamespace>NegiCraftLauncher.App.Wpf</RootNamespace>
+    <EnableWindowsTargeting>true</EnableWindowsTargeting>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="CommunityToolkit.Mvvm" Version="8.2.1" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\NegiCraftLauncher.Core\NegiCraftLauncher.Core.csproj" />
+    <!-- 与 Avalonia 那份完全同一套逻辑：VM 与像素层都不含任何 UI 框架类型。 -->
+    <ProjectReference Include="..\NegiCraftLauncher.Raster\NegiCraftLauncher.Raster.csproj" />
+    <ProjectReference Include="..\NegiCraftLauncher.ViewModels\NegiCraftLauncher.ViewModels.csproj" />
+  </ItemGroup>
+
+</Project>
