@@ -283,7 +283,9 @@ public partial class MainWindowViewModel : ViewModelBase
         Accounts.Clear();
         foreach (var account in _launcher.Accounts.Accounts)
         {
-            var model = new AccountModel(account) { AvatarBitmap = DefaultAvatar };
+            var isSlim = SkinService.IsSlimForPlayerName(account.Name);
+            var initialAvatar = isSlim ? NoAccountAvatar : DefaultAvatar;
+            var model = new AccountModel(account) { AvatarBitmap = initialAvatar };
             Accounts.Add(model);
             _ = LoadAvatarAsync(model);
         }
@@ -295,17 +297,32 @@ public partial class MainWindowViewModel : ViewModelBase
 
     private static IImage DefaultAvatar { get; } = PixelArtService.CreateAvatarBitmap();
 
-    /// <summary>Shown in the sidebar while there is no account at all.</summary>
+    /// <summary>Shown in the sidebar while there is no account at all, or as the initial Alex placeholder.</summary>
     private static IImage NoAccountAvatar { get; } = PixelArtService.CreateAlexAvatarBitmap();
 
     private async Task LoadAvatarAsync(AccountModel model)
     {
-        // Microsoft accounts carry a real profile; an offline name usually resolves to nothing and
-        // the service already falls back to the default skin.
-        var pixels = await SkinService.FetchSkinOnlineAsync(model.Name) ?? SkinService.CreateDefaultSteveSkin();
-        model.AvatarBitmap = SkinService.CreateAvatarFromSkin(pixels);
+        var skinData = await SkinService.GetOrFetchSkinDataAsync(model.Name);
+        uint[] pixels;
 
-        if (ReferenceEquals(model, CurrentAccount)) AvatarBitmap = model.AvatarBitmap;
+        if (skinData != null && SkinService.LoadSkinPixelsFromBytes(skinData.Bytes) is { } loaded)
+        {
+            pixels = loaded;
+        }
+        else
+        {
+            pixels = SkinService.CreateDefaultSkin(skinData?.IsSlim ?? SkinService.IsSlimForPlayerName(model.Name));
+        }
+
+        var avatar = SkinService.CreateAvatarFromSkin(pixels);
+        await Dispatcher.UIThread.InvokeAsync(() =>
+        {
+            model.AvatarBitmap = avatar;
+            if (ReferenceEquals(model, CurrentAccount))
+            {
+                AvatarBitmap = avatar;
+            }
+        });
     }
 
     // ==========================================================

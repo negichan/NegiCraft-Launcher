@@ -80,28 +80,13 @@ public static class PixelArtService
 
     public static WriteableBitmap CreateAvatarBitmap()
     {
-        string skinPath = Path.Combine(AppContext.BaseDirectory, "Assets", "skin_miku_mew.png");
-        if (!File.Exists(skinPath))
-        {
-            skinPath = Path.Combine(Directory.GetCurrentDirectory(), "src", "NegiCraftLauncher.App", "Assets", "skin_miku_mew.png");
-        }
-
-        var pixels = SkinService.LoadSkinPixelsFromFile(skinPath);
-        return SkinService.CreateAvatarFromSkin(pixels);
+        return SkinService.CreateAvatarFromSkin(SkinService.CreateDefaultSteveSkin());
     }
 
     /// <summary>The accountless placeholder face: the bundled default Alex head.</summary>
     public static WriteableBitmap CreateAlexAvatarBitmap()
     {
-        try
-        {
-            using var stream = AssetLoader.Open(new Uri("avares://NegiCraftLauncher.App/Assets/skin_alex.png"));
-            return SkinService.CreateAvatarFromSkin(SkinService.LoadSkinPixelsFromStream(stream));
-        }
-        catch
-        {
-            return SkinService.CreateAvatarFromSkin(SkinService.CreateDefaultSteveSkin());
-        }
+        return SkinService.CreateAvatarFromSkin(SkinService.CreateDefaultAlexSkin());
     }
 
     public static WriteableBitmap CreateBackgroundBitmap(bool dark)

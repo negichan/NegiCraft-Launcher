@@ -510,6 +510,7 @@
                 <Panel IsVisible="{Binding IsOnHome}" Margin="-100,-22,-28,-22">
                     <!-- .stage: top: 44px; left: 92px; width: 160px; height: 250px; -->
                     <Canvas IsVisible="{Binding HasAccount}">
+                        <!-- 3D skin model inside launcher: always visible when account exists -->
                         <controls:MinecraftSkinPreview x:Name="SkinPreview"
                                                        Canvas.Left="92" Canvas.Top="44"
                                                        PlayerName="{Binding CurrentAccount.Name}"/>
