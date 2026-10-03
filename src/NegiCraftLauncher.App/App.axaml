@@ -10,7 +10,7 @@
     </Application.DataTemplates>
 
     <Application.Styles>
-        <StyleInclude Source="avares://NegiCraftLauncher.App/Ui/AppTheme.axaml"/>
+        <StyleInclude Source="avares://NegiCraftLauncher.Theme/Theme.axaml"/>
         <materialIcons:MaterialIconStyles />
     </Application.Styles>
 </Application>
