@@ -35,6 +35,12 @@ public partial class PetWindow : Window
 
     public int RemainingWaypointCount => (_hasNavTarget ? 1 : 0) + _navQueue.Count;
 
+    /// <summary>
+    /// The host this pet was built with, or null for a bare pet with no host at all. Exposed for
+    /// tooling (the debug bridges read the effective/custom name and the account list through it).
+    /// </summary>
+    public IPetHost? Host => _host;
+
     public PetInteractionMode CurrentMode
     {
         get => _currentMode;

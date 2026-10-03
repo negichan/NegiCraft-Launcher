@@ -39,8 +39,15 @@ public partial class App : Application
             // Without a launcher to position it, the pet would otherwise land at the top-left corner.
             petWindow.PlaceAtDefaultCorner();
 
-            desktop.ShutdownMode = ShutdownMode.OnExplicitShutdown;
+            // The pet is the only window here, so closing it (menu → 关闭桌宠) must end the process.
+            // OnExplicitShutdown left it running with no window and no tray icon, i.e. a process the
+            // user could only get rid of through Task Manager.
+            desktop.ShutdownMode = ShutdownMode.OnLastWindowClose;
             desktop.MainWindow = petWindow;
+
+            // Same file-mailbox bridge as the launcher, minus everything launcher-specific.
+            // Opened only with --debug; the mailbox lives in %TEMP%\ncl-pet-debug.
+            StandaloneDebugBridge.StartIfNeeded(petWindow);
         }
 
         base.OnFrameworkInitializationCompleted();
