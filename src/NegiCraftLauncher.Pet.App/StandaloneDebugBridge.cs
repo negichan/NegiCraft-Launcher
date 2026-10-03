@@ -51,10 +51,12 @@ internal static class StandaloneDebugBridge
             switch (verb)
             {
                 // Closes the pet window exactly as the "关闭桌宠" menu item does. Kept separate from
-                // `quit` on purpose: `quit` tears the process down, `pet-close` only closes the window,
-                // so the two exit paths can be told apart when testing shutdown behaviour.
+                // `quit` on purpose: `quit` tears the process down directly, `pet-close` goes through
+                // the window, so the two exit paths can be told apart when testing shutdown behaviour.
+                // With ShutdownMode.OnLastWindowClose this also ends the process — hence ExitAfterReply,
+                // otherwise the reply never reaches disk and the client just times out.
                 case "pet-close":
-                    await PetDebugMailbox.Ui(pet.Close);
+                    _mailbox?.ExitAfterReply(pet.Close);
                     return "OK";
                 case "quit":
                     // Exit only once the reply is on disk, so the client sees OK rather than timing out.
