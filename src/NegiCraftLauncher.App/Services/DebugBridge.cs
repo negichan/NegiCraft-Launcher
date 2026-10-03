@@ -1,21 +1,18 @@
 using System;
 using System.IO;
 using System.Linq;
-using System.Runtime.InteropServices;
 using System.Text;
-using System.Threading;
 using System.Threading.Tasks;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Media.Imaging;
-using Avalonia.Threading;
 using Avalonia.VisualTree;
-using NegiCraftLauncher.Skin.Controls;
-using NegiCraftLauncher.Pet;
 using NegiCraftLauncher.App.Models;
 using NegiCraftLauncher.App.ViewModels;
 using NegiCraftLauncher.App.Views;
+using NegiCraftLauncher.Pet.Debug;
+using NegiCraftLauncher.Skin.Controls;
 
 namespace NegiCraftLauncher.App.Services;
 
@@ -23,11 +20,19 @@ namespace NegiCraftLauncher.App.Services;
 /// A local control channel for automated verification: set page/tab/popover state and render an
 /// offscreen screenshot without ever touching the mouse, keyboard focus, or window z-order.
 /// Only opened when the app is launched with --debug, so normal runs expose nothing.
+///
+/// The pet verbs are not handled here — they are shared with the standalone pet's bridge and live
+/// in <see cref="PetDebugCommands"/>. This class owns the launcher-only verbs (pages, accounts,
+/// downloads, tray) and the transport.
 /// </summary>
 public sealed class DebugBridge
 {
+    /// <summary>Mailbox directory under <c>%TEMP%</c>. The standalone pet uses its own (ncl-pet-debug).</summary>
+    public const string DefaultBoxName = "ncl-debug";
+
     private readonly Window _window;
     private readonly MainWindowViewModel _vm;
+    private PetDebugMailbox? _mailbox;
 
     private DebugBridge(Window window, MainWindowViewModel vm)
     {
@@ -37,46 +42,13 @@ public sealed class DebugBridge
 
     public static void StartIfNeeded(Window window)
     {
-        if (Array.IndexOf(Environment.GetCommandLineArgs(), "--debug") < 0) return;
+        if (!PetDebugMailbox.IsEnabled) return;
         if (window.DataContext is not MainWindowViewModel vm) return;
 
         var bridge = new DebugBridge(window, vm);
-        var loop = new Thread(bridge.RunLoop) { IsBackground = true, Name = "ncl-debug" };
-        loop.Start();
-    }
-
-    private void RunLoop()
-    {
-        // A file mailbox instead of a named pipe: no persistent handles to leak or lose, and it
-        // keeps working no matter what else on the machine intercepts or covers the UI.
-        var dir = Path.Combine(Path.GetTempPath(), "ncl-debug");
-        Directory.CreateDirectory(dir);
-        var cmdPath = Path.Combine(dir, "cmd.txt");
-        var replyPath = Path.Combine(dir, "reply.txt");
-
-        while (true)
-        {
-            try
-            {
-                if (!File.Exists(cmdPath))
-                {
-                    Thread.Sleep(80);
-                    continue;
-                }
-
-                var line = File.ReadAllText(cmdPath);
-                File.Delete(cmdPath);
-
-                var reply = Dispatch(line).GetAwaiter().GetResult();
-                var tmp = replyPath + ".tmp";
-                File.WriteAllText(tmp, reply);
-                File.Move(tmp, replyPath, overwrite: true);
-            }
-            catch (Exception)
-            {
-                Thread.Sleep(80);   // e.g. client still mid-write; retry next tick
-            }
-        }
+        bridge._mailbox = new PetDebugMailbox(
+            PetDebugMailbox.ResolveBoxName(DefaultBoxName), "ncl-debug", bridge.Dispatch);
+        bridge._mailbox.Start();
     }
 
     private async Task<string> Dispatch(string line)
@@ -87,13 +59,21 @@ public sealed class DebugBridge
 
         try
         {
+            // Pet verbs are shared with the standalone pet's bridge. The pet window can be closed,
+            // in which case the shared handler answers "ERR no pet window" — as it always did.
+            var pet = (_window as MainWindow)?.PetWindowInstance;
+            if (PetDebugCommands.TryHandle(pet, _vm.IsPetActive, verb, arg, _window.TryGetPlatformHandle()?.Handle ?? IntPtr.Zero) is { } shared)
+            {
+                return await shared;
+            }
+
             switch (verb)
             {
                 case "page":
-                    await Ui(() => _vm.CurrentPage = arg);
+                    await PetDebugMailbox.Ui(() => _vm.CurrentPage = arg);
                     return "OK";
                 case "account":
-                    await Ui(() =>
+                    await PetDebugMailbox.Ui(() =>
                     {
                         var target = _vm.Accounts.FirstOrDefault(a => a.Name.Equals(arg, StringComparison.OrdinalIgnoreCase));
                         if (target != null)
@@ -103,10 +83,10 @@ public sealed class DebugBridge
                     });
                     return "OK";
                 case "tab":
-                    await Ui(() => _vm.CurrentSettingsTab = arg);
+                    await PetDebugMailbox.Ui(() => _vm.CurrentSettingsTab = arg);
                     return "OK";
                 case "pop":
-                    await Ui(() =>
+                    await PetDebugMailbox.Ui(() =>
                     {
                         _vm.IsAccPopOpen = arg == "acc";
                         _vm.IsInstPopOpen = arg == "inst";
@@ -123,7 +103,7 @@ public sealed class DebugBridge
                     });
                     return "OK";
                 case "cfg-inst":
-                    await Ui(() =>
+                    await PetDebugMailbox.Ui(() =>
                     {
                         var target = _vm.Instances.FirstOrDefault();
                         if (target != null)
@@ -138,7 +118,8 @@ public sealed class DebugBridge
                     });
                     return "OK";
                 case "pet":
-                    await Ui(() =>
+                    // Launcher-only: open/close the embedded pet window.
+                    await PetDebugMailbox.Ui(() =>
                     {
                         if (_window is MainWindow mw)
                         {
@@ -147,257 +128,13 @@ public sealed class DebugBridge
                         }
                     });
                     return "OK";
-                case "pet-dangle":
-                    return await Ui(() =>
-                    {
-                        var pet = (_window as MainWindow)?.PetWindowInstance;
-                        if (pet == null) return "ERR no pet window";
-                        var preview = pet.GetVisualDescendants().OfType<MinecraftSkinPreview>().FirstOrDefault();
-                        if (preview == null) return "ERR no pet preview";
-                        preview.IsDangling = arg == "on" || arg == "true" || arg == "1";
-                        return "OK " + preview.IsDangling;
-                    });
-                case "pet-rotate":
-                    return await Ui(() =>
-                    {
-                        var pet = (_window as MainWindow)?.PetWindowInstance;
-                        if (pet == null) return "ERR no pet window";
-                        var preview = pet.GetVisualDescendants().OfType<MinecraftSkinPreview>().FirstOrDefault();
-                        if (preview == null) return "ERR no pet preview";
-                        if (float.TryParse(arg, out var deg))
-                        {
-                            preview.RotateModel(deg);
-                            return "OK " + deg;
-                        }
-                        return "ERR invalid deg";
-                    });
-                case "pet-sneak":
-                    return await Ui(() =>
-                    {
-                        var pet = (_window as MainWindow)?.PetWindowInstance;
-                        if (pet == null) return "ERR no pet window";
-                        var preview = pet.GetVisualDescendants().OfType<MinecraftSkinPreview>().FirstOrDefault();
-                        if (preview == null) return "ERR no pet preview";
-                        preview.Sneaking = arg == "on" || arg == "true" || arg == "1";
-                        return "OK " + preview.Sneaking;
-                    });
-                case "pet-control":
-                    return await Ui(() =>
-                    {
-                        var pet = (_window as MainWindow)?.PetWindowInstance;
-                        if (pet == null) return "ERR no pet window";
-                        if (arg == "on" || arg == "true" || arg == "1") pet.IsControlMode = true;
-                        else if (arg == "off" || arg == "false" || arg == "0") pet.IsControlMode = false;
-                        else if (arg == "toggle") pet.IsControlMode = !pet.IsControlMode;
-                        return "OK " + pet.IsControlMode;
-                    });
-                case "pet-key":
-                    return await Ui(() =>
-                    {
-                        var pet = (_window as MainWindow)?.PetWindowInstance;
-                        if (pet == null) return "ERR no pet window";
-                        var parts = arg.Split(' ', StringSplitOptions.RemoveEmptyEntries);
-                        if (parts.Length == 0) return "ERR missing key";
-                        var keyName = parts[0];
-                        bool down = parts.Length < 2 || parts[1] == "down" || parts[1] == "1" || parts[1] == "true";
-                        pet.SetSimulatedKey(keyName, down);
-                        return $"OK key={keyName} down={down}";
-                    });
-                case "pet-follow":
-                    return await Ui(() =>
-                    {
-                        var pet = (_window as MainWindow)?.PetWindowInstance;
-                        if (pet == null) return "ERR no pet window";
-                        if (arg == "on" || arg == "true" || arg == "1") pet.IsFollowMouseMode = true;
-                        else if (arg == "off" || arg == "false" || arg == "0") pet.IsFollowMouseMode = false;
-                        else if (arg == "toggle") pet.IsFollowMouseMode = !pet.IsFollowMouseMode;
-                        return "OK " + pet.IsFollowMouseMode;
-                    });
-                case "pet-interact":
-                    return await Ui(() =>
-                    {
-                        var pet = (_window as MainWindow)?.PetWindowInstance;
-                        if (pet == null) return "ERR no pet window";
-                        // pet-interact [on|off|toggle] | pet-interact swallow [on|off|toggle]
-                        var parts = arg.Split(' ', StringSplitOptions.RemoveEmptyEntries);
-                        if (parts.Length >= 2 && parts[0] == "swallow")
-                        {
-                            if (parts[1] == "on") pet.InteractSwallowClicks = true;
-                            else if (parts[1] == "off") pet.InteractSwallowClicks = false;
-                            else if (parts[1] == "toggle") pet.InteractSwallowClicks = !pet.InteractSwallowClicks;
-                        }
-                        else if (parts.Length >= 1)
-                        {
-                            if (parts[0] == "on") pet.IsInteractMode = true;
-                            else if (parts[0] == "off") pet.IsInteractMode = false;
-                            else if (parts[0] == "toggle") pet.IsInteractMode = !pet.IsInteractMode;
-                        }
-                        return $"OK interact={pet.IsInteractMode} swallow={pet.InteractSwallowClicks} hook={pet.IsInteractHookInstalled}";
-                    });
-                case "pet-attack":
-                    return await Ui(() =>
-                    {
-                        var pet = (_window as MainWindow)?.PetWindowInstance;
-                        if (pet == null) return "ERR no pet window";
-                        var preview = pet.GetVisualDescendants().OfType<MinecraftSkinPreview>().FirstOrDefault();
-                        if (preview == null) return "ERR no pet preview";
-                        // A progress argument parks the swing there for photographing; bare plays it.
-                        if (double.TryParse(arg, out double t))
-                        {
-                            preview.TriggerAttack(Math.Clamp(t, 0.0, 1.0));
-                            return "OK parked " + t;
-                        }
-                        preview.TriggerAttack();
-                        return "OK played";
-                    });
-                case "pet-coord":
-                    return await Ui(() =>
-                    {
-                        var pet = (_window as MainWindow)?.PetWindowInstance;
-                        if (pet == null) return "ERR no pet window";
-                        var parts = arg.Split(new[] { ' ', ',', ';' }, StringSplitOptions.RemoveEmptyEntries);
-                        if (parts.Length >= 2 && int.TryParse(parts[0], out int cx) && int.TryParse(parts[1], out int cy))
-                        {
-                            pet.SetNavigationTarget(cx, cy);
-                            for (int i = 2; i + 1 < parts.Length; i += 2)
-                            {
-                                if (int.TryParse(parts[i], out int nx) && int.TryParse(parts[i + 1], out int ny))
-                                {
-                                    pet.AddNavigationTarget(nx, ny);
-                                }
-                            }
-                            return $"OK waypoints={pet.RemainingWaypointCount}";
-                        }
-                        return "ERR invalid coords";
-                    });
-                case "pet-coord-add":
-                    return await Ui(() =>
-                    {
-                        var pet = (_window as MainWindow)?.PetWindowInstance;
-                        if (pet == null) return "ERR no pet window";
-                        var parts = arg.Split(new[] { ' ', ',' }, StringSplitOptions.RemoveEmptyEntries);
-                        if (parts.Length >= 2 && int.TryParse(parts[0], out int cx) && int.TryParse(parts[1], out int cy))
-                        {
-                            pet.AddNavigationTarget(cx, cy);
-                            return $"OK waypoints={pet.RemainingWaypointCount}";
-                        }
-                        return "ERR invalid coords";
-                    });
-                case "pet-mode":
-                    return await Ui(() =>
-                    {
-                        var pet = (_window as MainWindow)?.PetWindowInstance;
-                        if (pet == null) return "ERR no pet window";
-                        if (arg == "free") pet.CurrentMode = PetWindow.PetInteractionMode.Free;
-                        else if (arg == "control") pet.CurrentMode = PetWindow.PetInteractionMode.Control;
-                        else if (arg == "follow") pet.CurrentMode = PetWindow.PetInteractionMode.FollowMouse;
-                        return "OK mode=" + pet.CurrentMode;
-                    });
-                case "pet-menu":
-                    return await Ui(() =>
-                    {
-                        var pet = (_window as MainWindow)?.PetWindowInstance;
-                        if (pet == null) return "ERR no pet window";
-                        if (arg == "close") pet.ClosePetContextMenu();
-                        else pet.OpenPetContextMenu();
-                        return "OK IsOpen=" + pet.IsPetContextMenuOpen;
-                    });
-                case "pet-walk":
-                    return await Ui(() =>
-                    {
-                        var pet = (_window as MainWindow)?.PetWindowInstance;
-                        if (pet == null) return "ERR no pet window";
-                        var preview = pet.GetVisualDescendants().OfType<MinecraftSkinPreview>().FirstOrDefault();
-                        if (preview == null) return "ERR no pet preview";
-                        preview.IsWalking = arg == "on" || arg == "true" || arg == "1";
-                        return "OK " + preview.IsWalking;
-                    });
-                case "pet-jump":
-                    return await Ui(() =>
-                    {
-                        var pet = (_window as MainWindow)?.PetWindowInstance;
-                        if (pet == null) return "ERR no pet window";
-                        var preview = pet.GetVisualDescendants().OfType<MinecraftSkinPreview>().FirstOrDefault();
-                        if (preview == null) return "ERR no pet preview";
-                        preview.IsJumping = arg == "on" || arg == "true" || arg == "1";
-                        return "OK " + preview.IsJumping;
-                    });
-                case "pet-jump-offset":
-                    return await Ui(() =>
-                    {
-                        var pet = (_window as MainWindow)?.PetWindowInstance;
-                        if (pet == null) return "ERR no pet window";
-                        var preview = pet.GetVisualDescendants().OfType<MinecraftSkinPreview>().FirstOrDefault();
-                        if (preview == null) return "ERR no pet preview";
-                        if (double.TryParse(arg, out double off))
-                        {
-                            preview.SetJumpOffset(off);
-                            return "OK " + off;
-                        }
-                        return "ERR invalid offset";
-                    });
-                case "pet-yaw":
-                    return await Ui(() =>
-                    {
-                        var pet = (_window as MainWindow)?.PetWindowInstance;
-                        if (pet == null) return "ERR no pet window";
-                        var preview = pet.GetVisualDescendants().OfType<MinecraftSkinPreview>().FirstOrDefault();
-                        if (preview == null) return "ERR no pet preview";
-                        if (float.TryParse(arg, out float deg))
-                        {
-                            preview.RotateModel(deg - preview.CurrentYawDeg);
-                        }
-                        return "OK " + preview.CurrentYawDeg;
-                    });
-                case "pet-track":
-                    return await Ui(() =>
-                    {
-                        var pet = (_window as MainWindow)?.PetWindowInstance;
-                        if (pet == null) return "ERR no pet window";
-                        return "OK " + pet.TrackDebugInfo;
-                    });
-                case "pet-mouse":
-                    return await Ui(() =>
-                    {
-                        var pet = (_window as MainWindow)?.PetWindowInstance;
-                        if (pet == null) return "ERR no pet window";
-                        if (arg == "reset" || arg == "clear")
-                        {
-                            pet.ClearVirtualCursor();
-                            return "OK clear";
-                        }
-                        var parts = arg.Split(new[] { ' ', ',' }, StringSplitOptions.RemoveEmptyEntries);
-                        if (parts.Length >= 2 && int.TryParse(parts[0], out int mx) && int.TryParse(parts[1], out int my))
-                        {
-                            pet.SetVirtualCursor(mx, my);
-                            return $"OK mouse=({mx},{my})";
-                        }
-                        return "ERR invalid mouse coords";
-                    });
-                case "pet-name":
-                    return await Ui(() =>
-                    {
-                        var pet = (_window as MainWindow)?.PetWindowInstance;
-                        if (pet == null) return "ERR no pet window";
-                        if (arg == "reset" || string.IsNullOrWhiteSpace(arg))
-                        {
-                            _vm.PetCustomName = null;
-                            pet.SetPlayerName(_vm.EffectivePetName);
-                        }
-                        else
-                        {
-                            _vm.PetCustomName = arg;
-                            pet.SetPlayerName(arg);
-                        }
-                        return "OK " + _vm.EffectivePetName;
-                    });
                 case "threads":
-                    await Ui(() => _vm.DownloadThreads = int.Parse(arg));
+                    await PetDebugMailbox.Ui(() => _vm.DownloadThreads = int.Parse(arg));
                     return "OK";
                 case "demo":
                     // Sample rows so the task-row template (buttons, bar, states) can be checked
                     // without waiting on a real multi-hundred-MB download.
-                    await Ui(() =>
+                    await PetDebugMailbox.Ui(() =>
                     {
                         _vm.Downloads.Clear();
                         _vm.Downloads.Add(new DownloadTaskModel { Name = "安装 1.21.11" , Status = "下载中", Progress = 42, PercentText = "42%", Detail = "client.jar" });
@@ -408,7 +145,7 @@ public sealed class DebugBridge
                     return "OK";
                 case "skin":
                     // Force an arbitrary skin PNG into the live 3D preview, to A/B wide vs slim.
-                    return await Ui(() =>
+                    return await PetDebugMailbox.Ui(() =>
                     {
                         if (_window.GetVisualDescendants().OfType<MinecraftSkinPreview>().FirstOrDefault()
                             is not { } preview) return "ERR no SkinPreview";
@@ -416,38 +153,19 @@ public sealed class DebugBridge
                         return "OK " + arg;
                     });
                 case "state":
-                    return await Ui(State);
+                    return await PetDebugMailbox.Ui(State);
                 case "skinsnap":
-                    return await Ui(() =>
+                    return await PetDebugMailbox.Ui(() =>
                     {
                         var preview = _window.GetVisualDescendants().OfType<MinecraftSkinPreview>().FirstOrDefault();
                         if (preview == null) return "ERR no preview";
                         preview.SaveSnapshot(arg);
                         return "OK " + arg;
                     });
-                case "pet-skinsnap":
-                    return await PetSnapshot(arg);
                 case "shot":
-                    return await Ui(() => Shot(arg));
-                case "shot-pet":
-                    return await Ui(() =>
-                    {
-                        var pet = (_window as MainWindow)?.PetWindowInstance;
-                        if (pet?.Content is Visual content)
-                        {
-                            var size = content.Bounds.Size;
-                            if (size.Width <= 0 || size.Height <= 0) size = new Size(pet.Width, pet.Height);
-                            using var rtb = new RenderTargetBitmap(
-                                new PixelSize((int)Math.Ceiling(size.Width), (int)Math.Ceiling(size.Height)),
-                                new Vector(96, 96));
-                            rtb.Render(content);
-                            rtb.Save(arg, new PngBitmapEncoderOptions());
-                            return $"OK {arg}";
-                        }
-                        return "ERR no pet window";
-                    });
+                    return await PetDebugMailbox.Ui(() => Shot(arg));
                 case "tray-right":
-                    return await Ui(() =>
+                    return await PetDebugMailbox.Ui(() =>
                     {
                         var firstTray = TrayIcon.GetIcons(Application.Current!)?.FirstOrDefault();
                         var implField = typeof(TrayIcon).GetField("_impl", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
@@ -474,7 +192,7 @@ public sealed class DebugBridge
                         return $"OK bounds={trayWin.Bounds.Width}x{trayWin.Bounds.Height} descendants={trayWin.GetVisualDescendants().Count()}";
                     });
                 case "shot-tray":
-                    return await Ui(() =>
+                    return await PetDebugMailbox.Ui(() =>
                     {
                         var desktop = Application.Current?.ApplicationLifetime as IClassicDesktopStyleApplicationLifetime;
                         var trayWin = desktop?.Windows.FirstOrDefault(w => w.GetType().Name.Contains("TrayPopupRoot"));
@@ -488,54 +206,9 @@ public sealed class DebugBridge
                         rtb.Save(arg, new PngBitmapEncoderOptions());
                         return $"OK {arg} w={trayWin.Bounds.Width} h={trayWin.Bounds.Height}";
                     });
-                case "pet-state":
-                    // Read-only view of the live pet: the name it is actually rendering (which the
-                    // host adapter is responsible for keeping in sync), plus mode/topmost/menu.
-                    return await Ui(() =>
-                    {
-                        var pet = (_window as MainWindow)?.PetWindowInstance;
-                        if (pet == null) return "ERR no pet window";
-                        var preview = pet.GetVisualDescendants().OfType<MinecraftSkinPreview>().FirstOrDefault();
-                        var accounts = string.Join(",", _vm.Accounts.Select(a => a.Name));
-                        return $"petActive={_vm.IsPetActive} petPlayerName={preview?.PlayerName ?? "n/a"} " +
-                               $"effectiveName={_vm.EffectivePetName} customName={_vm.PetCustomName ?? "<null>"} " +
-                               $"mode={pet.CurrentMode} topmost={pet.Topmost} " +
-                               $"menuOpen={pet.IsPetContextMenuOpen} accounts=[{accounts}]";
-                    });
-                case "pet-hwnd":
-                    // Read-only probe of the pet window's real Win32 styles. This is what decides
-                    // whether Alt+Tab / Task view / foreground-stealing can be fixed by injecting
-                    // WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE (route A) or needs another approach.
-                    return await Ui(() =>
-                    {
-                        var pet = (_window as MainWindow)?.PetWindowInstance;
-                        if (pet == null) return "ERR no pet window";
-                        var handle = pet.TryGetPlatformHandle();
-                        if (handle == null || handle.Handle == IntPtr.Zero) return "ERR no hwnd";
-
-                        var hwnd = handle.Handle;
-                        int style = GetWindowLongW(hwnd, GWL_STYLE);
-                        int exStyle = GetWindowLongW(hwnd, GWL_EXSTYLE);
-                        var owner = GetWindow(hwnd, GW_OWNER);
-
-                        var mainHwnd = _window.TryGetPlatformHandle()?.Handle ?? IntPtr.Zero;
-
-                        return $"hwnd=0x{hwnd.ToInt64():X} owner=0x{owner.ToInt64():X} " +
-                               $"style=0x{style:X8} exstyle=0x{exStyle:X8} | " +
-                               $"toolwindow={Has(exStyle, WS_EX_TOOLWINDOW)} " +
-                               $"noactivate={Has(exStyle, WS_EX_NOACTIVATE)} " +
-                               $"appwindow={Has(exStyle, WS_EX_APPWINDOW)} " +
-                               $"layered={Has(exStyle, WS_EX_LAYERED)} " +
-                               $"transparent={Has(exStyle, WS_EX_TRANSPARENT)} " +
-                               $"topmost={Has(exStyle, WS_EX_TOPMOST)} | " +
-                               $"popup={Has(style, WS_POPUP)} caption={Has(style, WS_CAPTION)} " +
-                               $"visible={Has(style, WS_VISIBLE)} | " +
-                               $"petClass={ClassName(hwnd)} ownerClass={ClassName(owner)} " +
-                               $"ownerTitle='{WindowText(owner)}' ownerVisible={IsWindowVisible(owner)} " +
-                               $"mainHwnd=0x{mainHwnd.ToInt64():X} ownerIsMain={owner == mainHwnd}";
-                    });
                 case "quit":
-                    await Ui(() =>
+                    // Exit only once the reply is on disk, so the client sees OK rather than timing out.
+                    _mailbox?.ExitAfterReply(() =>
                     {
                         if (_window is MainWindow mw)
                         {
@@ -555,82 +228,6 @@ public sealed class DebugBridge
         {
             return $"ERR {ex.Message}";
         }
-    }
-
-    private static Task Ui(Action action) =>
-        Dispatcher.UIThread.InvokeAsync(() => action()).GetTask();
-
-    private static Task<T> Ui<T>(Func<T> func) =>
-        Dispatcher.UIThread.InvokeAsync(func).GetTask();
-
-    // --- Win32 style probe (pet-hwnd) ---------------------------------------------------------
-    // Style/ex-style are 32-bit DWORDs, so GetWindowLongW (not ...Ptr) is the correct call here
-    // and works on both x86 and x64 without a platform guard.
-    private const int GWL_STYLE = -16;
-    private const int GWL_EXSTYLE = -20;
-    private const uint GW_OWNER = 4;
-
-    private const int WS_POPUP = unchecked((int)0x80000000);
-    private const int WS_VISIBLE = 0x10000000;
-    private const int WS_CAPTION = 0x00C00000;
-
-    private const int WS_EX_TOPMOST = 0x00000008;
-    private const int WS_EX_TRANSPARENT = 0x00000020;
-    private const int WS_EX_TOOLWINDOW = 0x00000080;
-    private const int WS_EX_APPWINDOW = 0x00040000;
-    private const int WS_EX_LAYERED = 0x00080000;
-    private const int WS_EX_NOACTIVATE = 0x08000000;
-
-    [DllImport("user32.dll", SetLastError = true)]
-    private static extern int GetWindowLongW(IntPtr hWnd, int nIndex);
-
-    [DllImport("user32.dll", SetLastError = true)]
-    private static extern IntPtr GetWindow(IntPtr hWnd, uint uCmd);
-
-    [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
-    private static extern int GetClassNameW(IntPtr hWnd, StringBuilder lpClassName, int nMaxCount);
-
-    [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
-    private static extern int GetWindowTextW(IntPtr hWnd, StringBuilder lpString, int nMaxCount);
-
-    [DllImport("user32.dll")]
-    private static extern bool IsWindowVisible(IntPtr hWnd);
-
-    private static bool Has(int value, int flag) => (value & flag) != 0;
-
-    private static string ClassName(IntPtr hwnd)
-    {
-        if (hwnd == IntPtr.Zero) return "<null>";
-        var sb = new StringBuilder(256);
-        return GetClassNameW(hwnd, sb, sb.Capacity) > 0 ? sb.ToString() : "<err>";
-    }
-
-    private static string WindowText(IntPtr hwnd)
-    {
-        if (hwnd == IntPtr.Zero) return "<null>";
-        var sb = new StringBuilder(256);
-        return GetWindowTextW(hwnd, sb, sb.Capacity) > 0 ? sb.ToString() : "";
-    }
-
-    // shot-pet cannot see the pet: its offscreen render only ever draws the startup snapshot, so
-    // every frame comes out identical. This reads the live GL frame instead. SaveSnapshot hands
-    // back the frame captured by the *previous* request, hence arm once, wait, then save.
-    private async Task<string> PetSnapshot(string path)
-    {
-        if (string.IsNullOrWhiteSpace(path)) return "ERR no path";
-
-        var preview = await Ui(() =>
-            (_window as MainWindow)?.PetWindowInstance?
-                .GetVisualDescendants().OfType<MinecraftSkinPreview>().FirstOrDefault());
-        if (preview == null) return "ERR no pet preview";
-
-        var scratch = Path.Combine(Path.GetTempPath(), "ncl-pet-snap-arm.png");
-        await Ui(() => preview.SaveSnapshot(scratch));
-        await Task.Delay(90);
-        await Ui(() => preview.SaveSnapshot(path));
-        try { File.Delete(scratch); } catch (IOException) { }
-
-        return "OK " + path;
     }
 
     private string State()
