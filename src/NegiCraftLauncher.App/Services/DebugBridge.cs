@@ -1,6 +1,7 @@
 using System;
 using System.IO;
 using System.Linq;
+using System.Runtime.InteropServices;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
@@ -486,6 +487,38 @@ public sealed class DebugBridge
                         rtb.Save(arg, new PngBitmapEncoderOptions());
                         return $"OK {arg} w={trayWin.Bounds.Width} h={trayWin.Bounds.Height}";
                     });
+                case "pet-hwnd":
+                    // Read-only probe of the pet window's real Win32 styles. This is what decides
+                    // whether Alt+Tab / Task view / foreground-stealing can be fixed by injecting
+                    // WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE (route A) or needs another approach.
+                    return await Ui(() =>
+                    {
+                        var pet = (_window as MainWindow)?.PetWindowInstance;
+                        if (pet == null) return "ERR no pet window";
+                        var handle = pet.TryGetPlatformHandle();
+                        if (handle == null || handle.Handle == IntPtr.Zero) return "ERR no hwnd";
+
+                        var hwnd = handle.Handle;
+                        int style = GetWindowLongW(hwnd, GWL_STYLE);
+                        int exStyle = GetWindowLongW(hwnd, GWL_EXSTYLE);
+                        var owner = GetWindow(hwnd, GW_OWNER);
+
+                        var mainHwnd = _window.TryGetPlatformHandle()?.Handle ?? IntPtr.Zero;
+
+                        return $"hwnd=0x{hwnd.ToInt64():X} owner=0x{owner.ToInt64():X} " +
+                               $"style=0x{style:X8} exstyle=0x{exStyle:X8} | " +
+                               $"toolwindow={Has(exStyle, WS_EX_TOOLWINDOW)} " +
+                               $"noactivate={Has(exStyle, WS_EX_NOACTIVATE)} " +
+                               $"appwindow={Has(exStyle, WS_EX_APPWINDOW)} " +
+                               $"layered={Has(exStyle, WS_EX_LAYERED)} " +
+                               $"transparent={Has(exStyle, WS_EX_TRANSPARENT)} " +
+                               $"topmost={Has(exStyle, WS_EX_TOPMOST)} | " +
+                               $"popup={Has(style, WS_POPUP)} caption={Has(style, WS_CAPTION)} " +
+                               $"visible={Has(style, WS_VISIBLE)} | " +
+                               $"petClass={ClassName(hwnd)} ownerClass={ClassName(owner)} " +
+                               $"ownerTitle='{WindowText(owner)}' ownerVisible={IsWindowVisible(owner)} " +
+                               $"mainHwnd=0x{mainHwnd.ToInt64():X} ownerIsMain={owner == mainHwnd}";
+                    });
                 case "quit":
                     await Ui(() =>
                     {
@@ -514,6 +547,55 @@ public sealed class DebugBridge
 
     private static Task<T> Ui<T>(Func<T> func) =>
         Dispatcher.UIThread.InvokeAsync(func).GetTask();
+
+    // --- Win32 style probe (pet-hwnd) ---------------------------------------------------------
+    // Style/ex-style are 32-bit DWORDs, so GetWindowLongW (not ...Ptr) is the correct call here
+    // and works on both x86 and x64 without a platform guard.
+    private const int GWL_STYLE = -16;
+    private const int GWL_EXSTYLE = -20;
+    private const uint GW_OWNER = 4;
+
+    private const int WS_POPUP = unchecked((int)0x80000000);
+    private const int WS_VISIBLE = 0x10000000;
+    private const int WS_CAPTION = 0x00C00000;
+
+    private const int WS_EX_TOPMOST = 0x00000008;
+    private const int WS_EX_TRANSPARENT = 0x00000020;
+    private const int WS_EX_TOOLWINDOW = 0x00000080;
+    private const int WS_EX_APPWINDOW = 0x00040000;
+    private const int WS_EX_LAYERED = 0x00080000;
+    private const int WS_EX_NOACTIVATE = 0x08000000;
+
+    [DllImport("user32.dll", SetLastError = true)]
+    private static extern int GetWindowLongW(IntPtr hWnd, int nIndex);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    private static extern IntPtr GetWindow(IntPtr hWnd, uint uCmd);
+
+    [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+    private static extern int GetClassNameW(IntPtr hWnd, StringBuilder lpClassName, int nMaxCount);
+
+    [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+    private static extern int GetWindowTextW(IntPtr hWnd, StringBuilder lpString, int nMaxCount);
+
+    [DllImport("user32.dll")]
+    private static extern bool IsWindowVisible(IntPtr hWnd);
+
+    private static bool Has(int value, int flag) => (value & flag) != 0;
+
+    private static string ClassName(IntPtr hwnd)
+    {
+        if (hwnd == IntPtr.Zero) return "<null>";
+        var sb = new StringBuilder(256);
+        return GetClassNameW(hwnd, sb, sb.Capacity) > 0 ? sb.ToString() : "<err>";
+    }
+
+    private static string WindowText(IntPtr hwnd)
+    {
+        if (hwnd == IntPtr.Zero) return "<null>";
+        var sb = new StringBuilder(256);
+        return GetWindowTextW(hwnd, sb, sb.Capacity) > 0 ? sb.ToString() : "";
+    }
 
     // shot-pet cannot see the pet: its offscreen render only ever draws the startup snapshot, so
     // every frame comes out identical. This reads the live GL frame instead. SaveSnapshot hands
