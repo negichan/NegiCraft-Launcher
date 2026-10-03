@@ -10,6 +10,7 @@
         TransparencyLevelHint="Transparent"
         Background="Transparent"
         ShowInTaskbar="False"
+        ShowActivated="False"
         Topmost="True"
         CanResize="False"
         WindowStartupLocation="Manual"
