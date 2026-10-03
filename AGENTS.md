@@ -89,6 +89,8 @@ src/NegiCraftLauncher.Pet.App/bin/Debug/net10.0/NegiPet.exe          # 可选：
 
 诊断用：`state` 会打印 `skintype=` 和 `top=`（`top=False` 说明关掉了第二层，老皮肤应当如此）。
 
+另外：渲染器只吃**宽度 64** 的贴图（`SetSkinTex` 对 `width != 64` 直接抛异常）。128x128 以上的高清皮肤要先经 `SkinRenderControl.NormalizeSkinBitmap` 缩到 64 宽（最近邻；2:1 的缩成 64x32 保持 `Old`），否则会被静默丢掉。
+
 ## 构建前
 
 `design/_dbg.ps1` 起的实例不会自动退出；`dotnet build` 前先 `taskkill //F //IM NegiCraftLauncher.App.exe`，否则 exe 被占用报 MSB3027。
