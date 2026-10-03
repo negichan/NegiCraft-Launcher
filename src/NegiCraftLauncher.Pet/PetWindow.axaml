@@ -2,7 +2,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:controls="using:NegiCraftLauncher.Skin.Controls"
         xmlns:materialIcons="clr-namespace:Material.Icons.Avalonia;assembly=Material.Icons.Avalonia"
-        x:Class="NegiCraftLauncher.App.Views.PetWindow"
+        x:Class="NegiCraftLauncher.Pet.PetWindow"
         Title="NegiPet"
         Width="160" Height="320"
         MinWidth="60" MinHeight="90"
@@ -82,7 +82,7 @@
                     <Separator/>
                 </MenuItem>
                 <Separator/>
-                <MenuItem Header="打开启动器" Click="OnOpenLauncherClick"/>
+                <MenuItem Header="打开启动器" x:Name="MenuOpenLauncher" Click="OnOpenLauncherClick"/>
                 <MenuItem Header="关闭桌宠" Click="OnClosePetClick"/>
             </ContextMenu>
         </Panel.ContextMenu>

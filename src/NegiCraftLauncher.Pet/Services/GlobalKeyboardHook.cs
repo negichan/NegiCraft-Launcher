@@ -1,7 +1,7 @@
 using System;
 using System.Runtime.InteropServices;
 
-namespace NegiCraftLauncher.App.Services;
+namespace NegiCraftLauncher.Pet.Services;
 
 /// <summary>
 /// A low-level keyboard hook (WH_KEYBOARD_LL) to capture global hotkeys such as Left Alt + Caps Lock

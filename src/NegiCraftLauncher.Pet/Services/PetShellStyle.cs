@@ -1,6 +1,6 @@
 using Avalonia.Controls;
 
-namespace NegiCraftLauncher.App.Services;
+namespace NegiCraftLauncher.Pet.Services;
 
 /// <summary>
 /// Makes a pet window behave like a desktop companion instead of an ordinary app window.
