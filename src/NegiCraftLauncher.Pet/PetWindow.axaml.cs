@@ -262,6 +262,8 @@ public partial class PetWindow : Window
         if (_host is null || !_host.CanOpenLauncher)
         {
             if (MenuOpenLauncher != null) MenuOpenLauncher.IsVisible = false;
+            // With no launcher there is no "home page" to inherit a name from.
+            if (MenuResetName != null) MenuResetName.Header = "恢复默认名字";
         }
 
         UpdateResetNameMenuState();
@@ -285,6 +287,23 @@ public partial class PetWindow : Window
     public void SetPlayerName(string name)
     {
         PetPreview.PlayerName = name;
+    }
+
+    /// <summary>
+    /// Places the pet at the bottom-right of the primary screen's working area — its default resting
+    /// spot. Hosts call this before showing the window; a host that wants a different spot can set
+    /// <see cref="Window.Position"/> directly instead.
+    /// </summary>
+    public void PlaceAtDefaultCorner()
+    {
+        var screens = Screens;
+        var primary = screens.Primary ?? (screens.All.Count > 0 ? screens.All[0] : null);
+        if (primary is null) return;
+
+        var workArea = primary.WorkingArea;
+        Position = new PixelPoint(
+            workArea.X + workArea.Width - (int)(190 * primary.Scaling),
+            workArea.Y + workArea.Height - (int)(290 * primary.Scaling));
     }
 
     public void ApplySkin(byte[] skinBytes)

@@ -3,14 +3,14 @@
     <OutputType>WinExe</OutputType>
     <TargetFramework>net10.0</TargetFramework>
     <Nullable>enable</Nullable>
+    <AssemblyName>NegiPet</AssemblyName>
+    <RootNamespace>NegiCraftLauncher.Pet.App</RootNamespace>
     <ApplicationManifest>app.manifest</ApplicationManifest>
-    <ApplicationIcon>Assets\app.ico</ApplicationIcon>
-    <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
+    <ApplicationIcon>Assets\NegiPet.ico</ApplicationIcon>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
 
   <ItemGroup>
-    <Folder Include="Models\" />
     <AvaloniaResource Include="Assets\**" />
   </ItemGroup>
 
@@ -18,18 +18,13 @@
     <PackageReference Include="Avalonia" Version="12.1.3" />
     <PackageReference Include="Avalonia.Desktop" Version="12.1.3" />
     <PackageReference Include="Avalonia.Fonts.Inter" Version="12.1.3" />
-    <PackageReference Include="CommunityToolkit.Mvvm" Version="8.2.1" />
     <PackageReference Include="Material.Icons.Avalonia" Version="3.0.2" />
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\NegiCraftLauncher.Core\NegiCraftLauncher.Core.csproj" />
-    <!-- The desktop pet; the launcher hosts it in-process. -->
     <ProjectReference Include="..\NegiCraftLauncher.Pet\NegiCraftLauncher.Pet.csproj" />
-    <!-- Skin decoding + the OpenGL skin renderer; also brings SkiaSharp and the vendored
-         MinecraftSkinRender transitively. -->
-    <ProjectReference Include="..\NegiCraftLauncher.Skin\NegiCraftLauncher.Skin.csproj" />
-    <!-- Shared design tokens + control themes, also used by the standalone pet. -->
+    <!-- Same design tokens + control themes as the launcher, so the pet's context menu and dialogs
+         look identical in both hosts. -->
     <ProjectReference Include="..\NegiCraftLauncher.Theme\NegiCraftLauncher.Theme.csproj" />
   </ItemGroup>
 </Project>

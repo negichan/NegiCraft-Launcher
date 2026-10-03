@@ -7,8 +7,8 @@
     <Styles.Resources>
         <ResourceDictionary>
             <ResourceDictionary.MergedDictionaries>
-                <ResourceInclude Source="avares://NegiCraftLauncher.App/Ui/Tokens.axaml" />
-                <ResourceInclude Source="avares://NegiCraftLauncher.App/Ui/Controls.axaml" />
+                <ResourceInclude Source="avares://NegiCraftLauncher.Theme/Tokens.axaml" />
+                <ResourceInclude Source="avares://NegiCraftLauncher.Theme/Controls.axaml" />
             </ResourceDictionary.MergedDictionaries>
         </ResourceDictionary>
     </Styles.Resources>

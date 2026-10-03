@@ -144,17 +144,7 @@ public partial class MainWindow : Window
 
         var currentName = _vm?.EffectivePetName ?? "pingplus";
         _petWindow = new PetWindow(currentName, _vm is null ? null : new Services.PetHostAdapter(_vm, this));
-
-        var screens = Screens;
-        var primary = screens.Primary ?? (screens.All.Count > 0 ? screens.All[0] : null);
-        if (primary != null)
-        {
-            var workArea = primary.WorkingArea;
-            _petWindow.Position = new PixelPoint(
-                workArea.X + workArea.Width - (int)(190 * primary.Scaling),
-                workArea.Y + workArea.Height - (int)(290 * primary.Scaling)
-            );
-        }
+        _petWindow.PlaceAtDefaultCorner();
 
         _petWindow.Closed += (_, _) =>
         {

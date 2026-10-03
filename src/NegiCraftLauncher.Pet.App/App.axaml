@@ -1,15 +1,11 @@
 <Application xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-             x:Class="NegiCraftLauncher.App.App"
-             xmlns:local="using:NegiCraftLauncher.App"
+             x:Class="NegiCraftLauncher.Pet.App.App"
              xmlns:materialIcons="clr-namespace:Material.Icons.Avalonia;assembly=Material.Icons.Avalonia"
              RequestedThemeVariant="Dark">
 
-    <Application.DataTemplates>
-        <local:ViewLocator/>
-    </Application.DataTemplates>
-
     <Application.Styles>
+        <!-- The shared launcher theme, so the pet's menu/dialogs match the launcher exactly. -->
         <StyleInclude Source="avares://NegiCraftLauncher.Theme/Theme.axaml"/>
         <materialIcons:MaterialIconStyles />
     </Application.Styles>
