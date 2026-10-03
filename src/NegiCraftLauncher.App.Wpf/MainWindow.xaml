@@ -1,0 +1,31 @@
+<Window x:Class="NegiCraftLauncher.App.Wpf.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="NegiCraft Launcher"
+        Width="1180" Height="720"
+        MinWidth="960" MinHeight="620"
+        WindowStartupLocation="CenterScreen"
+        WindowStyle="None"
+        AllowsTransparency="True"
+        Background="Transparent"
+        ShowInTaskbar="True">
+
+    <!-- P1 骨架：只证明 WPF 空窗能起、分层透明窗能逐像素 alpha。
+         真正的界面在 P4（主题层）与 P5（主窗口）落地，届时整个文件会被替换。 -->
+    <Border CornerRadius="18" Background="#E60E0E12" BorderBrush="#17FFFFFF" BorderThickness="1">
+        <!-- 注意：WPF 的 StackPanel 没有 Spacing（那是 Avalonia / WinUI 的属性），只能靠 Margin。 -->
+        <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
+            <TextBlock Text="NegiCraft Launcher · WPF"
+                       FontSize="22" FontWeight="Bold" Foreground="#fafafa"
+                       Margin="0,0,0,10"
+                       HorizontalAlignment="Center"/>
+            <TextBlock Text="P1 骨架（Windows 原生 WPF 前端）"
+                       FontSize="13" Foreground="#a1a1aa"
+                       Margin="0,0,0,6"
+                       HorizontalAlignment="Center"/>
+            <TextBlock Text="用 --selftest 跑风险探针；界面迁移从 P4 / P5 开始。"
+                       FontSize="12" Foreground="#71717a"
+                       HorizontalAlignment="Center"/>
+        </StackPanel>
+    </Border>
+</Window>

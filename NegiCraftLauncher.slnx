@@ -1,6 +1,7 @@
 <Solution>
   <Folder Name="/src/">
     <Project Path="src/NegiCraftLauncher.App/NegiCraftLauncher.App.csproj" />
+    <Project Path="src/NegiCraftLauncher.App.Wpf/NegiCraftLauncher.App.Wpf.csproj" />
     <Project Path="src/NegiCraftLauncher.Core/NegiCraftLauncher.Core.csproj" />
     <Project Path="src/NegiCraftLauncher.Pet/NegiCraftLauncher.Pet.csproj" />
     <Project Path="src/NegiCraftLauncher.Pet.App/NegiCraftLauncher.Pet.App.csproj" />

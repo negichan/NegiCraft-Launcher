@@ -1,0 +1,8 @@
+<Application x:Class="NegiCraftLauncher.App.Wpf.App"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             ShutdownMode="OnExplicitShutdown">
+    <Application.Resources>
+        <!-- 主题资源在 P3 阶段从 NegiCraftLauncher.Theme 的 Tokens.axaml 移植过来。 -->
+    </Application.Resources>
+</Application>
