@@ -3,6 +3,7 @@ using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Markup.Xaml;
 using NegiCraftLauncher.App.ViewModels;
 using NegiCraftLauncher.App.Views;
+using NegiCraftLauncher.Pet;
 
 namespace NegiCraftLauncher.App;
 

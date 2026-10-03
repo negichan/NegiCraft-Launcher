@@ -1,7 +1,7 @@
 using System;
 using System.Runtime.InteropServices;
 
-namespace NegiCraftLauncher.App.Services;
+namespace NegiCraftLauncher.Pet.Services;
 
 /// <summary>
 /// A WH_MOUSE_LL hook installed on the calling thread's message pump, so a left click anywhere

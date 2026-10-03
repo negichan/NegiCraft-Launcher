@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.ComponentModel;
 using System.IO;
 using System.Runtime.InteropServices;
 using Avalonia;
@@ -9,17 +10,15 @@ using Avalonia.Interactivity;
 using Avalonia.Platform.Storage;
 using Avalonia.Threading;
 using Material.Icons.Avalonia;
-using NegiCraftLauncher.App.ViewModels;
 
-namespace NegiCraftLauncher.App.Views;
+namespace NegiCraftLauncher.Pet;
 
 public partial class PetWindow : Window
 {
     private readonly double _baseWidth = 160;
     private readonly double _baseHeight = 320;
     private double _currentScale = 1.0;
-    private readonly MainWindowViewModel? _launcherVm;
-    private readonly Window? _launcherWindow;
+    private readonly IPetHost? _host;
 
     public enum PetInteractionMode
     {
@@ -241,13 +240,12 @@ public partial class PetWindow : Window
         Services.PetShellStyle.ApplyToolWindow(this);
     }
 
-    public PetWindow(string initialPlayerName, MainWindowViewModel? launcherVm = null, Window? launcherWindow = null) : this()
+    public PetWindow(string initialPlayerName, IPetHost? host = null) : this()
     {
-        _launcherVm = launcherVm;
-        _launcherWindow = launcherWindow;
+        _host = host;
 
-        var effectiveName = !string.IsNullOrWhiteSpace(_launcherVm?.EffectivePetName)
-            ? _launcherVm.EffectivePetName
+        var effectiveName = !string.IsNullOrWhiteSpace(_host?.EffectiveName)
+            ? _host.EffectiveName
             : initialPlayerName;
 
         if (!string.IsNullOrWhiteSpace(effectiveName))
@@ -255,9 +253,15 @@ public partial class PetWindow : Window
             PetPreview.PlayerName = effectiveName;
         }
 
-        if (_launcherVm != null)
+        if (_host != null)
         {
-            _launcherVm.PropertyChanged += OnVmPropertyChanged;
+            _host.PropertyChanged += OnHostPropertyChanged;
+        }
+
+        // Launcher-only affordances disappear when nothing can host them (standalone build).
+        if (_host is null || !_host.CanOpenLauncher)
+        {
+            if (MenuOpenLauncher != null) MenuOpenLauncher.IsVisible = false;
         }
 
         UpdateResetNameMenuState();
@@ -271,9 +275,9 @@ public partial class PetWindow : Window
             StopShiftMonitoring();
             StopKeyboardHook();
             DropInteractHook();
-            if (_launcherVm != null)
+            if (_host != null)
             {
-                _launcherVm.PropertyChanged -= OnVmPropertyChanged;
+                _host.PropertyChanged -= OnHostPropertyChanged;
             }
         };
     }
@@ -288,13 +292,13 @@ public partial class PetWindow : Window
         PetPreview.ApplySkin(skinBytes);
     }
 
-    private void OnVmPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+    private void OnHostPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
-        if (e.PropertyName == nameof(MainWindowViewModel.EffectivePetName))
+        if (e.PropertyName == nameof(IPetHost.EffectiveName))
         {
-            if (_launcherVm != null && !string.IsNullOrWhiteSpace(_launcherVm.EffectivePetName))
+            if (_host != null && !string.IsNullOrWhiteSpace(_host.EffectiveName))
             {
-                PetPreview.PlayerName = _launcherVm.EffectivePetName;
+                PetPreview.PlayerName = _host.EffectiveName;
                 UpdateResetNameMenuState();
             }
         }
@@ -302,7 +306,7 @@ public partial class PetWindow : Window
 
     private void UpdateResetNameMenuState()
     {
-        bool hasCustom = !string.IsNullOrWhiteSpace(_launcherVm?.PetCustomName);
+        bool hasCustom = !string.IsNullOrWhiteSpace(_host?.CustomName);
         if (MenuResetName != null)
         {
             MenuResetName.IsEnabled = hasCustom;
@@ -311,23 +315,23 @@ public partial class PetWindow : Window
 
     private void PopulateAccountMenu()
     {
-        if (_launcherVm == null) return;
+        if (_host == null || _host.AccountNames.Count == 0) return;
 
-        foreach (var account in _launcherVm.Accounts)
+        foreach (var accName in _host.AccountNames)
         {
+            var name = accName;
             var item = new MenuItem
             {
-                Header = account.Name
+                Header = name
             };
-            var accName = account.Name;
             item.Click += (_, _) =>
             {
                 // 手动选择账户皮肤并修改桌宠名字
-                if (_launcherVm != null)
+                if (_host != null)
                 {
-                    _launcherVm.PetCustomName = accName;
+                    _host.CustomName = name;
                 }
-                PetPreview.PlayerName = accName;
+                PetPreview.PlayerName = name;
                 UpdateResetNameMenuState();
             };
             MenuAccountsParent.Items.Add(item);
@@ -955,6 +959,12 @@ public partial class PetWindow : Window
         PetContextMenu?.Open(RootPanel);
     }
 
+    /// <summary>Closes the pet context menu.</summary>
+    public void ClosePetContextMenu() => PetContextMenu?.Close();
+
+    /// <summary>Whether the pet context menu is currently open.</summary>
+    public bool IsPetContextMenuOpen => PetContextMenu?.IsOpen ?? false;
+
     private void OnRootPointerReleased(object? sender, PointerReleasedEventArgs e)
     {
         if (_isLeftPressed)
@@ -1190,7 +1200,7 @@ public partial class PetWindow : Window
 
     private async void OnChangeNameClick(object? sender, RoutedEventArgs e)
     {
-        string current = _launcherVm?.PetCustomName ?? PetPreview.PlayerName ?? "";
+        string current = _host?.CustomName ?? PetPreview.PlayerName ?? "";
         var newName = await PromptPetNameDialog.ShowAsync(this, current);
         if (newName != null)
         {
@@ -1198,17 +1208,17 @@ public partial class PetWindow : Window
             if (string.IsNullOrWhiteSpace(trimmed))
             {
                 // 输入为空代表恢复继承
-                if (_launcherVm != null)
+                if (_host != null)
                 {
-                    _launcherVm.PetCustomName = null;
-                    PetPreview.PlayerName = _launcherVm.EffectivePetName;
+                    _host.CustomName = null;
+                    PetPreview.PlayerName = _host.EffectiveName;
                 }
             }
             else
             {
-                if (_launcherVm != null)
+                if (_host != null)
                 {
-                    _launcherVm.PetCustomName = trimmed;
+                    _host.CustomName = trimmed;
                 }
                 PetPreview.PlayerName = trimmed;
             }
@@ -1218,10 +1228,10 @@ public partial class PetWindow : Window
 
     private void OnResetNameToInheritedClick(object? sender, RoutedEventArgs e)
     {
-        if (_launcherVm != null)
+        if (_host != null)
         {
-            _launcherVm.PetCustomName = null;
-            PetPreview.PlayerName = _launcherVm.EffectivePetName;
+            _host.CustomName = null;
+            PetPreview.PlayerName = _host.EffectiveName;
             UpdateResetNameMenuState();
         }
     }
@@ -1254,12 +1264,7 @@ public partial class PetWindow : Window
 
     private void OnOpenLauncherClick(object? sender, RoutedEventArgs e)
     {
-        if (_launcherWindow != null)
-        {
-            _launcherWindow.IsVisible = true;
-            _launcherWindow.WindowState = WindowState.Normal;
-            _launcherWindow.Activate();
-        }
+        _host?.OpenLauncher();
     }
 
     private void OnClosePetClick(object? sender, RoutedEventArgs e)

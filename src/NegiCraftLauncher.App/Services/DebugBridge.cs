@@ -12,6 +12,7 @@ using Avalonia.Media.Imaging;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
 using NegiCraftLauncher.Skin.Controls;
+using NegiCraftLauncher.Pet;
 using NegiCraftLauncher.App.Models;
 using NegiCraftLauncher.App.ViewModels;
 using NegiCraftLauncher.App.Views;
@@ -297,9 +298,9 @@ public sealed class DebugBridge
                     {
                         var pet = (_window as MainWindow)?.PetWindowInstance;
                         if (pet == null) return "ERR no pet window";
-                        if (arg == "close") pet.PetContextMenu?.Close();
+                        if (arg == "close") pet.ClosePetContextMenu();
                         else pet.OpenPetContextMenu();
-                        return "OK IsOpen=" + pet.PetContextMenu?.IsOpen;
+                        return "OK IsOpen=" + pet.IsPetContextMenuOpen;
                     });
                 case "pet-walk":
                     return await Ui(() =>
@@ -486,6 +487,20 @@ public sealed class DebugBridge
                         rtb.Render(trayWin);
                         rtb.Save(arg, new PngBitmapEncoderOptions());
                         return $"OK {arg} w={trayWin.Bounds.Width} h={trayWin.Bounds.Height}";
+                    });
+                case "pet-state":
+                    // Read-only view of the live pet: the name it is actually rendering (which the
+                    // host adapter is responsible for keeping in sync), plus mode/topmost/menu.
+                    return await Ui(() =>
+                    {
+                        var pet = (_window as MainWindow)?.PetWindowInstance;
+                        if (pet == null) return "ERR no pet window";
+                        var preview = pet.GetVisualDescendants().OfType<MinecraftSkinPreview>().FirstOrDefault();
+                        var accounts = string.Join(",", _vm.Accounts.Select(a => a.Name));
+                        return $"petActive={_vm.IsPetActive} petPlayerName={preview?.PlayerName ?? "n/a"} " +
+                               $"effectiveName={_vm.EffectivePetName} customName={_vm.PetCustomName ?? "<null>"} " +
+                               $"mode={pet.CurrentMode} topmost={pet.Topmost} " +
+                               $"menuOpen={pet.IsPetContextMenuOpen} accounts=[{accounts}]";
                     });
                 case "pet-hwnd":
                     // Read-only probe of the pet window's real Win32 styles. This is what decides

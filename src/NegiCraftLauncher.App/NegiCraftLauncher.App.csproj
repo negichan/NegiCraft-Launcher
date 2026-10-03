@@ -24,6 +24,8 @@
 
   <ItemGroup>
     <ProjectReference Include="..\NegiCraftLauncher.Core\NegiCraftLauncher.Core.csproj" />
+    <!-- The desktop pet; the launcher hosts it in-process. -->
+    <ProjectReference Include="..\NegiCraftLauncher.Pet\NegiCraftLauncher.Pet.csproj" />
     <!-- Skin decoding + the OpenGL skin renderer; also brings SkiaSharp and the vendored
          MinecraftSkinRender transitively. -->
     <ProjectReference Include="..\NegiCraftLauncher.Skin\NegiCraftLauncher.Skin.csproj" />

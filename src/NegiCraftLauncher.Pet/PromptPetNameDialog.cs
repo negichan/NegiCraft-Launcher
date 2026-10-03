@@ -7,7 +7,7 @@ using Avalonia.Layout;
 using Avalonia.Media;
 using Avalonia.Threading;
 
-namespace NegiCraftLauncher.App.Views;
+namespace NegiCraftLauncher.Pet;
 
 public class PromptPetNameDialog : Window
 {

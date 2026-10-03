@@ -8,6 +8,7 @@ using Avalonia.Platform;
 using Avalonia.Platform.Storage;
 using Avalonia.Threading;
 using NegiCraftLauncher.App.ViewModels;
+using NegiCraftLauncher.Pet;
 
 namespace NegiCraftLauncher.App.Views;
 
@@ -142,7 +143,7 @@ public partial class MainWindow : Window
         }
 
         var currentName = _vm?.EffectivePetName ?? "pingplus";
-        _petWindow = new PetWindow(currentName, _vm, this);
+        _petWindow = new PetWindow(currentName, _vm is null ? null : new Services.PetHostAdapter(_vm, this));
 
         var screens = Screens;
         var primary = screens.Primary ?? (screens.All.Count > 0 ? screens.All[0] : null);

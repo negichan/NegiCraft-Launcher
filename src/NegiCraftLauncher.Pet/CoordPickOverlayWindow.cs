@@ -8,7 +8,7 @@ using Avalonia.Input;
 using Avalonia.Layout;
 using Avalonia.Media;
 
-namespace NegiCraftLauncher.App.Views;
+namespace NegiCraftLauncher.Pet;
 
 /// <summary>
 /// A lightweight transparent overlay that captures clicks anywhere on screen
