@@ -8,6 +8,7 @@
     <Project Path="src/NegiCraftLauncher.Raster/NegiCraftLauncher.Raster.csproj" />
     <Project Path="src/NegiCraftLauncher.Skin/NegiCraftLauncher.Skin.csproj" />
     <Project Path="src/NegiCraftLauncher.Theme/NegiCraftLauncher.Theme.csproj" />
+    <Project Path="src/NegiCraftLauncher.Theme.Wpf/NegiCraftLauncher.Theme.Wpf.csproj" />
     <Project Path="src/NegiCraftLauncher.ViewModels/NegiCraftLauncher.ViewModels.csproj" />
   </Folder>
   <Folder Name="/libs/">

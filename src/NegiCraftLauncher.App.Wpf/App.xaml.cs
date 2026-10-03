@@ -35,6 +35,14 @@ public partial class App : Application
             return;
         }
 
+        // --theme：把主题画廊摆出来截一张图 + 逐控件检查样式有没有命中。
+        if (Array.IndexOf(e.Args, "--theme") >= 0)
+        {
+            ThemeGallery.Run();
+            Shutdown();
+            return;
+        }
+
         MainWindow = new MainWindow();
         MainWindow.Show();
     }

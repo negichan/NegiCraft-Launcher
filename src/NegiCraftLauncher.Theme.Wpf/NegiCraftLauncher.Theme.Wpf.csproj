@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <!-- 只放 WPF 侧的 view 层主题（token + 控件样式）。逻辑一行都没有，所以不需要
+         引用 Core / ViewModels / Raster —— 谁都可以引它，包括桌宠。
+         与 Avalonia 那份 NegiCraftLauncher.Theme 是**两份独立的 view 层资产**，
+         不是同一份源码编译两次（WPF 与 Avalonia 的 XAML 没有共同编译器）。 -->
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+    <RootNamespace>NegiCraftLauncher.Theme.Wpf</RootNamespace>
+    <EnableWindowsTargeting>true</EnableWindowsTargeting>
+  </PropertyGroup>
+
+</Project>

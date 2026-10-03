@@ -53,7 +53,8 @@ src/NegiCraftLauncher.Raster      软件光栅化 + 平台中立像素层（Pixe
 src/NegiCraftLauncher.Skin        皮肤解码 + OpenGL 渲染栈（App 与 Pet 共用）
 src/NegiCraftLauncher.Pet         桌宠本体 + IPetHost 宿主契约
 src/NegiCraftLauncher.Pet.App     独立桌宠（WinExe → NegiPet.exe）
-src/NegiCraftLauncher.Theme       设计 token + 控件主题（App 与 Pet.App 共用）
+src/NegiCraftLauncher.Theme       设计 token + 控件主题（Avalonia；App 与 Pet.App 共用）
+src/NegiCraftLauncher.Theme.Wpf   设计 token + 控件主题（WPF；无逻辑，谁都能引）
 libs/MinecraftSkinRender          vendored 渲染库（Skia 侧）
 libs/MinecraftSkinRender.Core     vendored 渲染库的零依赖核心（位姿数学、几何表）
 ```
@@ -61,6 +62,7 @@ libs/MinecraftSkinRender.Core     vendored 渲染库的零依赖核心（位姿�
 依赖方向：`Pet.App → Pet → Skin → MinecraftSkinRender`；`App → Pet`、`App → Skin`、`App → Theme`、
 `Pet.App → Theme`。`Core` 不参与 UI。`App.Wpf` 与 `App` 平行，共用 `Core` / `ViewModels` / `Raster`。
 `Raster` **只引用 `MinecraftSkinRender.Core`**（不引用 Skia 侧），否则 `libSkiaSharp.dll` 会被拖回 WPF 侧。
+`Theme` 与 `Theme.Wpf` 是**两份独立的 view 层资产**（XAML 无共同编译器），只保证视觉一致，不保证文本一致。
 
 **Windows 走 WPF、macOS/Linux 走 Avalonia** 是既定方向；view 层各写各的（XAML 无共同编译器），
 共享的是 `Core` / `ViewModels` / `Raster`。详见 `docs/wpf-migration-plan.md`（不入库）。
@@ -90,6 +92,43 @@ $EXE --compare a.png --with b.png             # 逐像素对比
 - 披风用的是**另一张贴图**，`SkinRenderSoftware.BuildLayers` 里显式跳过 `ModelPartType.Cape`。
   不跳的话它会拿皮肤贴图去采样头部区域，在身后糊出一块棕色板子（正面看不出来，180° 露馅）。
 - 性能结论一律以 **Release** 为准：Debug 下 Roslyn 不内联，同一份代码慢近一倍。
+
+## 验证 WPF 主题
+
+```bash
+src/NegiCraftLauncher.App.Wpf/bin/Debug/net10.0-windows/NegiCraftLauncher.exe --theme
+```
+
+把主题画廊起在屏幕外、截完图就关掉（不动光标、不抢焦点）。产物：
+
+- `%TEMP%\ncl-wpf-theme.png` —— 整张画廊（2× 光栅化）
+- `%TEMP%\ncl-wpf-theme-<小节>.png` —— 8 个分小节图（1×，一个 DIP 一个像素）
+- `%TEMP%\ncl-wpf-theme.txt` —— **逐控件的样式命中检查**（`Template.FindName`）+ 主题资源值
+
+要点：
+
+- **不要只看截图**。样式没命中时 WPF 会悄悄退回系统默认外观，是"有点怪"不是"报错"。
+  报告里的 `Root` / `PART_ContentHost` / `Track` / `PART_Track` / `PART_LayoutRoot` 都必须是 `True`。
+- 画廊要**分小节出图**：整张 1014×2602 缩略后，4px 的滚动条、6px 的进度条全糊成一根线。
+- `RenderTargetBitmap.Render(子元素)` 会带上元素相对父级的偏移 → 小尺寸位图整张空白。
+  分小节图走 `VisualBrush` + `DrawingVisual` 在原点重画（`ThemeGallery.RenderAtOrigin`）。
+
+WPF 与 Avalonia 有几处**静默出错**的渲染差异（不报错、只是画得不对），改主题前先看
+`docs/wpf-migration-plan.md` §15.2。最容易踩的三个：
+
+- **圆角不会被夹到一半**。Avalonia 写 `999` 表示胶囊；WPF 的 `Border` 不夹，直接画成**椭圆**。
+  按实际像素高度写具体值（6px 高写 3、4px 高写 2、16×16 写 8）。
+- **`ScrollBar` 的 `MinWidth` 被静态构造覆盖**成系统滚动条宽度（≈17.33），
+  光设 `Width="10"` 会被撑回去 —— 必须显式 `MinWidth="0"`。
+- **`ProgressBar` 默认 `BorderThickness=1`** 且边框色来自系统主题，要清成 0/Transparent。
+
+## 跑一次 Avalonia 回归（T0-3）
+
+```powershell
+design\_smoke.ps1          # 起 Avalonia 版，四个主页面各截一张图到 %TEMP%\ncl-smoke-<page>.png
+```
+
+和 `_dbg.ps1` 一样，**必须在同一次 PowerShell 调用里跑完**（沙箱会随会话收掉 GUI 子进程）。
 
 桌宠有两种宿主：启动器进程内托管（`App/Services/PetHostAdapter.cs` 把 VM 适配成 `IPetHost`），以及独立 exe（`Pet.App/StandalonePetHost.cs`）。**独立版没有启动器专属功能**：隐藏“打开启动器”、账号换肤菜单为空。两边名字各存各的（启动器在 `settings.json`，独立版在 `%APPDATA%\NCL\pet.json`）。
 

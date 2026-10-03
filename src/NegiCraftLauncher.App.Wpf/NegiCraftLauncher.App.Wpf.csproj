@@ -27,6 +27,8 @@
     <!-- 与 Avalonia 那份完全同一套逻辑：VM 与像素层都不含任何 UI 框架类型。 -->
     <ProjectReference Include="..\NegiCraftLauncher.Raster\NegiCraftLauncher.Raster.csproj" />
     <ProjectReference Include="..\NegiCraftLauncher.ViewModels\NegiCraftLauncher.ViewModels.csproj" />
+    <!-- WPF 侧的 view 层主题。与 Avalonia 的 NegiCraftLauncher.Theme 是两份独立资产。 -->
+    <ProjectReference Include="..\NegiCraftLauncher.Theme.Wpf\NegiCraftLauncher.Theme.Wpf.csproj" />
   </ItemGroup>
 
 </Project>
