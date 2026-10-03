@@ -474,4 +474,155 @@
             </ControlTemplate>
         </Setter>
     </ControlTheme>
+
+    <!-- ============ Separator ============ -->
+    <ControlTheme TargetType="Separator" x:Key="{x:Type Separator}">
+        <Setter Property="Focusable" Value="False" />
+        <Setter Property="Height" Value="1" />
+        <Setter Property="Margin" Value="4,4" />
+        <Setter Property="Background" Value="{DynamicResource BorderLineBrush}" />
+        <Setter Property="Template">
+            <ControlTemplate>
+                <Border Height="{TemplateBinding Height}"
+                        Margin="{TemplateBinding Margin}"
+                        Background="{TemplateBinding Background}" />
+            </ControlTemplate>
+        </Setter>
+    </ControlTheme>
+
+    <!-- ============ MenuFlyoutPresenter ============ -->
+    <ControlTheme TargetType="MenuFlyoutPresenter" x:Key="{x:Type MenuFlyoutPresenter}">
+        <Setter Property="Background" Value="{DynamicResource CardBackgroundBrush}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource BorderLineBrush}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="Padding" Value="4" />
+        <Setter Property="CornerRadius" Value="12" />
+        <Setter Property="MinWidth" Value="140" />
+        <Setter Property="MaxWidth" Value="280" />
+        <Setter Property="ScrollViewer.HorizontalScrollBarVisibility" Value="Disabled" />
+        <Setter Property="ScrollViewer.VerticalScrollBarVisibility" Value="Auto" />
+        <Setter Property="Template">
+            <ControlTemplate>
+                <Border Background="{TemplateBinding Background}"
+                        BorderBrush="{TemplateBinding BorderBrush}"
+                        BorderThickness="{TemplateBinding BorderThickness}"
+                        CornerRadius="{TemplateBinding CornerRadius}"
+                        Padding="{TemplateBinding Padding}"
+                        BoxShadow="0 12 32 -6 #E6000000">
+                    <ScrollViewer HorizontalScrollBarVisibility="{TemplateBinding (ScrollViewer.HorizontalScrollBarVisibility)}"
+                                  VerticalScrollBarVisibility="{TemplateBinding (ScrollViewer.VerticalScrollBarVisibility)}">
+                        <ItemsPresenter Name="PART_ItemsPresenter"
+                                        ItemsPanel="{TemplateBinding ItemsPanel}"
+                                        KeyboardNavigation.TabNavigation="Continue"
+                                        Grid.IsSharedSizeScope="True" />
+                    </ScrollViewer>
+                </Border>
+            </ControlTemplate>
+        </Setter>
+    </ControlTheme>
+
+    <!-- ============ ContextMenu ============ -->
+    <ControlTheme TargetType="ContextMenu" x:Key="{x:Type ContextMenu}">
+        <Setter Property="Background" Value="{DynamicResource CardBackgroundBrush}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource BorderLineBrush}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="Padding" Value="4" />
+        <Setter Property="CornerRadius" Value="12" />
+        <Setter Property="MinWidth" Value="140" />
+        <Setter Property="MaxWidth" Value="280" />
+        <Setter Property="ScrollViewer.HorizontalScrollBarVisibility" Value="Disabled" />
+        <Setter Property="ScrollViewer.VerticalScrollBarVisibility" Value="Auto" />
+        <Setter Property="Template">
+            <ControlTemplate>
+                <Border Background="{TemplateBinding Background}"
+                        BorderBrush="{TemplateBinding BorderBrush}"
+                        BorderThickness="{TemplateBinding BorderThickness}"
+                        CornerRadius="{TemplateBinding CornerRadius}"
+                        Padding="{TemplateBinding Padding}"
+                        BoxShadow="0 12 32 -6 #E6000000">
+                    <ScrollViewer HorizontalScrollBarVisibility="{TemplateBinding (ScrollViewer.HorizontalScrollBarVisibility)}"
+                                  VerticalScrollBarVisibility="{TemplateBinding (ScrollViewer.VerticalScrollBarVisibility)}">
+                        <ItemsPresenter Name="PART_ItemsPresenter"
+                                        ItemsPanel="{TemplateBinding ItemsPanel}"
+                                        KeyboardNavigation.TabNavigation="Continue"
+                                        Grid.IsSharedSizeScope="True" />
+                    </ScrollViewer>
+                </Border>
+            </ControlTemplate>
+        </Setter>
+    </ControlTheme>
+
+    <!-- ============ MenuItem ============ -->
+    <ControlTheme TargetType="MenuItem" x:Key="{x:Type MenuItem}">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="Foreground" Value="{DynamicResource ForegroundBrush}" />
+        <Setter Property="Padding" Value="12,7" />
+        <Setter Property="CornerRadius" Value="8" />
+        <Setter Property="FontSize" Value="13" />
+        <Setter Property="Cursor" Value="Hand" />
+        <Setter Property="Template">
+            <ControlTemplate>
+                <Panel>
+                    <Border Background="{TemplateBinding Background}"
+                            BorderBrush="{TemplateBinding BorderBrush}"
+                            BorderThickness="{TemplateBinding BorderThickness}"
+                            CornerRadius="{TemplateBinding CornerRadius}"
+                            Padding="{TemplateBinding Padding}"
+                            Margin="0,1"
+                            Name="PART_LayoutRoot">
+                        <Grid ColumnDefinitions="Auto,*,Auto">
+                            <ContentPresenter Grid.Column="0"
+                                              Content="{TemplateBinding Icon}"
+                                              Margin="0,0,8,0"
+                                              VerticalAlignment="Center"
+                                              IsVisible="{TemplateBinding Icon, Converter={x:Static ObjectConverters.IsNotNull}}"
+                                              Name="PART_IconPresenter" />
+                            <ContentPresenter Grid.Column="1"
+                                              Content="{TemplateBinding Header}"
+                                              ContentTemplate="{TemplateBinding HeaderTemplate}"
+                                              RecognizesAccessKey="True"
+                                              VerticalAlignment="Center"
+                                              TextElement.Foreground="{TemplateBinding Foreground}"
+                                              TextElement.FontSize="{TemplateBinding FontSize}"
+                                              Name="PART_HeaderPresenter" />
+                            <Path Grid.Column="2"
+                                  Fill="{DynamicResource MutedForegroundBrush}"
+                                  Data="M 0 0 L 4 4 L 0 8 Z"
+                                  VerticalAlignment="Center"
+                                  Margin="12,0,2,0"
+                                  Name="PART_ChevronPath" />
+                        </Grid>
+                    </Border>
+                    <Popup Name="PART_Popup"
+                           WindowManagerAddShadowHint="False"
+                           Placement="RightEdgeAlignedTop"
+                           HorizontalOffset="4"
+                           IsOpen="{TemplateBinding IsSubMenuOpen, Mode=TwoWay}">
+                        <Border Background="{DynamicResource CardBackgroundBrush}"
+                                BorderBrush="{DynamicResource BorderLineBrush}"
+                                BorderThickness="1"
+                                CornerRadius="12"
+                                Padding="4"
+                                BoxShadow="0 12 32 -6 #E6000000">
+                            <ScrollViewer HorizontalScrollBarVisibility="Disabled"
+                                          VerticalScrollBarVisibility="Auto">
+                                <ItemsPresenter Name="PART_ItemsPresenter"
+                                                ItemsPanel="{TemplateBinding ItemsPanel}"
+                                                Grid.IsSharedSizeScope="True" />
+                            </ScrollViewer>
+                        </Border>
+                    </Popup>
+                </Panel>
+            </ControlTemplate>
+        </Setter>
+        <Style Selector="^:empty /template/ Path#PART_ChevronPath">
+            <Setter Property="IsVisible" Value="False" />
+        </Style>
+        <Style Selector="^:pointerover /template/ Border#PART_LayoutRoot">
+            <Setter Property="Background" Value="#1c1c21" />
+        </Style>
+        <Style Selector="^:disabled">
+            <Setter Property="Opacity" Value="0.4" />
+        </Style>
+    </ControlTheme>
 </ResourceDictionary>

@@ -47,6 +47,38 @@ public partial class MainWindowViewModel : ViewModelBase
     /// <summary>The view hides and restores itself; the VM only says when.</summary>
     public event Action? HideWindowRequested;
     public event Action? ShowWindowRequested;
+    public event Action? OpenPetRequested;
+    public event Action? RecallPetRequested;
+
+    [ObservableProperty]
+    private bool _isPetActive;
+
+    public string? PetCustomName
+    {
+        get => _launcher.Settings.PetCustomName;
+        set
+        {
+            var trimmed = string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+            if (_launcher.Settings.PetCustomName != trimmed)
+            {
+                _launcher.Settings.PetCustomName = trimmed;
+                PersistSettings();
+                OnPropertyChanged();
+                OnPropertyChanged(nameof(EffectivePetName));
+            }
+        }
+    }
+
+    public string EffectivePetName =>
+        !string.IsNullOrWhiteSpace(PetCustomName)
+            ? PetCustomName
+            : (CurrentAccount?.Name ?? "pingplus");
+
+    [RelayCommand]
+    private void OpenPet() => OpenPetRequested?.Invoke();
+
+    [RelayCommand]
+    private void RecallPet() => RecallPetRequested?.Invoke();
 
     public MainWindowViewModel()
     {
@@ -219,6 +251,7 @@ public partial class MainWindowViewModel : ViewModelBase
         foreach (var a in Accounts) a.IsCurrent = ReferenceEquals(a, value);
         AvatarBitmap = value?.AvatarBitmap ?? NoAccountAvatar;
         OnPropertyChanged(nameof(HasAccount));
+        OnPropertyChanged(nameof(EffectivePetName));
     }
 
     [RelayCommand]
