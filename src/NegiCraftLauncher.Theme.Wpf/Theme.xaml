@@ -1,0 +1,14 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <!--
+        NegiCraftLauncher 应用主题（WPF 侧）：设计 token + 自研控件样式。
+        对应 Avalonia 的 NegiCraftLauncher.Theme/Theme.axaml。
+
+        用法（在 App.xaml 里合并一次即可，隐式样式会自动作用于整个应用）：
+            <ResourceDictionary Source="pack://application:,,,/NegiCraftLauncher.Theme.Wpf;component/Theme.xaml" />
+    -->
+    <ResourceDictionary.MergedDictionaries>
+        <ResourceDictionary Source="Tokens.xaml" />
+        <ResourceDictionary Source="Controls.xaml" />
+    </ResourceDictionary.MergedDictionaries>
+</ResourceDictionary>

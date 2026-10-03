@@ -3,6 +3,12 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              ShutdownMode="OnExplicitShutdown">
     <Application.Resources>
-        <!-- 主题资源在 P3 阶段从 NegiCraftLauncher.Theme 的 Tokens.axaml 移植过来。 -->
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <!-- 设计 token + 自研控件样式。与 Avalonia 的 NegiCraftLauncher.Theme 视觉对齐，
+                     但源码是两份（XAML 没有共同编译器）。 -->
+                <ResourceDictionary Source="pack://application:,,,/NegiCraftLauncher.Theme.Wpf;component/Theme.xaml" />
+            </ResourceDictionary.MergedDictionaries>
+        </ResourceDictionary>
     </Application.Resources>
 </Application>

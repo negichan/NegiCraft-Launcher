@@ -1,0 +1,703 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                    xmlns:neg="clr-namespace:NegiCraftLauncher.Theme.Wpf">
+    <!--
+        NegiCraftLauncher in-house control styles —— WPF 侧。
+
+        与 Avalonia 的 NegiCraftLauncher.Theme/Controls.axaml 是**两份独立的 view 层资产**：
+        WPF 与 Avalonia 的 XAML 没有共同编译器（根 xmlns 都不一样），做不到一套源码两边编。
+        这里保证的是**视觉结果一致**，不是文本一致。
+
+        Avalonia → WPF 的对应关系：
+          ControlTheme TargetType="X" x:Key="{x:Type X}"  →  Style TargetType="{x:Type X}"（无 Key 即隐式）
+          ControlTheme ... x:Key="Name"                   →  Style x:Key="Name"
+          ControlTemplate 里放 Border/Panel                →  要包在 Setter.Value 里，且必须带 TargetType
+          Selector="^:pointerover" / "^:checked"          →  ControlTemplate.Triggers + Trigger
+          Selector="^ /template/ Border#Name"             →  Trigger 的 Setter TargetName="Name"
+          CornerRadius（Button/TextBox 自带）              →  neg:Negi.CornerRadius 附加属性
+          TextBox.Watermark                               →  neg:Negi.Placeholder 附加属性
+          Panel                                           →  Grid（无行列即单格）
+          StackPanel Spacing                              →  子元素 Margin
+          ToggleSwitch                                    →  CheckBox 重模板（WPF 无此控件）
+          BoxShadow                                       →  DropShadowEffect
+          MenuFlyoutPresenter                             →  无对应（WPF 用 ContextMenu / Menu 自己的样式）
+
+        Grid 的 ColumnDefinitions="*,Auto" 简写是 Avalonia 的语法，WPF 必须展开成
+        <Grid.ColumnDefinitions><ColumnDefinition Width="*"/>…</Grid.ColumnDefinitions>。
+
+        ⚠️ **圆角不能照抄 999**。Avalonia 的 Border 会把过大的圆角夹到"短边的一半"，
+        所以那边一律写 999 表示"胶囊/正圆"。WPF 的 Border 不夹 —— 半径超过短边一半时
+        直接画成一个**椭圆（透镜形）**。473x6 的进度条配 999 会变成一根两头尖的细刺。
+        ⇒ WPF 这边一律按**实际像素高度**写具体值：6px 高写 3，4px 高写 2，16x16 写 8。
+        改高度时记得一起改圆角。
+    -->
+
+    <!-- ============ 基础件（必须声明在用到它们的样式之前，StaticResource 是顺序敏感的） ============ -->
+
+    <!-- 滑动条/滚动条里的填充按钮：Avalonia 版是全透明 -->
+    <Style x:Key="NegiFlatRepeatButtonStyle" TargetType="{x:Type RepeatButton}">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="Focusable" Value="False" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="{x:Type RepeatButton}">
+                    <Border Background="{TemplateBinding Background}" />
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- Slider 的轨道段：6px 高的胶囊（圆角 3 = 高度的一半，见文件头的圆角说明） -->
+    <Style x:Key="SliderTrackButtonStyle" TargetType="{x:Type RepeatButton}">
+        <Setter Property="Focusable" Value="False" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="{x:Type RepeatButton}">
+                    <Border Background="{TemplateBinding Background}"
+                            CornerRadius="3"
+                            Height="6"
+                            VerticalAlignment="Center" />
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- Slider 的滑块：16x16 的正圆（卡片底色 + 主色描边） -->
+    <Style x:Key="SliderThumbStyle" TargetType="{x:Type Thumb}">
+        <Setter Property="Cursor" Value="Hand" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="{x:Type Thumb}">
+                    <Border Background="{DynamicResource CardBackgroundBrush}"
+                            BorderBrush="{DynamicResource PrimaryBrush}"
+                            BorderThickness="2"
+                            CornerRadius="8" />
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- 滚动条：翻页按钮全透明，只有 4px 的滑块可见 -->
+    <Style x:Key="ScrollBarPageButtonStyle" TargetType="{x:Type RepeatButton}">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="Focusable" Value="False" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="{x:Type RepeatButton}">
+                    <Border Background="Transparent" />
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <Style x:Key="ScrollBarThumbVerticalStyle" TargetType="{x:Type Thumb}">
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="{x:Type Thumb}">
+                    <Border Background="{DynamicResource MutedBrush}"
+                            CornerRadius="2"
+                            HorizontalAlignment="Center"
+                            Margin="0,3"
+                            Width="4" />
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <Style x:Key="ScrollBarThumbHorizontalStyle" TargetType="{x:Type Thumb}">
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="{x:Type Thumb}">
+                    <Border Background="{DynamicResource MutedBrush}"
+                            CornerRadius="2"
+                            Height="4"
+                            Margin="3,0"
+                            VerticalAlignment="Center" />
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <ControlTemplate x:Key="ScrollBarVerticalTemplate" TargetType="{x:Type ScrollBar}">
+        <Border Background="Transparent">
+            <Track x:Name="PART_Track" IsDirectionReversed="True">
+                <Track.DecreaseRepeatButton>
+                    <RepeatButton Command="ScrollBar.PageUpCommand" Style="{StaticResource ScrollBarPageButtonStyle}" />
+                </Track.DecreaseRepeatButton>
+                <Track.IncreaseRepeatButton>
+                    <RepeatButton Command="ScrollBar.PageDownCommand" Style="{StaticResource ScrollBarPageButtonStyle}" />
+                </Track.IncreaseRepeatButton>
+                <Track.Thumb>
+                    <Thumb Style="{StaticResource ScrollBarThumbVerticalStyle}" />
+                </Track.Thumb>
+            </Track>
+        </Border>
+    </ControlTemplate>
+
+    <ControlTemplate x:Key="ScrollBarHorizontalTemplate" TargetType="{x:Type ScrollBar}">
+        <Border Background="Transparent">
+            <Track x:Name="PART_Track" IsDirectionReversed="False">
+                <Track.DecreaseRepeatButton>
+                    <RepeatButton Command="ScrollBar.PageLeftCommand" Style="{StaticResource ScrollBarPageButtonStyle}" />
+                </Track.DecreaseRepeatButton>
+                <Track.IncreaseRepeatButton>
+                    <RepeatButton Command="ScrollBar.PageRightCommand" Style="{StaticResource ScrollBarPageButtonStyle}" />
+                </Track.IncreaseRepeatButton>
+                <Track.Thumb>
+                    <Thumb Style="{StaticResource ScrollBarThumbHorizontalStyle}" />
+                </Track.Thumb>
+            </Track>
+        </Border>
+    </ControlTemplate>
+
+    <!-- 菜单分隔线：WPF 在菜单里用的是另一个资源键，两个都得给 -->
+    <ControlTemplate x:Key="NegiSeparatorTemplate" TargetType="{x:Type Separator}">
+        <Border Height="{TemplateBinding Height}"
+                Margin="{TemplateBinding Margin}"
+                Background="{TemplateBinding Background}" />
+    </ControlTemplate>
+
+    <!-- ============ Thumb（全局兜底） ============ -->
+    <Style TargetType="{x:Type Thumb}">
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="{x:Type Thumb}">
+                    <Border Background="{DynamicResource MutedBrush}" CornerRadius="3" />
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- ============ RepeatButton（全局兜底） ============ -->
+    <Style TargetType="{x:Type RepeatButton}">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="Focusable" Value="False" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="{x:Type RepeatButton}">
+                    <Border Background="{TemplateBinding Background}" />
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- ============ Button ============ -->
+    <Style TargetType="{x:Type Button}">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="Foreground" Value="{DynamicResource ForegroundBrush}" />
+        <Setter Property="BorderBrush" Value="Transparent" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="Padding" Value="16,0" />
+        <Setter Property="HorizontalContentAlignment" Value="Center" />
+        <Setter Property="VerticalContentAlignment" Value="Center" />
+        <Setter Property="neg:Negi.CornerRadius" Value="10" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="{x:Type Button}">
+                    <Border x:Name="Root"
+                            Background="{TemplateBinding Background}"
+                            BorderBrush="{TemplateBinding BorderBrush}"
+                            BorderThickness="{TemplateBinding BorderThickness}"
+                            CornerRadius="{Binding Path=(neg:Negi.CornerRadius), RelativeSource={RelativeSource TemplatedParent}}"
+                            Padding="{TemplateBinding Padding}"
+                            ClipToBounds="True"
+                            TextElement.Foreground="{TemplateBinding Foreground}">
+                        <ContentPresenter x:Name="PART_ContentPresenter"
+                                          Content="{TemplateBinding Content}"
+                                          ContentTemplate="{TemplateBinding ContentTemplate}"
+                                          HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                          VerticalAlignment="{TemplateBinding VerticalContentAlignment}"
+                                          RecognizesAccessKey="True" />
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsEnabled" Value="False">
+                            <Setter Property="Opacity" Value="0.5" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- ============ TextBox ============ -->
+    <Style TargetType="{x:Type TextBox}">
+        <Setter Property="Background" Value="{DynamicResource CardBackgroundBrush}" />
+        <Setter Property="Foreground" Value="{DynamicResource ForegroundBrush}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource BorderLineBrush}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="Padding" Value="12,0" />
+        <Setter Property="MinHeight" Value="36" />
+        <Setter Property="VerticalContentAlignment" Value="Center" />
+        <Setter Property="CaretBrush" Value="{DynamicResource ForegroundBrush}" />
+        <Setter Property="SelectionBrush" Value="{DynamicResource RingBrush}" />
+        <Setter Property="neg:Negi.CornerRadius" Value="10" />
+        <Setter Property="neg:Negi.Placeholder" Value="" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="{x:Type TextBox}">
+                    <Border x:Name="Border"
+                            Background="{TemplateBinding Background}"
+                            BorderBrush="{TemplateBinding BorderBrush}"
+                            BorderThickness="{TemplateBinding BorderThickness}"
+                            CornerRadius="{Binding Path=(neg:Negi.CornerRadius), RelativeSource={RelativeSource TemplatedParent}}"
+                            MinHeight="{TemplateBinding MinHeight}"
+                            TextElement.Foreground="{TemplateBinding Foreground}">
+                        <Grid>
+                            <!-- 水印。Avalonia 的 Watermark 由 TextBox 自己画；WPF 要自己搭，
+                                 并靠下面 Text="" 的触发器显隐。 -->
+                            <TextBlock x:Name="Watermark"
+                                       Text="{Binding Path=(neg:Negi.Placeholder), RelativeSource={RelativeSource TemplatedParent}}"
+                                       Foreground="{DynamicResource MutedForegroundBrush}"
+                                       HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                       VerticalAlignment="{TemplateBinding VerticalContentAlignment}"
+                                       Margin="{TemplateBinding Padding}"
+                                       IsHitTestVisible="False"
+                                       Visibility="Collapsed" />
+                            <!-- WPF 的 TextBox 模板**必须**有一个叫 PART_ContentHost 的
+                                 ScrollViewer 或 AdornerDecorator，否则输入区不显示。 -->
+                            <ScrollViewer x:Name="PART_ContentHost"
+                                          Margin="{TemplateBinding Padding}"
+                                          Focusable="False"
+                                          HorizontalScrollBarVisibility="{TemplateBinding ScrollViewer.HorizontalScrollBarVisibility}"
+                                          VerticalScrollBarVisibility="{TemplateBinding ScrollViewer.VerticalScrollBarVisibility}" />
+                        </Grid>
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="Text" Value="">
+                            <Setter TargetName="Watermark" Property="Visibility" Value="Visible" />
+                        </Trigger>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="Border" Property="BorderBrush" Value="{DynamicResource RingBrush}" />
+                        </Trigger>
+                        <Trigger Property="IsKeyboardFocusWithin" Value="True">
+                            <Setter TargetName="Border" Property="BorderBrush" Value="{DynamicResource RingBrush}" />
+                        </Trigger>
+                        <Trigger Property="IsEnabled" Value="False">
+                            <Setter Property="Opacity" Value="0.5" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- ============ CheckBox（承担 Avalonia 的 ToggleSwitch 角色） ============ -->
+    <!--  WPF 没有 ToggleSwitch。项目里 ToggleSwitch 一律是 <ToggleSwitch IsChecked="{Binding X}"/>
+        且 OnContent/OffContent 都是空串，所以一个「开关样子的 CheckBox」就完全等价。
+        P5 搬运 MainWindow.axaml 时把 <ToggleSwitch .../> 换成 <CheckBox .../> 即可。  -->
+    <Style TargetType="{x:Type CheckBox}">
+        <Setter Property="Foreground" Value="{DynamicResource ForegroundBrush}" />
+        <Setter Property="HorizontalAlignment" Value="Left" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+        <Setter Property="VerticalContentAlignment" Value="Center" />
+        <Setter Property="FontSize" Value="14" />
+        <Setter Property="Cursor" Value="Hand" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="{x:Type CheckBox}">
+                    <StackPanel Orientation="Horizontal">
+                        <ContentPresenter x:Name="PART_ContentPresenter"
+                                          Content="{TemplateBinding Content}"
+                                          ContentTemplate="{TemplateBinding ContentTemplate}"
+                                          VerticalAlignment="Center"
+                                          RecognizesAccessKey="True" />
+                        <Grid x:Name="PART_ToggleContainer" Background="Transparent" Margin="8,0,0,0">
+                            <Border x:Name="Track"
+                                    Background="{DynamicResource MutedBrush}"
+                                    CornerRadius="10"
+                                    Height="20"
+                                    Width="36" />
+                            <Border x:Name="SwitchKnob"
+                                    Background="{DynamicResource CardBackgroundBrush}"
+                                    CornerRadius="8"
+                                    Height="16"
+                                    Width="16"
+                                    HorizontalAlignment="Left"
+                                    Margin="2,0,0,0" />
+                        </Grid>
+                    </StackPanel>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsChecked" Value="True">
+                            <Setter TargetName="Track" Property="Background" Value="{DynamicResource PrimaryBrush}" />
+                            <Setter TargetName="SwitchKnob" Property="HorizontalAlignment" Value="Right" />
+                            <Setter TargetName="SwitchKnob" Property="Margin" Value="0,0,2,0" />
+                        </Trigger>
+                        <Trigger Property="IsEnabled" Value="False">
+                            <Setter Property="Opacity" Value="0.5" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- ============ Slider ============ -->
+    <!--  注意：不在这里绑 Track 的 Minimum / Maximum / Value / ViewportSize ——
+        WPF 的 Slider 会自己去接 PART_Track 并同步这几个值，我们插手反而会打架。
+        只照 WPF 默认模板那样绑一个 IsDirectionReversed。  -->
+    <Style TargetType="{x:Type Slider}">
+        <Setter Property="Background" Value="{DynamicResource MutedBrush}" />
+        <Setter Property="Foreground" Value="{DynamicResource PrimaryBrush}" />
+        <Setter Property="MinHeight" Value="16" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="{x:Type Slider}">
+                    <Grid x:Name="SliderContainer" Background="Transparent" Margin="{TemplateBinding Padding}">
+                        <Track x:Name="PART_Track"
+                               IsDirectionReversed="{TemplateBinding IsDirectionReversed}"
+                               VerticalAlignment="Center">
+                            <Track.DecreaseRepeatButton>
+                                <RepeatButton x:Name="PART_DecreaseButton"
+                                              Background="{DynamicResource MutedBrush}"
+                                              Focusable="False"
+                                              Style="{StaticResource SliderTrackButtonStyle}" />
+                            </Track.DecreaseRepeatButton>
+                            <Track.IncreaseRepeatButton>
+                                <RepeatButton x:Name="PART_IncreaseButton"
+                                              Background="{DynamicResource MutedBrush}"
+                                              Focusable="False"
+                                              Style="{StaticResource SliderTrackButtonStyle}" />
+                            </Track.IncreaseRepeatButton>
+                            <Track.Thumb>
+                                <Thumb x:Name="Thumb"
+                                       Height="16"
+                                       Width="16"
+                                       Style="{StaticResource SliderThumbStyle}" />
+                            </Track.Thumb>
+                        </Track>
+                    </Grid>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsEnabled" Value="False">
+                            <Setter Property="Opacity" Value="0.5" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- ============ ProgressBar ============ -->
+    <!--  WPF 的 ProgressBar 靠名字找 PART_Track / PART_Indicator，名字不能改。
+         圆角默认 2 —— 项目里的进度条都是 Height=4，2 正好是一半（见文件头的圆角说明）。  -->
+    <Style TargetType="{x:Type ProgressBar}">
+        <Setter Property="Background" Value="{DynamicResource MutedBrush}" />
+        <Setter Property="Foreground" Value="{DynamicResource PrimaryBrush}" />
+        <Setter Property="MinHeight" Value="4" />
+        <!-- WPF 的 ProgressBar 默认 BorderThickness=1 且边框色来自系统主题；
+             不清掉的话 6px 高的进度条里外各有一圈系统色细线，看起来像几根线叠在一起。 -->
+        <Setter Property="BorderBrush" Value="Transparent" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="neg:Negi.CornerRadius" Value="2" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="{x:Type ProgressBar}">
+                    <Border x:Name="PART_Track"
+                            Background="{TemplateBinding Background}"
+                            BorderBrush="{TemplateBinding BorderBrush}"
+                            BorderThickness="{TemplateBinding BorderThickness}"
+                            CornerRadius="{Binding Path=(neg:Negi.CornerRadius), RelativeSource={RelativeSource TemplatedParent}}"
+                            ClipToBounds="True">
+                        <Border x:Name="PART_Indicator"
+                                Background="{TemplateBinding Foreground}"
+                                CornerRadius="{Binding Path=(neg:Negi.CornerRadius), RelativeSource={RelativeSource TemplatedParent}}"
+                                HorizontalAlignment="Left" />
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <!-- 不定态：WPF 不像 Avalonia 那样自带滑动动画（Avalonia 的 ProgressBar
+                             在 IsIndeterminate 时会自己跑）。这里用"整条铺满 + 呼吸"来兜底 ——
+                             不用宽度数学，也不会和 ProgressBar 自己设的 Indicator.Width 打架。
+                             应用里只有资源加载那一处用它（120x4），够表达"正在忙"。 -->
+                        <Trigger Property="IsIndeterminate" Value="True">
+                            <Setter TargetName="PART_Indicator" Property="HorizontalAlignment" Value="Stretch" />
+                            <Trigger.EnterActions>
+                                <BeginStoryboard x:Name="IndeterminateStoryboard">
+                                    <Storyboard RepeatBehavior="Forever" AutoReverse="True">
+                                        <DoubleAnimation Storyboard.TargetName="PART_Indicator"
+                                                         Storyboard.TargetProperty="Opacity"
+                                                         From="0.15" To="1" Duration="0:0:0.7" />
+                                    </Storyboard>
+                                </BeginStoryboard>
+                            </Trigger.EnterActions>
+                            <Trigger.ExitActions>
+                                <StopStoryboard BeginStoryboardName="IndeterminateStoryboard" />
+                            </Trigger.ExitActions>
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- ============ ScrollBar ============ -->
+    <!--  必须显式写 MinWidth/MinHeight=0：WPF 的 ScrollBar 在静态构造里把这两个的默认值
+        覆盖成了系统滚动条尺寸（VerticalScrollBarWidth ≈ 17.33），所以光设 Width="10"
+        会被 MinWidth 撑回去，实际还是 17px 宽。这个坑不看 ActualWidth 根本发现不了。  -->
+    <Style TargetType="{x:Type ScrollBar}">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="MinWidth" Value="0" />
+        <Setter Property="MinHeight" Value="0" />
+        <Setter Property="Width" Value="10" />
+        <Setter Property="Template" Value="{StaticResource ScrollBarVerticalTemplate}" />
+        <Style.Triggers>
+            <Trigger Property="Orientation" Value="Horizontal">
+                <Setter Property="Width" Value="Auto" />
+                <Setter Property="Height" Value="10" />
+                <Setter Property="Template" Value="{StaticResource ScrollBarHorizontalTemplate}" />
+            </Trigger>
+        </Style.Triggers>
+    </Style>
+
+    <!-- ============ ItemsControl ============ -->
+    <!--  Avalonia 的 x:Key="{x:Type ItemsControl}" 会沿基类链命中所有派生控件；
+        WPF 的隐式样式同样会作用于派生类型，所以这条会顺带盖到 MenuItem / ContextMenu /
+        ListBox / ComboBox 上。凡是另有显式样式的（ContextMenu、MenuItem）都以精确类型
+        优先命中，不受影响；纯 ItemsControl 本来就只有 ItemsPresenter，等于没变。  -->
+    <Style TargetType="{x:Type ItemsControl}">
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="{x:Type ItemsControl}">
+                    <ItemsPresenter x:Name="PART_ItemsPresenter" Margin="{TemplateBinding Padding}" />
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- ============ ScrollViewer ============ -->
+    <!--  WPF 靠名字找 PART_ScrollContentPresenter / PART_HorizontalScrollBar /
+        PART_VerticalScrollBar，缺一个就滚不动。TextBox 的 PART_ContentHost 也是它。  -->
+    <Style TargetType="{x:Type ScrollViewer}">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="{x:Type ScrollViewer}">
+                    <Grid Background="{TemplateBinding Background}">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="*" />
+                            <RowDefinition Height="Auto" />
+                        </Grid.RowDefinitions>
+                        <ScrollContentPresenter x:Name="PART_ScrollContentPresenter"
+                                                Grid.Row="0"
+                                                Grid.Column="0"
+                                                Margin="{TemplateBinding Padding}"
+                                                CanContentScroll="{TemplateBinding CanContentScroll}"
+                                                Content="{TemplateBinding Content}"
+                                                ContentTemplate="{TemplateBinding ContentTemplate}" />
+                        <ScrollBar x:Name="PART_HorizontalScrollBar"
+                                   Grid.Row="1"
+                                   Grid.Column="0"
+                                   Orientation="Horizontal"
+                                   Maximum="{TemplateBinding ScrollableWidth}"
+                                   ViewportSize="{TemplateBinding ViewportWidth}"
+                                   Value="{TemplateBinding HorizontalOffset}"
+                                   Visibility="{TemplateBinding ComputedHorizontalScrollBarVisibility}" />
+                        <ScrollBar x:Name="PART_VerticalScrollBar"
+                                   Grid.Row="0"
+                                   Grid.Column="1"
+                                   Orientation="Vertical"
+                                   Maximum="{TemplateBinding ScrollableHeight}"
+                                   ViewportSize="{TemplateBinding ViewportHeight}"
+                                   Value="{TemplateBinding VerticalOffset}"
+                                   Visibility="{TemplateBinding ComputedVerticalScrollBarVisibility}" />
+                        <Rectangle x:Name="PART_Corner"
+                                   Grid.Row="1"
+                                   Grid.Column="1"
+                                   Fill="Transparent" />
+                    </Grid>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- ============ ToolTip ============ -->
+    <Style TargetType="{x:Type ToolTip}">
+        <Setter Property="Background" Value="{DynamicResource ForegroundBrush}" />
+        <Setter Property="Foreground" Value="{DynamicResource PrimaryForegroundBrush}" />
+        <Setter Property="FontSize" Value="12" />
+        <Setter Property="Padding" Value="9,5" />
+        <Setter Property="MaxWidth" Value="320" />
+        <Setter Property="neg:Negi.CornerRadius" Value="6" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="{x:Type ToolTip}">
+                    <Border Background="{TemplateBinding Background}"
+                            BorderBrush="{TemplateBinding BorderBrush}"
+                            BorderThickness="{TemplateBinding BorderThickness}"
+                            CornerRadius="{Binding Path=(neg:Negi.CornerRadius), RelativeSource={RelativeSource TemplatedParent}}"
+                            Padding="{TemplateBinding Padding}">
+                        <ContentPresenter x:Name="PART_ContentPresenter"
+                                          Content="{TemplateBinding Content}"
+                                          ContentTemplate="{TemplateBinding ContentTemplate}"
+                                          MaxWidth="{TemplateBinding MaxWidth}"
+                                          TextBlock.Foreground="{TemplateBinding Foreground}">
+                            <!-- Avalonia 那边可以写 TextBlock.TextWrapping（它在 Avalonia 里是附加属性），
+                                 WPF 不是。改成给模板作用域里的 TextBlock 一个隐式样式，效果一样。 -->
+                            <ContentPresenter.Resources>
+                                <Style TargetType="{x:Type TextBlock}">
+                                    <Setter Property="TextWrapping" Value="Wrap" />
+                                </Style>
+                            </ContentPresenter.Resources>
+                        </ContentPresenter>
+                    </Border>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- ============ Separator ============ -->
+    <Style TargetType="{x:Type Separator}">
+        <Setter Property="Focusable" Value="False" />
+        <Setter Property="Height" Value="1" />
+        <Setter Property="Margin" Value="4,4" />
+        <Setter Property="Background" Value="{DynamicResource BorderLineBrush}" />
+        <Setter Property="Template" Value="{StaticResource NegiSeparatorTemplate}" />
+    </Style>
+
+    <!-- 菜单里的分隔线走的是这个键（WPF 的 MenuItem.SeparatorStyleKey），不是隐式样式 -->
+    <Style x:Key="{x:Static MenuItem.SeparatorStyleKey}" TargetType="{x:Type Separator}">
+        <Setter Property="Focusable" Value="False" />
+        <Setter Property="Height" Value="1" />
+        <Setter Property="Margin" Value="4,4" />
+        <Setter Property="Background" Value="{DynamicResource BorderLineBrush}" />
+        <Setter Property="Template" Value="{StaticResource NegiSeparatorTemplate}" />
+    </Style>
+
+    <!-- ============ 弹出菜单容器（ContextMenu / Menu 共用的样子） ============ -->
+    <Style x:Key="NegiMenuPopupBorderStyle" TargetType="{x:Type Border}">
+        <Setter Property="Background" Value="{DynamicResource CardBackgroundBrush}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource BorderLineBrush}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="CornerRadius" Value="12" />
+        <Setter Property="Padding" Value="4" />
+        <Setter Property="Effect">
+            <Setter.Value>
+                <!-- Avalonia 的 BoxShadow="0 12 32 -6 #E6000000" 近似成这个 -->
+                <DropShadowEffect BlurRadius="32" ShadowDepth="6" Direction="270" Color="#000000" Opacity="0.9" />
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- ============ ContextMenu ============ -->
+    <Style TargetType="{x:Type ContextMenu}">
+        <Setter Property="Background" Value="{DynamicResource CardBackgroundBrush}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource BorderLineBrush}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="Padding" Value="4" />
+        <Setter Property="MinWidth" Value="140" />
+        <Setter Property="MaxWidth" Value="280" />
+        <Setter Property="neg:Negi.CornerRadius" Value="12" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="{x:Type ContextMenu}">
+                    <Border Background="{TemplateBinding Background}"
+                            BorderBrush="{TemplateBinding BorderBrush}"
+                            BorderThickness="{TemplateBinding BorderThickness}"
+                            Padding="{TemplateBinding Padding}"
+                            CornerRadius="{Binding Path=(neg:Negi.CornerRadius), RelativeSource={RelativeSource TemplatedParent}}">
+                        <Border.Effect>
+                            <DropShadowEffect BlurRadius="32" ShadowDepth="6" Direction="270" Color="#000000" Opacity="0.9" />
+                        </Border.Effect>
+                        <ScrollViewer Focusable="False"
+                                      HorizontalScrollBarVisibility="Disabled"
+                                      VerticalScrollBarVisibility="Auto">
+                            <ItemsPresenter x:Name="PART_ItemsPresenter"
+                                            KeyboardNavigation.DirectionalNavigation="Cycle" />
+                        </ScrollViewer>
+                    </Border>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- ============ MenuItem ============ -->
+    <Style TargetType="{x:Type MenuItem}">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="Foreground" Value="{DynamicResource ForegroundBrush}" />
+        <Setter Property="Padding" Value="12,7" />
+        <Setter Property="FontSize" Value="13" />
+        <Setter Property="Cursor" Value="Hand" />
+        <Setter Property="neg:Negi.CornerRadius" Value="8" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="{x:Type MenuItem}">
+                    <Grid>
+                        <Border x:Name="PART_LayoutRoot"
+                                Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                Padding="{TemplateBinding Padding}"
+                                Margin="0,1"
+                                CornerRadius="{Binding Path=(neg:Negi.CornerRadius), RelativeSource={RelativeSource TemplatedParent}}">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <ContentPresenter x:Name="PART_IconPresenter"
+                                                  Grid.Column="0"
+                                                  ContentSource="Icon"
+                                                  Margin="0,0,8,0"
+                                                  VerticalAlignment="Center" />
+                                <ContentPresenter x:Name="PART_HeaderPresenter"
+                                                  Grid.Column="1"
+                                                  ContentSource="Header"
+                                                  RecognizesAccessKey="True"
+                                                  VerticalAlignment="Center"
+                                                  TextElement.Foreground="{TemplateBinding Foreground}"
+                                                  TextElement.FontSize="{TemplateBinding FontSize}" />
+                                <Path x:Name="PART_ChevronPath"
+                                      Grid.Column="2"
+                                      Fill="{DynamicResource MutedForegroundBrush}"
+                                      Data="M 0 0 L 4 4 L 0 8 Z"
+                                      VerticalAlignment="Center"
+                                      Margin="12,0,2,0"
+                                      Visibility="Collapsed" />
+                            </Grid>
+                        </Border>
+                        <Popup x:Name="PART_Popup"
+                               AllowsTransparency="True"
+                               Focusable="False"
+                               Placement="Right"
+                               HorizontalOffset="4"
+                               PlacementTarget="{Binding ElementName=PART_LayoutRoot}"
+                               IsOpen="{Binding IsSubmenuOpen, RelativeSource={RelativeSource TemplatedParent}}"
+                               PopupAnimation="Fade">
+                            <Border Style="{StaticResource NegiMenuPopupBorderStyle}">
+                                <ScrollViewer Focusable="False"
+                                              HorizontalScrollBarVisibility="Disabled"
+                                              VerticalScrollBarVisibility="Auto">
+                                    <ItemsPresenter KeyboardNavigation.DirectionalNavigation="Cycle" />
+                                </ScrollViewer>
+                            </Border>
+                        </Popup>
+                    </Grid>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="Role" Value="SubmenuHeader">
+                            <Setter TargetName="PART_ChevronPath" Property="Visibility" Value="Visible" />
+                        </Trigger>
+                        <Trigger Property="Role" Value="TopLevelHeader">
+                            <Setter TargetName="PART_ChevronPath" Property="Visibility" Value="Visible" />
+                        </Trigger>
+                        <Trigger Property="IsHighlighted" Value="True">
+                            <Setter TargetName="PART_LayoutRoot" Property="Background" Value="{DynamicResource AccentBrush}" />
+                        </Trigger>
+                        <!-- IsHighlighted 是父级 Menu 在鼠标经过时置的；脱离 Menu 单独放
+                             （比如主题画廊里）时它不会动，所以再补一条 IsMouseOver。 -->
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="PART_LayoutRoot" Property="Background" Value="{DynamicResource AccentBrush}" />
+                        </Trigger>
+                        <Trigger Property="IsEnabled" Value="False">
+                            <Setter Property="Opacity" Value="0.4" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+</ResourceDictionary>
