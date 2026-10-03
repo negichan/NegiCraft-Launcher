@@ -18,6 +18,14 @@ public partial class App : Application
             return;
         }
 
+        // --bench：跑软件光栅化器的 ms/帧 实测，结果写到 %TEMP%\ncl-wpf-bench.txt。
+        if (Array.IndexOf(e.Args, "--bench") >= 0)
+        {
+            Bench.Run();
+            Shutdown();
+            return;
+        }
+
         MainWindow = new MainWindow();
         MainWindow.Show();
     }
