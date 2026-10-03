@@ -46,7 +46,7 @@ public static class Steve3DTexture
         // left
         0f, 4f, 0f, 16f, 4f, 16f, 4f, 4f,
         // right
-        7f, 4f, 7f, 16f, 10f, 16f, 10f, 4f,
+        7f, 4f, 7f, 16f, 11f, 16f, 11f, 4f,
         // top
         4f, 0f, 4f, 4f, 7f, 4f, 7f, 0f,
         // bottom

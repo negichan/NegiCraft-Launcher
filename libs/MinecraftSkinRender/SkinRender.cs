@@ -1,4 +1,4 @@
-﻿using System.Numerics;
+using System.Numerics;
 using SkiaSharp;
 
 namespace MinecraftSkinRender;
@@ -104,10 +104,6 @@ public abstract class SkinRender
         get { return _skinType; }
         set
         {
-            if (_skinType == value)
-            {
-                return;
-            }
             _skinType = value;
             _skina.SkinType = value;
             _switchModel = true;
@@ -293,6 +289,17 @@ public abstract class SkinRender
     }
 
     /// <summary>
+    /// 设置绝对坐标
+    /// </summary>
+    /// <param name="x"></param>
+    /// <param name="y"></param>
+    public void SetPos(float x, float y)
+    {
+        _xy.X = x;
+        _xy.Y = y;
+    }
+
+    /// <summary>
     /// 缩放
     /// </summary>
     /// <param name="x"></param>
@@ -306,7 +313,7 @@ public abstract class SkinRender
     /// </summary>
     /// <param name="skin"></param>
     /// <exception cref="Exception"></exception>
-    public void SetSkinTex(SKBitmap? skin)
+    public void SetSkinTex(SKBitmap? skin, SkinType? explicitType = null)
     {
         _skinTex?.Dispose();
         if (skin == null)
@@ -321,8 +328,23 @@ public abstract class SkinRender
 
         _skinTex = skin;
 
-        _skinType = SkinTypeChecker.GetTextType(skin);
+        SkinType targetType;
+        if (explicitType.HasValue && explicitType.Value != SkinType.Unkonw)
+        {
+            targetType = explicitType.Value;
+        }
+        else
+        {
+            targetType = SkinTypeChecker.GetTextType(skin);
+        }
+
+        if (targetType != SkinType.Unkonw)
+        {
+            _skinType = targetType;
+            _skina.SkinType = targetType;
+        }
         _switchSkin = true;
+        _switchModel = true;
         HaveSkin = true;
     }
 
