@@ -1,16 +1,237 @@
 using System;
+using System.Collections.Concurrent;
 using System.IO;
 using System.Net.Http;
+using System.Security.Cryptography;
+using System.Text;
 using System.Threading.Tasks;
 using Avalonia;
 using Avalonia.Media.Imaging;
 using Avalonia.Platform;
+using SkiaSharp;
 
 namespace NegiCraftLauncher.App.Services;
 
 public static class SkinService
 {
     private static readonly HttpClient Http = new() { Timeout = TimeSpan.FromSeconds(5) };
+    private static readonly ConcurrentDictionary<string, SkinData> MemorySkinCache = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// Gets skin data (bytes and model type) for the username, using memory cache, disk cache (%APPDATA%\NCL\cache\skins),
+    /// or downloading from Mojang/mineskin/minotar. Returns null if offline / not found.
+    /// </summary>
+    public static async Task<SkinData?> GetOrFetchSkinDataAsync(string username)
+    {
+        if (string.IsNullOrWhiteSpace(username)) return null;
+
+        if (MemorySkinCache.TryGetValue(username, out var cached))
+        {
+            return cached;
+        }
+
+        // Check disk cache (reject corrupted 2425-byte Minotar dummy Steve)
+        string cacheDir = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "NCL", "cache", "skins");
+        string diskPath = Path.Combine(cacheDir, $"{username}.png");
+        string modelPath = Path.Combine(cacheDir, $"{username}.model");
+
+        try
+        {
+            if (File.Exists(diskPath))
+            {
+                var bytes = await File.ReadAllBytesAsync(diskPath);
+                if (bytes.Length > 0 && bytes.Length != 2425)
+                {
+                    bool isSlim;
+                    if (File.Exists(modelPath))
+                    {
+                        var modelText = (await File.ReadAllTextAsync(modelPath)).Trim();
+                        isSlim = string.Equals(modelText, "slim", StringComparison.OrdinalIgnoreCase);
+                    }
+                    else
+                    {
+                        isSlim = InferIsSlim(bytes, username);
+                        try
+                        {
+                            await File.WriteAllTextAsync(modelPath, isSlim ? "slim" : "classic");
+                        }
+                        catch { }
+                    }
+
+                    var skinData = new SkinData(bytes, isSlim);
+                    MemorySkinCache[username] = skinData;
+                    return skinData;
+                }
+                else if (bytes.Length == 2425)
+                {
+                    File.Delete(diskPath);
+                    if (File.Exists(modelPath)) File.Delete(modelPath);
+                }
+            }
+        }
+        catch { }
+
+        // Check bundled assets (e.g. skin_miku_mew.png)
+        try
+        {
+            string assetUri = $"avares://NegiCraftLauncher.App/Assets/skin_{username.ToLowerInvariant()}.png";
+            if (AssetLoader.Exists(new Uri(assetUri)))
+            {
+                using var stream = AssetLoader.Open(new Uri(assetUri));
+                using var ms = new MemoryStream();
+                await stream.CopyToAsync(ms);
+                var bytes = ms.ToArray();
+                if (bytes.Length > 0)
+                {
+                    bool isSlim = InferIsSlim(bytes, username);
+                    var skinData = new SkinData(bytes, isSlim);
+                    MemorySkinCache[username] = skinData;
+                    try
+                    {
+                        Directory.CreateDirectory(cacheDir);
+                        await File.WriteAllBytesAsync(diskPath, bytes);
+                        await File.WriteAllTextAsync(modelPath, isSlim ? "slim" : "classic");
+                    }
+                    catch { }
+                    return skinData;
+                }
+            }
+        }
+        catch { }
+
+        // Fetch online from official Mojang, mineskin, or minotar
+        var onlineData = await FetchFromMojangAsync(username)
+                      ?? await FetchFromMineskinAsync(username)
+                      ?? await FetchFromMinotarAsync(username);
+
+        if (onlineData != null && onlineData.Bytes.Length > 0 && onlineData.Bytes.Length != 2425)
+        {
+            MemorySkinCache[username] = onlineData;
+            try
+            {
+                Directory.CreateDirectory(cacheDir);
+                await File.WriteAllBytesAsync(diskPath, onlineData.Bytes);
+                await File.WriteAllTextAsync(modelPath, onlineData.IsSlim ? "slim" : "classic");
+            }
+            catch { }
+            return onlineData;
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// Gets skin bytes for the username. Retained for backward compatibility.
+    /// </summary>
+    public static async Task<byte[]?> GetOrFetchSkinBytesAsync(string username) =>
+        (await GetOrFetchSkinDataAsync(username))?.Bytes;
+
+    private static async Task<SkinData?> FetchFromMojangAsync(string username)
+    {
+        try
+        {
+            var profileJson = await Http.GetStringAsync($"https://api.mojang.com/users/profiles/minecraft/{username}");
+            using var profileDoc = System.Text.Json.JsonDocument.Parse(profileJson);
+            if (!profileDoc.RootElement.TryGetProperty("id", out var idElem)) return null;
+            string uuid = idElem.GetString() ?? "";
+            if (string.IsNullOrEmpty(uuid)) return null;
+
+            var sessionJson = await Http.GetStringAsync($"https://sessionserver.mojang.com/session/minecraft/profile/{uuid}");
+            using var sessionDoc = System.Text.Json.JsonDocument.Parse(sessionJson);
+            if (!sessionDoc.RootElement.TryGetProperty("properties", out var props)) return null;
+
+            foreach (var prop in props.EnumerateArray())
+            {
+                if (prop.TryGetProperty("name", out var nameElem) && nameElem.GetString() == "textures"
+                    && prop.TryGetProperty("value", out var valElem))
+                {
+                    string base64 = valElem.GetString() ?? "";
+                    byte[] decoded = Convert.FromBase64String(base64);
+                    using var texDoc = System.Text.Json.JsonDocument.Parse(decoded);
+                    if (texDoc.RootElement.TryGetProperty("textures", out var textures)
+                        && textures.TryGetProperty("SKIN", out var skin)
+                        && skin.TryGetProperty("url", out var urlElem))
+                    {
+                        bool isSlim = false;
+                        if (skin.TryGetProperty("metadata", out var metaElem)
+                            && metaElem.TryGetProperty("model", out var modelElem)
+                            && string.Equals(modelElem.GetString(), "slim", StringComparison.OrdinalIgnoreCase))
+                        {
+                            isSlim = true;
+                        }
+
+                        string skinUrl = urlElem.GetString() ?? "";
+                        if (!string.IsNullOrEmpty(skinUrl))
+                        {
+                            var bytes = await Http.GetByteArrayAsync(skinUrl.Replace("http://", "https://"));
+                            if (bytes != null && bytes.Length > 0 && bytes.Length != 2425)
+                            {
+                                return new SkinData(bytes, isSlim);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        catch { }
+        return null;
+    }
+
+    private static async Task<SkinData?> FetchFromMineskinAsync(string username)
+    {
+        try
+        {
+            var bytes = await Http.GetByteArrayAsync($"https://mineskin.eu/skin/{username}");
+            if (bytes != null && bytes.Length > 0 && bytes.Length != 2425)
+            {
+                bool isSlim = InferIsSlim(bytes, username);
+                return new SkinData(bytes, isSlim);
+            }
+        }
+        catch { }
+        return null;
+    }
+
+    private static async Task<SkinData?> FetchFromMinotarAsync(string username)
+    {
+        try
+        {
+            var bytes = await Http.GetByteArrayAsync($"https://minotar.net/skin/{username}");
+            // Minotar returns a 2425-byte default Steve when username is not found or rate-limited; reject it!
+            if (bytes != null && bytes.Length > 0 && bytes.Length != 2425)
+            {
+                bool isSlim = InferIsSlim(bytes, username);
+                return new SkinData(bytes, isSlim);
+            }
+        }
+        catch { }
+        return null;
+    }
+
+    private static bool InferIsSlim(byte[] bytes, string username)
+    {
+        try
+        {
+            using var ms = new MemoryStream(bytes);
+            using var bmp = SKBitmap.Decode(ms);
+            if (bmp != null)
+            {
+                return MinecraftSkinRender.SkinTypeChecker.IsSlimSkin(bmp);
+            }
+        }
+        catch { }
+        return IsSlimForPlayerName(username);
+    }
+
+    public static async Task<byte[]?> FetchSkinBytesOnlineAsync(string username) =>
+        await GetOrFetchSkinBytesAsync(username);
+
+    public static async Task<uint[]?> FetchSkinOnlineAsync(string username)
+    {
+        var bytes = await GetOrFetchSkinBytesAsync(username);
+        return bytes != null ? LoadSkinPixelsFromBytes(bytes) : null;
+    }
 
     public static uint[] LoadSkinPixelsFromFile(string filePath)
     {
@@ -21,38 +242,8 @@ public static class SkinService
 
         try
         {
-            using var stream = File.OpenRead(filePath);
-            return LoadSkinPixelsFromStream(stream);
-        }
-        catch
-        {
-            return CreateDefaultSteveSkin();
-        }
-    }
-
-    /// <summary>Decodes a 64x64 skin texture from any PNG stream (file on disk or embedded asset).</summary>
-    public static uint[] LoadSkinPixelsFromStream(Stream stream)
-    {
-        var pixels = new uint[64 * 64];
-        try
-        {
-            var bmp = new Bitmap(stream);
-            var wb = new WriteableBitmap(new PixelSize(64, 64), new Vector(96, 96), PixelFormat.Bgra8888, AlphaFormat.Premul);
-            using (var fb = wb.Lock())
-            {
-                bmp.CopyPixels(new PixelRect(0, 0, Math.Min(64, bmp.PixelSize.Width), Math.Min(64, bmp.PixelSize.Height)),
-                               fb.Address, fb.RowBytes * 64, fb.RowBytes);
-                unsafe
-                {
-                    uint* ptr = (uint*)fb.Address;
-                    for (int i = 0; i < 64 * 64; i++)
-                    {
-                        // In BGRA format: B is byte 0, G is 1, R is 2, A is 3
-                        pixels[i] = ptr[i];
-                    }
-                }
-            }
-            return pixels;
+            var bytes = File.ReadAllBytes(filePath);
+            return LoadSkinPixelsFromBytes(bytes) ?? CreateDefaultSteveSkin();
         }
         catch
         {
@@ -73,41 +264,35 @@ public static class SkinService
         return null;
     }
 
-    public static async Task<byte[]?> FetchSkinBytesOnlineAsync(string username)
+    /// <summary>
+    /// Robustly decodes a skin texture from PNG bytes into 64x64 uint ARGB/BGRA pixels via SkiaSharp.
+    /// Handles both modern 64x64 and legacy 64x32 textures.
+    /// </summary>
+    public static uint[]? LoadSkinPixelsFromBytes(byte[] bytes)
     {
         try
         {
-            string url = $"https://minotar.net/skin/{username}";
-            return await Http.GetByteArrayAsync(url);
-        }
-        catch
-        {
-            return null;
-        }
-    }
+            using var skBmp = SKBitmap.Decode(bytes);
+            if (skBmp == null) return null;
 
-    public static async Task<uint[]?> FetchSkinOnlineAsync(string username)
-    {
-        try
-        {
-            string url = $"https://minotar.net/skin/{username}";
-            var bytes = await Http.GetByteArrayAsync(url);
-            using var ms = new MemoryStream(bytes);
-            var bmp = new Bitmap(ms);
-            var wb = new WriteableBitmap(new PixelSize(64, 64), new Vector(96, 96), PixelFormat.Bgra8888, AlphaFormat.Premul);
             var pixels = new uint[64 * 64];
-            using (var fb = wb.Lock())
+            int w = Math.Min(64, skBmp.Width);
+            int h = Math.Min(64, skBmp.Height);
+
+            for (int y = 0; y < h; y++)
             {
-                bmp.CopyPixels(new PixelRect(0, 0, 64, 64), fb.Address, fb.RowBytes * 64, fb.RowBytes);
-                unsafe
+                for (int x = 0; x < w; x++)
                 {
-                    uint* ptr = (uint*)fb.Address;
-                    for (int i = 0; i < 64 * 64; i++)
-                    {
-                        pixels[i] = ptr[i];
-                    }
+                    var c = skBmp.GetPixel(x, y);
+                    // Little-endian Bgra8888 representation:
+                    // B: byte 0, G: byte 1, R: byte 2, A: byte 3
+                    pixels[y * 64 + x] = ((uint)c.Alpha << 24)
+                                       | ((uint)c.Red << 16)
+                                       | ((uint)c.Green << 8)
+                                       | (uint)c.Blue;
                 }
             }
+
             return pixels;
         }
         catch
@@ -116,12 +301,27 @@ public static class SkinService
         }
     }
 
-    // The head is drawn as two layers: the face at 48px and the hat layer at 56px, so the
-    // outer cube overhangs the head instead of being flattened onto it.
-    private const int AvatarSize = 64;
-    private const int FaceSize = 48;
-    private const int HatSize = 56;
+    public static uint[] LoadSkinPixelsFromStream(Stream stream)
+    {
+        try
+        {
+            using var ms = new MemoryStream();
+            stream.CopyTo(ms);
+            return LoadSkinPixelsFromBytes(ms.ToArray()) ?? CreateDefaultSteveSkin();
+        }
+        catch
+        {
+            return CreateDefaultSteveSkin();
+        }
+    }
 
+    private const int AvatarSize = 64;
+
+    /// <summary>
+    /// Creates a pixel-perfect 64x64 head avatar by compositing the 8x8 base face and 8x8 hat/hair layer
+    /// in 1:1 pixel alignment, then upscaling 8x with nearest-neighbor interpolation.
+    /// Eliminates all misalignment and tearing between face and hair layers for Alex and custom skins.
+    /// </summary>
     public static WriteableBitmap CreateAvatarFromSkin(uint[] skinPixels)
     {
         var bmp = new WriteableBitmap(new PixelSize(AvatarSize, AvatarSize), new Vector(96, 96), PixelFormat.Bgra8888, AlphaFormat.Premul);
@@ -129,54 +329,160 @@ public static class SkinService
         unsafe
         {
             uint* ptr = (uint*)fb.Address;
-            for (int i = 0; i < AvatarSize * AvatarSize; i++) ptr[i] = 0;
 
-            // Head front: (8, 8), 8x8
-            Blot(ptr, skinPixels, 8, (AvatarSize - FaceSize) / 2, FaceSize / 8, blend: false);
-            // Hat front: (40, 8), 8x8, drawn larger and blended over the face
-            Blot(ptr, skinPixels, 40, (AvatarSize - HatSize) / 2, HatSize / 8, blend: true);
+            // 1. Composite 8x8 face and hat layer
+            var head8 = stackalloc uint[64];
+            for (int y = 0; y < 8; y++)
+            {
+                for (int x = 0; x < 8; x++)
+                {
+                    uint face = skinPixels[(8 + y) * 64 + (8 + x)];
+                    uint hat = skinPixels[(8 + y) * 64 + (40 + x)];
+                    uint hatA = (hat >> 24) & 0xFF;
+
+                    if (hatA == 0)
+                    {
+                        head8[y * 8 + x] = face;
+                    }
+                    else if (hatA == 255)
+                    {
+                        head8[y * 8 + x] = hat;
+                    }
+                    else
+                    {
+                        // Alpha blend hat over face
+                        uint faceA = (face >> 24) & 0xFF;
+                        uint outA = hatA + faceA * (255 - hatA) / 255;
+                        uint outR = (((hat >> 16) & 0xFF) * hatA + ((face >> 16) & 0xFF) * (255 - hatA)) / 255;
+                        uint outG = (((hat >> 8) & 0xFF) * hatA + ((face >> 8) & 0xFF) * (255 - hatA)) / 255;
+                        uint outB = ((hat & 0xFF) * hatA + (face & 0xFF) * (255 - hatA)) / 255;
+                        head8[y * 8 + x] = (outA << 24) | (outR << 16) | (outG << 8) | outB;
+                    }
+                }
+            }
+
+            // 2. Scale 8x8 up to 64x64 with Nearest-Neighbor
+            for (int y = 0; y < AvatarSize; y++)
+            {
+                int srcY = y / 8;
+                for (int x = 0; x < AvatarSize; x++)
+                {
+                    int srcX = x / 8;
+                    ptr[y * AvatarSize + x] = head8[srcY * 8 + srcX];
+                }
+            }
         }
         return bmp;
     }
 
-    private static unsafe void Blot(uint* dst, uint[] src, int srcX, int offset, int scale, bool blend)
+    /// <summary>
+    /// Computes a stable hash code matching PCL's implementation (MeloongCore.StringExtensions.GetStableHashCode).
+    /// </summary>
+    public static ulong GetStableHashCode(string str)
     {
-        for (int py = 0; py < 8; py++)
-        {
-            for (int px = 0; px < 8; px++)
-            {
-                uint col = src[(8 + py) * 64 + (srcX + px)];
-                if ((col >> 24) == 0) continue;
+        ulong result = 5381;
+        foreach (char v in str) result = (result << 5) ^ result ^ (ulong)v;
+        return result ^ 0xA98F501BC684032FUL;
+    }
 
-                uint a = (col >> 24) & 0xFF;
-                for (int y = 0; y < scale; y++)
-                {
-                    int dy = offset + py * scale + y;
-                    for (int x = 0; x < scale; x++)
-                    {
-                        int dx = offset + px * scale + x;
-                        ref uint at = ref dst[dy * AvatarSize + dx];
-                        if (!blend)
-                        {
-                            at = col;
-                            continue;
-                        }
-                        uint da = at >> 24;
-                        at = ((a + da * (255 - a) / 255) << 24)
-                           | (((col >> 16 & 0xFF) + (at >> 16 & 0xFF) * (255 - a) / 255) << 16)
-                           | (((col >> 8 & 0xFF) + (at >> 8 & 0xFF) * (255 - a) / 255) << 8)
-                           | ((col & 0xFF) + (at & 0xFF) * (255 - a) / 255);
-                    }
-                }
+    private static string EnsureLength(string? str, char code, int length)
+    {
+        str ??= "";
+        return str.Length > length ? str[..length] : str.PadLeft(length, code);
+    }
+
+    /// <summary>
+    /// PCL's offline player UUID generation (ModLaunch.McLoginLegacyUuid).
+    /// </summary>
+    public static string McLoginLegacyUuid(string name)
+    {
+        string part1 = EnsureLength(name.Length.ToString("X"), '0', 16);
+        string part2 = EnsureLength(GetStableHashCode(name).ToString("X"), '0', 16);
+        string fullUuid = part1 + part2;
+        return fullUuid[..12] + "3" + fullUuid.Substring(13, 3) + "9" + fullUuid[17..];
+    }
+
+    /// <summary>
+    /// PCL's offline skin gender / model determination (ModMinecraft.McSkinSex).
+    /// Returns "Alex" (slim) or "Steve" (classic).
+    /// </summary>
+    public static string McSkinSex(string uuid)
+    {
+        if (uuid.Length != 32) return "Steve";
+        int a = int.Parse(uuid[7].ToString(), System.Globalization.NumberStyles.AllowHexSpecifier);
+        int b = int.Parse(uuid[15].ToString(), System.Globalization.NumberStyles.AllowHexSpecifier);
+        int c = int.Parse(uuid[23].ToString(), System.Globalization.NumberStyles.AllowHexSpecifier);
+        int d = int.Parse(uuid[31].ToString(), System.Globalization.NumberStyles.AllowHexSpecifier);
+        return ((a ^ b ^ c ^ d) % 2 != 0) ? "Alex" : "Steve";
+    }
+
+    /// <summary>
+    /// Offline players have no profile property stating the model, so the default skin is
+    /// picked using PCL's McSkinSex(McLoginLegacyUuid(name)) algorithm (Alex = slim/少女, Steve = classic).
+    /// </summary>
+    public static bool IsSlimForPlayerName(string name)
+    {
+        if (string.IsNullOrWhiteSpace(name)) return false;
+        if (MemorySkinCache.TryGetValue(name, out var cached))
+        {
+            return cached.IsSlim;
+        }
+
+        string cacheDir = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "NCL", "cache", "skins");
+        string modelPath = Path.Combine(cacheDir, $"{name}.model");
+        if (File.Exists(modelPath))
+        {
+            try
+            {
+                var txt = File.ReadAllText(modelPath).Trim();
+                if (string.Equals(txt, "slim", StringComparison.OrdinalIgnoreCase)) return true;
+                if (string.Equals(txt, "classic", StringComparison.OrdinalIgnoreCase)) return false;
             }
+            catch { }
+        }
+
+        if (name.Contains("alex", StringComparison.OrdinalIgnoreCase)) return true;
+        if (name.Contains("steve", StringComparison.OrdinalIgnoreCase)) return false;
+
+        var uuid = McLoginLegacyUuid(name);
+        return McSkinSex(uuid) == "Alex";
+    }
+
+    /// <summary>The bundled vanilla default texture for the requested model.</summary>
+    public static uint[] CreateDefaultSkin(bool slim)
+    {
+        try
+        {
+            var bytes = DefaultSkinBytes(slim);
+            return LoadSkinPixelsFromBytes(bytes) ?? FallbackSolidSkin();
+        }
+        catch
+        {
+            return FallbackSolidSkin();
         }
     }
 
-    public static uint[] CreateDefaultSteveSkin()
+    private static uint[] FallbackSolidSkin()
     {
         var pixels = new uint[64 * 64];
-        // Default Steve skin fallback
-        for (int i = 0; i < pixels.Length; i++) pixels[i] = 0xFFC49A76; // base skin
+        for (var i = 0; i < pixels.Length; i++) pixels[i] = 0xFFC49A76;
         return pixels;
     }
+
+    public static uint[] CreateDefaultSteveSkin() => CreateDefaultSkin(slim: false);
+    public static uint[] CreateDefaultAlexSkin() => CreateDefaultSkin(slim: true);
+
+    /// <summary>The same default as PNG bytes, for callers that ingest encoded skins.</summary>
+    public static byte[] DefaultSkinBytes(bool slim)
+    {
+        using var stream = AssetLoader.Open(
+            new Uri($"avares://NegiCraftLauncher.App/Assets/{(slim ? "skin_alex" : "skin_steve")}.png"));
+        using var buffer = new MemoryStream();
+        stream.CopyTo(buffer);
+        return buffer.ToArray();
+    }
 }
+
+public sealed record SkinData(byte[] Bytes, bool IsSlim);
+
