@@ -301,6 +301,23 @@
         <Style Selector="Button.MenuItem:pointerover">
             <Setter Property="Background" Value="#1c1c21"/>
         </Style>
+
+        <!-- Icon Button (small action button) -->
+        <Style Selector="Button.IconBtn">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Padding" Value="0"/>
+            <Setter Property="CornerRadius" Value="8"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="HorizontalContentAlignment" Value="Center"/>
+            <Setter Property="VerticalContentAlignment" Value="Center"/>
+        </Style>
+        <Style Selector="Button.IconBtn:pointerover">
+            <Setter Property="Background" Value="#27272a"/>
+        </Style>
+        <Style Selector="Button.IconBtn.Danger:pointerover">
+            <Setter Property="Background" Value="#3f1218"/>
+        </Style>
     </Window.Styles>
 
     <!-- Outermost Window Shell: 22px border radius, background #09090b -->
@@ -1109,9 +1126,9 @@
             <!-- ========================================== -->
             <!-- 7. POPOVERS (1:1 with Image 2 & mockup)    -->
             <!-- ========================================== -->
-            <!-- #accPop: left: 84px; bottom: 12px; width: 260px; -->
+            <!-- #accPop: left: 84px; bottom: 12px; width: 280px; -->
             <Border HorizontalAlignment="Left" VerticalAlignment="Bottom"
-                    Margin="84,0,0,12" Width="260"
+                    Margin="84,0,0,12" Width="280"
                     Background="#111114" BorderBrush="#26262b" BorderThickness="1"
                     CornerRadius="14" Padding="6"
                     BoxShadow="0 30 80 -20 #EE000000"
@@ -1126,29 +1143,38 @@
                         <ItemsControl ItemsSource="{Binding Accounts}">
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate x:DataType="models:AccountModel">
-                                    <Button Classes="MenuItem"
-                                            Command="{Binding $parent[Window].((vm:MainWindowViewModel)DataContext).SelectAccountCommand}"
-                                            CommandParameter="{Binding .}">
-                                        <Button.ContextMenu>
-                                            <ContextMenu>
-                                                <MenuItem Header="删除账户"
-                                                          Command="{Binding $parent[Window].((vm:MainWindowViewModel)DataContext).RemoveAccountCommand}"
-                                                          CommandParameter="{Binding .}"/>
-                                            </ContextMenu>
-                                        </Button.ContextMenu>
-                                        <Grid ColumnDefinitions="Auto * Auto">
-                                            <Border Grid.Column="0" Width="30" Height="30" CornerRadius="8" ClipToBounds="True" Margin="0,0,10,0">
-                                                <Image Source="{Binding AvatarBitmap}" Width="30" Height="30" RenderOptions.BitmapInterpolationMode="None"/>
-                                            </Border>
-                                            <StackPanel Grid.Column="1" VerticalAlignment="Center">
-                                                <TextBlock Text="{Binding Name}" FontWeight="Bold" FontSize="13" Foreground="#fafafa"/>
-                                                <TextBlock Text="{Binding Type}" FontSize="12" Foreground="#a1a1aa"/>
-                                            </StackPanel>
-                                            <!-- Checkmark if active -->
-                                            <materialIcons:MaterialIcon Grid.Column="2" Kind="Check" Width="16" Height="16" Foreground="#fafafa"
-                                                                       IsVisible="{Binding IsCurrent}"/>
-                                        </Grid>
-                                    </Button>
+                                    <Grid ColumnDefinitions="* Auto" Margin="0,1">
+                                        <Button Grid.Column="0" Classes="MenuItem"
+                                                Command="{Binding $parent[Window].((vm:MainWindowViewModel)DataContext).SelectAccountCommand}"
+                                                CommandParameter="{Binding .}">
+                                            <Button.ContextMenu>
+                                                <ContextMenu>
+                                                    <MenuItem Header="删除账户"
+                                                              Command="{Binding $parent[Window].((vm:MainWindowViewModel)DataContext).RemoveAccountCommand}"
+                                                              CommandParameter="{Binding .}"/>
+                                                </ContextMenu>
+                                            </Button.ContextMenu>
+                                            <Grid ColumnDefinitions="Auto * Auto">
+                                                <Border Grid.Column="0" Width="30" Height="30" CornerRadius="8" ClipToBounds="True" Margin="0,0,10,0">
+                                                    <Image Source="{Binding AvatarBitmap}" Width="30" Height="30" RenderOptions.BitmapInterpolationMode="None"/>
+                                                </Border>
+                                                <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                                    <TextBlock Text="{Binding Name}" FontWeight="Bold" FontSize="13" Foreground="#fafafa" TextTrimming="CharacterEllipsis"/>
+                                                    <TextBlock Text="{Binding Type}" FontSize="12" Foreground="#a1a1aa"/>
+                                                </StackPanel>
+                                                <!-- Checkmark if active -->
+                                                <materialIcons:MaterialIcon Grid.Column="2" Kind="Check" Width="16" Height="16" Foreground="#fafafa"
+                                                                            IsVisible="{Binding IsCurrent}" Margin="0,0,4,0"/>
+                                            </Grid>
+                                        </Button>
+                                        <!-- Direct Delete Button -->
+                                        <Button Grid.Column="1" Classes="IconBtn Danger" Width="28" Height="28" Margin="4,0,2,0"
+                                                ToolTip.Tip="删除账户"
+                                                Command="{Binding $parent[Window].((vm:MainWindowViewModel)DataContext).RemoveAccountCommand}"
+                                                CommandParameter="{Binding .}">
+                                            <materialIcons:MaterialIcon Kind="TrashCanOutline" Width="15" Height="15" Foreground="#71717a"/>
+                                        </Button>
+                                    </Grid>
                                 </DataTemplate>
                             </ItemsControl.ItemTemplate>
                         </ItemsControl>
