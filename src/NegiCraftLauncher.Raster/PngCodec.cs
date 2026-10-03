@@ -224,6 +224,116 @@ public static class PngCodec
         return new RawImage(width, height, rgba);
     }
 
+    /// <summary>
+    /// 编码成 8 位 RGBA（颜色类型 6、行滤波 0）的 PNG。
+    /// 预乘 BGRA 的 <see cref="PixelBuffer"/> 会先还原成直通 RGBA 再写。
+    /// 主要用途是黄金参考图（T4 像素回归）与光栅化器的肉眼核对。
+    /// </summary>
+    public static byte[] Encode(PixelBuffer buffer)
+    {
+        var raw = new byte[buffer.Height * (1 + buffer.Width * 4)];
+        var o = 0;
+        for (var y = 0; y < buffer.Height; y++)
+        {
+            raw[o++] = 0; // 滤波类型 None
+            for (var x = 0; x < buffer.Width; x++)
+            {
+                var c = buffer.Pixels[y * buffer.Width + x];
+                var a = (c >> 24) & 0xFF;
+                var r = (c >> 16) & 0xFF;
+                var g = (c >> 8) & 0xFF;
+                var b = c & 0xFF;
+
+                if (a != 0 && a != 255)
+                {
+                    // 预乘 → 直通
+                    r = Math.Min(255, r * 255 / a);
+                    g = Math.Min(255, g * 255 / a);
+                    b = Math.Min(255, b * 255 / a);
+                }
+                else if (a == 0)
+                {
+                    r = g = b = 0;
+                }
+
+                raw[o++] = (byte)r;
+                raw[o++] = (byte)g;
+                raw[o++] = (byte)b;
+                raw[o++] = (byte)a;
+            }
+        }
+
+        byte[] compressed;
+        using (var output = new MemoryStream())
+        {
+            using (var zlib = new ZLibStream(output, CompressionLevel.Optimal, leaveOpen: true))
+            {
+                zlib.Write(raw, 0, raw.Length);
+            }
+
+            compressed = output.ToArray();
+        }
+
+        using var png = new MemoryStream();
+        png.Write(Signature, 0, Signature.Length);
+
+        var ihdr = new byte[13];
+        BinaryPrimitives.WriteUInt32BigEndian(ihdr.AsSpan(0, 4), (uint)buffer.Width);
+        BinaryPrimitives.WriteUInt32BigEndian(ihdr.AsSpan(4, 4), (uint)buffer.Height);
+        ihdr[8] = 8;  // 位深
+        ihdr[9] = 6;  // 颜色类型 RGBA
+        ihdr[10] = 0; // 压缩方法
+        ihdr[11] = 0; // 滤波方法
+        ihdr[12] = 0; // 非隔行
+        WriteChunk(png, "IHDR"u8, ihdr);
+        WriteChunk(png, "IDAT"u8, compressed);
+        WriteChunk(png, "IEND"u8, Array.Empty<byte>());
+
+        return png.ToArray();
+    }
+
+    private static void WriteChunk(Stream stream, ReadOnlySpan<byte> type, byte[] data)
+    {
+        Span<byte> header = stackalloc byte[8];
+        BinaryPrimitives.WriteUInt32BigEndian(header.Slice(0, 4), (uint)data.Length);
+        type.CopyTo(header.Slice(4, 4));
+        stream.Write(header);
+
+        if (data.Length > 0) stream.Write(data, 0, data.Length);
+
+        var crc = Crc32(type, data);
+        Span<byte> crcBytes = stackalloc byte[4];
+        BinaryPrimitives.WriteUInt32BigEndian(crcBytes, crc);
+        stream.Write(crcBytes);
+    }
+
+    private static readonly uint[] CrcTable = BuildCrcTable();
+
+    private static uint[] BuildCrcTable()
+    {
+        var table = new uint[256];
+        for (uint n = 0; n < 256; n++)
+        {
+            var c = n;
+            for (var k = 0; k < 8; k++)
+            {
+                c = (c & 1) != 0 ? 0xEDB88320u ^ (c >> 1) : c >> 1;
+            }
+
+            table[n] = c;
+        }
+
+        return table;
+    }
+
+    private static uint Crc32(ReadOnlySpan<byte> type, byte[] data)
+    {
+        var c = 0xFFFFFFFFu;
+        foreach (var b in type) c = CrcTable[(c ^ b) & 0xFF] ^ (c >> 8);
+        foreach (var b in data) c = CrcTable[(c ^ b) & 0xFF] ^ (c >> 8);
+        return c ^ 0xFFFFFFFFu;
+    }
+
     /// <summary>16 位样本取高字节（够用且不会溢出）。</summary>
     private static byte ReadSample(byte[] line, int sampleIndex, int sampleBytes) =>
         line[sampleIndex * sampleBytes];
