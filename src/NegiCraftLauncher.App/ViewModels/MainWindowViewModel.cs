@@ -385,6 +385,164 @@ public partial class MainWindowViewModel : ViewModelBase
         IsAccPopOpen = false;
         IsInstPopOpen = false;
         IsDlPopOpen = false;
+        IsInstConfigOpen = false;
+    }
+
+    // ==========================================================
+    // Instance Configuration Dialog
+    // ==========================================================
+
+    [ObservableProperty]
+    private bool _isInstConfigOpen;
+
+    [ObservableProperty]
+    private InstanceModel? _editingInstance;
+
+    [ObservableProperty]
+    private string _configInstName = "";
+
+    [ObservableProperty]
+    private bool _configInstIsolated = true;
+
+    [ObservableProperty]
+    private bool _configInstCustomJava;
+
+    [ObservableProperty]
+    private string? _configInstJavaPath;
+
+    [ObservableProperty]
+    private string _configInstJavaLabel = "跟随全局设置";
+
+    [ObservableProperty]
+    private bool _isInstJavaChooserOpen;
+
+    [ObservableProperty]
+    private bool _configInstCustomMemory;
+
+    [ObservableProperty]
+    private int _configInstMemoryGb = 4;
+
+    public ObservableCollection<JavaOptionModel> InstJavaOptions { get; } = new();
+
+    public string GlobalMemoryGbSummary => $"{MaxMemoryGb} GB";
+    public string GlobalJavaSummary => string.IsNullOrWhiteSpace(JavaLabel) ? "自动" : JavaLabel;
+
+    [RelayCommand]
+    private void OpenInstanceConfig(InstanceModel instance)
+    {
+        EditingInstance = instance;
+        ConfigInstName = instance.Name;
+        ConfigInstIsolated = instance.Isolated;
+        ConfigInstJavaPath = instance.JavaPath;
+        ConfigInstCustomJava = !string.IsNullOrWhiteSpace(instance.JavaPath);
+
+        ConfigInstCustomMemory = instance.MaxMemoryMb.HasValue;
+        ConfigInstMemoryGb = instance.MaxMemoryMb.HasValue
+            ? Math.Clamp(instance.MaxMemoryMb.Value / 1024, 1, 32)
+            : MaxMemoryGb;
+
+        RefreshInstJavaOptions();
+        IsInstJavaChooserOpen = false;
+        IsInstConfigOpen = true;
+    }
+
+    [RelayCommand]
+    private void CloseInstanceConfig()
+    {
+        IsInstConfigOpen = false;
+        EditingInstance = null;
+        IsInstJavaChooserOpen = false;
+    }
+
+    [RelayCommand]
+    private void SaveInstanceConfig()
+    {
+        if (EditingInstance is null) return;
+
+        var name = ConfigInstName.Trim();
+        if (string.IsNullOrWhiteSpace(name))
+        {
+            ShowBanner("实例名称不能为空。");
+            return;
+        }
+
+        var javaPath = ConfigInstCustomJava ? ConfigInstJavaPath : null;
+        var maxMemoryMb = ConfigInstCustomMemory ? (int?)(ConfigInstMemoryGb * 1024) : null;
+
+        _launcher.Instances.Update(EditingInstance.Id, name, ConfigInstIsolated, javaPath, maxMemoryMb);
+        EditingInstance.Refresh();
+
+        ApplyInstanceFilter();
+        if (CurrentInstance?.Id == EditingInstance.Id)
+        {
+            CurrentInstance.Refresh();
+        }
+
+        IsInstConfigOpen = false;
+        EditingInstance = null;
+        ShowBanner($"实例「{name}」配置已保存。");
+    }
+
+    [RelayCommand]
+    private void ToggleInstJavaChooser() => IsInstJavaChooserOpen = !IsInstJavaChooserOpen;
+
+    [RelayCommand]
+    private void SelectInstJava(JavaOptionModel option)
+    {
+        foreach (var o in InstJavaOptions) o.IsSelected = ReferenceEquals(o, option);
+        ConfigInstJavaPath = option.Path;
+        ConfigInstJavaLabel = option.Label;
+        IsInstJavaChooserOpen = false;
+    }
+
+    [RelayCommand]
+    public void SetInstJavaPath(string path)
+    {
+        if (string.IsNullOrWhiteSpace(path)) return;
+
+        var runtime = JavaRuntimeLocator.Probe(path, Path.GetFileName(Path.GetDirectoryName(path)!));
+        if (runtime is null)
+        {
+            ShowBanner("指定的路径不是有效的 Java 运行时。");
+            return;
+        }
+
+        ConfigInstJavaPath = runtime.ExecutablePath;
+        ConfigInstCustomJava = true;
+        RefreshInstJavaOptions();
+        IsInstJavaChooserOpen = false;
+    }
+
+    private void RefreshInstJavaOptions()
+    {
+        InstJavaOptions.Clear();
+
+        InstJavaOptions.Add(new JavaOptionModel
+        {
+            Label = "自动（按版本要求挑选）",
+            Path = null,
+            IsSelected = string.IsNullOrEmpty(ConfigInstJavaPath)
+        });
+
+        foreach (var runtime in JavaRuntimeLocator.FindAll())
+        {
+            InstJavaOptions.Add(new JavaOptionModel
+            {
+                Label = $"Java {runtime.MajorVersion} · {runtime.Label}",
+                Path = runtime.ExecutablePath,
+                IsSelected = string.Equals(ConfigInstJavaPath, runtime.ExecutablePath, StringComparison.OrdinalIgnoreCase)
+            });
+        }
+
+        if (string.IsNullOrEmpty(ConfigInstJavaPath))
+        {
+            ConfigInstJavaLabel = "自动（按版本要求挑选）";
+        }
+        else
+        {
+            var matched = InstJavaOptions.FirstOrDefault(o => o.IsSelected);
+            ConfigInstJavaLabel = matched?.Label ?? Path.GetFileName(ConfigInstJavaPath);
+        }
     }
 
     /// <summary>
@@ -1076,7 +1234,11 @@ public partial class MainWindowViewModel : ViewModelBase
         if (value == "Java") RefreshJavaOptions();
     }
 
-    partial void OnMaxMemoryGbChanged(int value) => PersistSettings();
+    partial void OnMaxMemoryGbChanged(int value)
+    {
+        OnPropertyChanged(nameof(GlobalMemoryGbSummary));
+        PersistSettings();
+    }
 
     partial void OnVersionIsolationChanged(bool value) => PersistSettings();
 
@@ -1134,6 +1296,7 @@ public partial class MainWindowViewModel : ViewModelBase
     public ObservableCollection<JavaOptionModel> JavaOptions { get; } = new();
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(GlobalJavaSummary))]
     private string _javaLabel = "自动";
 
     [ObservableProperty]

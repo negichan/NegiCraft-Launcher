@@ -104,7 +104,6 @@ public sealed class Launcher
         var source = await ResolveSourceAsync(ct).ConfigureAwait(false);
         var launcher = new GameLauncher(Settings, Instances, source, Version);
 
-        instance.Isolated = Settings.VersionIsolation;
         var session = await launcher.LaunchAsync(instance, account, progress, ct).ConfigureAwait(false);
 
         RunningSession = session;

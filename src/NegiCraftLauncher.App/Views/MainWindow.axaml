@@ -675,13 +675,16 @@
                                     <DataTemplate x:DataType="models:InstanceModel">
                                         <Button Classes="InstCard"
                                                 Classes.Current="{Binding IsCurrent}"
-                                                Width="200" Margin="0,0,12,12"
+                                                Width="216" Margin="0,0,12,12"
                                                 Command="{Binding $parent[Window].((vm:MainWindowViewModel)DataContext).SelectInstanceCommand}"
                                                 CommandParameter="{Binding .}">
                                             <Button.ContextMenu>
                                                 <ContextMenu>
                                                     <MenuItem Header="设为当前"
                                                               Command="{Binding $parent[Window].((vm:MainWindowViewModel)DataContext).SelectInstanceCommand}"
+                                                              CommandParameter="{Binding .}"/>
+                                                    <MenuItem Header="配置实例"
+                                                              Command="{Binding $parent[Window].((vm:MainWindowViewModel)DataContext).OpenInstanceConfigCommand}"
                                                               CommandParameter="{Binding .}"/>
                                                     <MenuItem Header="重命名"
                                                               Command="{Binding $parent[Window].((vm:MainWindowViewModel)DataContext).RenameInstanceCommand}"
@@ -695,17 +698,23 @@
                                                               CommandParameter="{Binding .}"/>
                                                 </ContextMenu>
                                             </Button.ContextMenu>
-                                            <StackPanel Orientation="Horizontal" Spacing="12">
-                                                <Border Width="40" Height="40" CornerRadius="9" ClipToBounds="True">
+                                            <Grid ColumnDefinitions="Auto * Auto">
+                                                <Border Grid.Column="0" Width="40" Height="40" CornerRadius="9" ClipToBounds="True">
                                                     <Image Source="{Binding IconBitmap}"
                                                            Width="40" Height="40"
                                                            RenderOptions.BitmapInterpolationMode="None"/>
                                                 </Border>
-                                                <StackPanel VerticalAlignment="Center" Spacing="2">
-                                                    <TextBlock Text="{Binding Name}" FontWeight="Bold" FontSize="13" Foreground="#fafafa" TextTrimming="CharacterEllipsis" MaxWidth="140"/>
-                                                    <TextBlock Text="{Binding MetaText}" FontSize="12" Foreground="#a1a1aa"/>
+                                                <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2" Margin="10,0,4,0">
+                                                    <TextBlock Text="{Binding Name}" FontWeight="Bold" FontSize="13" Foreground="#fafafa" TextTrimming="CharacterEllipsis"/>
+                                                    <TextBlock Text="{Binding MetaText}" FontSize="12" Foreground="#a1a1aa" TextTrimming="CharacterEllipsis"/>
                                                 </StackPanel>
-                                            </StackPanel>
+                                                <Button Grid.Column="2" Classes="IconBtn" Width="28" Height="28" VerticalAlignment="Center"
+                                                        ToolTip.Tip="配置实例"
+                                                        Command="{Binding $parent[Window].((vm:MainWindowViewModel)DataContext).OpenInstanceConfigCommand}"
+                                                        CommandParameter="{Binding .}">
+                                                    <materialIcons:MaterialIcon Kind="CogOutline" Width="16" Height="16" Foreground="#71717a"/>
+                                                </Button>
+                                            </Grid>
                                         </Button>
                                     </DataTemplate>
                                 </ItemsControl.ItemTemplate>
@@ -1402,6 +1411,158 @@
                                     Command="{Binding ConfirmDialogCommand}"/>
                         </StackPanel>
                     </StackPanel>
+                </Border>
+            </Panel>
+
+            <!-- ========================================== -->
+            <!-- 10.5 INSTANCE CONFIG DIALOG                -->
+            <!-- ========================================== -->
+            <Panel ZIndex="72" IsVisible="{Binding IsInstConfigOpen}">
+                <Border Background="#A6000000"
+                        PointerPressed="OnInstConfigBackdropPointerPressed"/>
+
+                <Border HorizontalAlignment="Center" VerticalAlignment="Center"
+                        Width="480" MaxHeight="560"
+                        Background="#111114" BorderBrush="#26262b" BorderThickness="1"
+                        CornerRadius="16" Padding="24,20"
+                        BoxShadow="0 30 80 -20 #EE000000"
+                        Classes="Popover"
+                        pop:Pop.Anchor="Center"
+                        pop:Pop.IsOpen="{Binding IsInstConfigOpen}"
+                        Classes.Open="{Binding IsInstConfigOpen}">
+                    <Grid RowDefinitions="Auto 1 Auto Auto">
+                        <!-- Header -->
+                        <Grid Grid.Row="0" ColumnDefinitions="Auto * Auto" Margin="0,0,0,16">
+                            <Border Grid.Column="0" Width="36" Height="36" CornerRadius="8" ClipToBounds="True" Margin="0,0,12,0" VerticalAlignment="Center">
+                                <Image Source="{Binding EditingInstance.IconBitmap}" Width="36" Height="36" RenderOptions.BitmapInterpolationMode="None"/>
+                            </Border>
+                            <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
+                                <TextBlock Text="配置实例" FontSize="16" FontWeight="SemiBold" Foreground="#fafafa"/>
+                                <TextBlock Text="{Binding EditingInstance.MetaText, FallbackValue=''}" FontSize="12" Foreground="#a1a1aa"/>
+                            </StackPanel>
+                            <Button Grid.Column="2" Classes="WinCtrl" Width="26" Height="26" CornerRadius="7"
+                                    Command="{Binding CloseInstanceConfigCommand}" ToolTip.Tip="关闭">
+                                <materialIcons:MaterialIcon Kind="Close" Width="14" Height="14"/>
+                            </Button>
+                        </Grid>
+
+                        <Rectangle Grid.Row="1" Height="1" Fill="#26262b" Margin="0,0,0,16"/>
+
+                        <!-- Form Items -->
+                        <ScrollViewer Grid.Row="2" MaxHeight="380" Margin="0,0,0,18">
+                            <StackPanel Spacing="16">
+                                <!-- Instance Name -->
+                                <StackPanel Spacing="6">
+                                    <TextBlock Text="实例名称" FontWeight="Medium" Foreground="#fafafa" FontSize="13"/>
+                                    <TextBox Text="{Binding ConfigInstName, Mode=TwoWay}"
+                                             Background="#1c1c21" BorderBrush="#26262b" BorderThickness="1"
+                                             CornerRadius="10" Foreground="#fafafa" Padding="12,8" FontSize="13"/>
+                                </StackPanel>
+
+                                <!-- Version Isolation -->
+                                <Border Background="#16161a" BorderBrush="#26262b" BorderThickness="1" CornerRadius="12" Padding="14,10">
+                                    <Grid ColumnDefinitions="* Auto">
+                                        <StackPanel VerticalAlignment="Center" Spacing="2">
+                                            <TextBlock Text="版本隔离" FontWeight="Medium" Foreground="#fafafa" FontSize="13"/>
+                                            <TextBlock Text="独立 saves、mods 与配置文件（推荐开启）" FontSize="11" Foreground="#71717a"/>
+                                        </StackPanel>
+                                        <ToggleSwitch Grid.Column="1" IsChecked="{Binding ConfigInstIsolated}" OnContent="" OffContent=""/>
+                                    </Grid>
+                                </Border>
+
+                                <!-- Java Runtime -->
+                                <Border Background="#16161a" BorderBrush="#26262b" BorderThickness="1" CornerRadius="12" Padding="14,10">
+                                    <StackPanel Spacing="10">
+                                        <Grid ColumnDefinitions="* Auto">
+                                            <StackPanel VerticalAlignment="Center" Spacing="2">
+                                                <TextBlock Text="独立 Java 运行时" FontWeight="Medium" Foreground="#fafafa" FontSize="13"/>
+                                                <TextBlock Text="不开启则跟随全局 Java 设置" FontSize="11" Foreground="#71717a"/>
+                                            </StackPanel>
+                                            <ToggleSwitch Grid.Column="1" IsChecked="{Binding ConfigInstCustomJava}" OnContent="" OffContent=""/>
+                                        </Grid>
+
+                                        <!-- Custom Java Picker Area -->
+                                        <StackPanel Spacing="8" IsVisible="{Binding ConfigInstCustomJava}">
+                                            <Rectangle Height="1" Fill="#26262b"/>
+                                            <Grid ColumnDefinitions="* Auto">
+                                                <Button Grid.Column="0" Classes="BtnSm BtnOutline"
+                                                        HorizontalContentAlignment="Stretch"
+                                                        Command="{Binding ToggleInstJavaChooserCommand}">
+                                                    <Grid ColumnDefinitions="* Auto">
+                                                        <TextBlock Text="{Binding ConfigInstJavaLabel}" VerticalAlignment="Center"
+                                                                   TextTrimming="CharacterEllipsis" FontSize="12"/>
+                                                        <materialIcons:MaterialIcon Grid.Column="1" Kind="ChevronDown"
+                                                                                    Width="14" Height="14" Foreground="#71717a"/>
+                                                    </Grid>
+                                                </Button>
+                                                <Button Grid.Column="1" Classes="BtnSm BtnOutline" Margin="8,0,0,0"
+                                                        Click="OnPickInstJavaClick" ToolTip.Tip="浏览自定义路径">
+                                                    <StackPanel Orientation="Horizontal" Spacing="4">
+                                                        <materialIcons:MaterialIcon Kind="FolderSearchOutline" Width="14" Height="14"/>
+                                                        <TextBlock Text="浏览…" FontSize="12" VerticalAlignment="Center"/>
+                                                    </StackPanel>
+                                                </Button>
+                                            </Grid>
+
+                                            <!-- Dropdown options -->
+                                            <Border BorderBrush="#26262b" BorderThickness="1" CornerRadius="10"
+                                                    Background="#111114" Padding="4" IsVisible="{Binding IsInstJavaChooserOpen}">
+                                                <ItemsControl ItemsSource="{Binding InstJavaOptions}">
+                                                    <ItemsControl.ItemTemplate>
+                                                        <DataTemplate x:DataType="models:JavaOptionModel">
+                                                            <Button Classes="MenuItem"
+                                                                    Command="{Binding $parent[Window].((vm:MainWindowViewModel)DataContext).SelectInstJavaCommand}"
+                                                                    CommandParameter="{Binding .}">
+                                                                <Grid ColumnDefinitions="* Auto">
+                                                                    <TextBlock Text="{Binding Label}" FontSize="12" Foreground="#fafafa"
+                                                                               VerticalAlignment="Center" TextTrimming="CharacterEllipsis"/>
+                                                                    <materialIcons:MaterialIcon Grid.Column="1" Kind="Check" Width="14" Height="14"
+                                                                                                Foreground="#fafafa" IsVisible="{Binding IsSelected}"/>
+                                                                </Grid>
+                                                            </Button>
+                                                        </DataTemplate>
+                                                    </ItemsControl.ItemTemplate>
+                                                </ItemsControl>
+                                            </Border>
+                                        </StackPanel>
+                                    </StackPanel>
+                                </Border>
+
+                                <!-- Memory -->
+                                <Border Background="#16161a" BorderBrush="#26262b" BorderThickness="1" CornerRadius="12" Padding="14,10">
+                                    <StackPanel Spacing="10">
+                                        <Grid ColumnDefinitions="* Auto">
+                                            <StackPanel VerticalAlignment="Center" Spacing="2">
+                                                <TextBlock Text="独立最大内存" FontWeight="Medium" Foreground="#fafafa" FontSize="13"/>
+                                                <TextBlock Text="{Binding GlobalMemoryGbSummary, StringFormat='不开启则跟随全局设置（当前 {0}）'}"
+                                                           FontSize="11" Foreground="#71717a"/>
+                                            </StackPanel>
+                                            <ToggleSwitch Grid.Column="1" IsChecked="{Binding ConfigInstCustomMemory}" OnContent="" OffContent=""/>
+                                        </Grid>
+
+                                        <!-- Custom Memory Slider -->
+                                        <StackPanel Spacing="4" IsVisible="{Binding ConfigInstCustomMemory}">
+                                            <Rectangle Height="1" Fill="#26262b"/>
+                                            <Grid ColumnDefinitions="* Auto" Margin="0,4,0,0">
+                                                <Slider Value="{Binding ConfigInstMemoryGb}" Minimum="1" Maximum="32" Margin="0,0,12,0"/>
+                                                <TextBlock Grid.Column="1" Text="{Binding ConfigInstMemoryGb, StringFormat='{}{0} GB'}"
+                                                           Width="48" TextAlignment="Right" VerticalAlignment="Center"
+                                                           Foreground="#fafafa" FontWeight="Medium" FontSize="13"/>
+                                            </Grid>
+                                        </StackPanel>
+                                    </StackPanel>
+                                </Border>
+                            </StackPanel>
+                        </ScrollViewer>
+
+                        <!-- Footer Buttons -->
+                        <StackPanel Grid.Row="3" Orientation="Horizontal" Spacing="10" HorizontalAlignment="Right">
+                            <Button Classes="BtnSm BtnOutline" Content="取消"
+                                    Command="{Binding CloseInstanceConfigCommand}"/>
+                            <Button Classes="BtnSm BtnPrimary" Content="保存设置"
+                                    Command="{Binding SaveInstanceConfigCommand}"/>
+                        </StackPanel>
+                    </Grid>
                 </Border>
             </Panel>
 

@@ -142,10 +142,36 @@ public partial class MainWindow : Window
         }
     }
 
+    private async void OnPickInstJavaClick(object? sender, RoutedEventArgs e)
+    {
+        if (_vm is null) return;
+
+        var files = await StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
+        {
+            Title = "选择 javaw.exe",
+            AllowMultiple = false,
+            FileTypeFilter = new[]
+            {
+                new FilePickerFileType("Java 运行时") { Patterns = new[] { "javaw.exe", "java.exe" } },
+                new FilePickerFileType("所有文件") { Patterns = new[] { "*" } },
+            }
+        });
+
+        if (files.Count > 0)
+        {
+            _vm.SetInstJavaPathCommand.Execute(files[0].Path.LocalPath);
+        }
+    }
+
     private void OnDialogBackdropPointerPressed(object? sender, PointerPressedEventArgs e)
     {
         // Clicking outside cancels rather than confirms, so a dialog can never be committed by accident.
         _vm?.CancelDialogCommand.Execute(null);
+    }
+
+    private void OnInstConfigBackdropPointerPressed(object? sender, PointerPressedEventArgs e)
+    {
+        _vm?.CloseInstanceConfigCommand.Execute(null);
     }
 
     private void OnWindowKeyDown(object? sender, KeyEventArgs e)

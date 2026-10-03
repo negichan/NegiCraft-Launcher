@@ -21,6 +21,12 @@ public partial class InstanceModel : ObservableObject
 
     public string MetaText => Source.MetaText;
 
+    public bool Isolated => Source.Isolated;
+
+    public string? JavaPath => Source.JavaPath;
+
+    public int? MaxMemoryMb => Source.MaxMemoryMb;
+
     [ObservableProperty]
     private IImage? _iconBitmap;
 
@@ -31,6 +37,9 @@ public partial class InstanceModel : ObservableObject
     {
         OnPropertyChanged(nameof(Name));
         OnPropertyChanged(nameof(MetaText));
+        OnPropertyChanged(nameof(Isolated));
+        OnPropertyChanged(nameof(JavaPath));
+        OnPropertyChanged(nameof(MaxMemoryMb));
     }
 }
 

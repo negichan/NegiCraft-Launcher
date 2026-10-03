@@ -119,6 +119,19 @@ public sealed class InstanceManager
         return true;
     }
 
+    public bool Update(string id, string displayName, bool isolated, string? javaPath, int? maxMemoryMb)
+    {
+        var instance = Find(id);
+        if (instance is null || string.IsNullOrWhiteSpace(displayName)) return false;
+
+        instance.DisplayName = displayName.Trim();
+        instance.Isolated = isolated;
+        instance.JavaPath = string.IsNullOrWhiteSpace(javaPath) ? null : javaPath.Trim();
+        instance.MaxMemoryMb = maxMemoryMb;
+        Save();
+        return true;
+    }
+
     public bool Delete(string id)
     {
         var instance = Find(id);
