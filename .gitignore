@@ -7,3 +7,5 @@ obj/
 design/
 # 内部分析文档
 docs/
+# 本地 Agent 工作区（记忆、日志等，不随源码分发）
+.workbuddy-ai/
