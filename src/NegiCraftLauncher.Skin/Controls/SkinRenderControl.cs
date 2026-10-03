@@ -203,8 +203,11 @@ public class SkinRenderControl : OpenGlControlBase, ICustomHitTest
             var bmp = SKBitmap.Decode(ms);
             if (bmp != null)
             {
+                var prepared = NormalizeSkinBitmap(bmp);
+                if (!ReferenceEquals(prepared, bmp)) bmp.Dispose();
+
                 _skinBitmap?.Dispose();
-                _skinBitmap = bmp;
+                _skinBitmap = prepared;
                 if (_skin != null)
                 {
                     _skin.SetSkinTex(_skinBitmap, explicitType);
@@ -217,6 +220,25 @@ public class SkinRenderControl : OpenGlControlBase, ICustomHitTest
         {
             Console.WriteLine($"[SkinRenderControl] SetSkin error: {ex.Message}");
         }
+    }
+
+    /// <summary>
+    /// Brings a texture down to the fixed 64-wide grid the renderer samples.
+    ///
+    /// The renderer refuses anything whose width is not 64 (<c>SetSkinTex</c> throws), so an HD skin
+    /// — 128x128 and up, common for hand-drawn ones — used to be dropped on the floor with nothing
+    /// but a console line to show for it. Nearest-neighbour keeps pixel art crisp and is an exact
+    /// inverse of the usual 2x upscale. A 2:1 texture keeps its legacy shape (128x64 becomes 64x32)
+    /// so it still renders as <see cref="SkinType.Old"/>.
+    /// </summary>
+    private static SKBitmap NormalizeSkinBitmap(SKBitmap bmp)
+    {
+        if (bmp.Width == 64) return bmp;
+
+        int targetHeight = bmp.Width == bmp.Height * 2 ? 32 : 64;
+        var info = new SKImageInfo(64, targetHeight, bmp.ColorType, bmp.AlphaType);
+        var sampling = new SKSamplingOptions(SKFilterMode.Nearest, SKMipmapMode.None);
+        return bmp.Resize(info, sampling) ?? bmp;
     }
 
     public string? CurrentLoadedUser { get; private set; }
