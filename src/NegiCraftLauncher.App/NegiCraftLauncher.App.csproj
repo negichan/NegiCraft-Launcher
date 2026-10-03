@@ -24,6 +24,9 @@
 
   <ItemGroup>
     <ProjectReference Include="..\NegiCraftLauncher.Core\NegiCraftLauncher.Core.csproj" />
+    <!-- Shared, UI-framework-neutral view models. Raster (the platform-neutral pixel layer)
+         comes in transitively through it. -->
+    <ProjectReference Include="..\NegiCraftLauncher.ViewModels\NegiCraftLauncher.ViewModels.csproj" />
     <!-- The desktop pet; the launcher hosts it in-process. -->
     <ProjectReference Include="..\NegiCraftLauncher.Pet\NegiCraftLauncher.Pet.csproj" />
     <!-- Skin decoding + the OpenGL skin renderer; also brings SkiaSharp and the vendored

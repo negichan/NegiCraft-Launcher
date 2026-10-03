@@ -1,32 +1,19 @@
-using System;
-using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Diagnostics;
-using System.IO;
-using System.Linq;
-using System.Threading;
-using System.Threading.Tasks;
-using Avalonia;
-using Avalonia.Media;
-using Avalonia.Media.Imaging;
-using Avalonia.Styling;
-using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
-using NegiCraftLauncher.App.Models;
-using NegiCraftLauncher.App.Services;
 using NegiCraftLauncher.Core;
 using NegiCraftLauncher.Core.Auth;
 using NegiCraftLauncher.Core.Instances;
 using NegiCraftLauncher.Core.Java;
 using NegiCraftLauncher.Core.Launch;
-using NegiCraftLauncher.Skin.Services;
 using NegiCraftLauncher.Core.Modrinth;
 using NegiCraftLauncher.Core.Net;
 using NegiCraftLauncher.Core.Versions;
+using NegiCraftLauncher.Raster;
 using SourceKind = NegiCraftLauncher.Core.Settings.DownloadSource;
 
-namespace NegiCraftLauncher.App.ViewModels;
+namespace NegiCraftLauncher.ViewModels;
 
 public partial class MainWindowViewModel : ViewModelBase
 {
@@ -35,10 +22,9 @@ public partial class MainWindowViewModel : ViewModelBase
     private readonly Launcher _launcher;
     private readonly ModrinthClient _modrinth = new();
     private ModrinthInstaller _modrinthInstaller = new();
-    private readonly Dictionary<string, IImage> _iconCache = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, PixelBuffer> _iconCache = new(StringComparer.OrdinalIgnoreCase);
     private readonly List<ResourceModel> _gameResources = new();
 
-    private Bitmap? _customBg;
     private bool _applyingSettings;
     private CancellationTokenSource? _saveDebounce;
     private CancellationTokenSource? _resourceLoad;
@@ -50,6 +36,12 @@ public partial class MainWindowViewModel : ViewModelBase
     public event Action? ShowWindowRequested;
     public event Action? OpenPetRequested;
     public event Action? RecallPetRequested;
+
+    /// <summary>
+    /// Raised whenever the light/dark choice changes. The VM does not know how a given UI
+    /// framework switches themes, so the view subscribes and applies it.
+    /// </summary>
+    public event Action<bool>? ThemeChanged;
 
     [ObservableProperty]
     private bool _isPetActive;
@@ -86,7 +78,7 @@ public partial class MainWindowViewModel : ViewModelBase
         _launcher = new Launcher();
         _launcher.Initialize();
 
-        _bgBitmap = PixelArtService.CreateBackgroundBitmap(_launcher.Settings.IsDark);
+        _bgArt = PixelArt.CreateBackground(_launcher.Settings.IsDark);
 
         ApplySettingsToUi(_launcher.Settings);
         RefreshAccounts();
@@ -120,11 +112,13 @@ public partial class MainWindowViewModel : ViewModelBase
     // Background & appearance
     // ==========================================================
 
+    /// <summary>The generated pixel scene, platform-neutral pixels. Null once a photo is picked.</summary>
     [ObservableProperty]
-    private IImage? _bgBitmap;
+    private PixelBuffer? _bgArt;
 
-    // Drives which background <Image> is shown: the generated pixel scene is stretched to fill,
-    // a picked photo keeps its own aspect and is cropped instead.
+    // Drives which background is shown: the generated pixel scene is stretched to fill, a picked
+    // photo keeps its own aspect and is cropped instead. The photo itself is decoded by the view,
+    // so the VM stays free of any image codec.
     [ObservableProperty]
     private string? _customBackgroundPath;
 
@@ -180,27 +174,38 @@ public partial class MainWindowViewModel : ViewModelBase
     [RelayCommand]
     private void SetBackground(string path)
     {
-        Bitmap bitmap;
-        try
-        {
-            bitmap = new Bitmap(path);
-        }
-        // The picker filter only checks the extension; an unreadable file must not take the app down.
-        catch (Exception)
+        if (!IsReadableImage(path))
         {
             ShowBanner("无法读取这张图片，请换一张试试。");
             return;
         }
 
-        var previous = _customBg;
-        _customBg = bitmap;
-        BgBitmap = bitmap;
         CustomBackgroundPath = path;
-        previous?.Dispose();
 
         // The art only shows on home, so jump there and open the tuning popup.
         CurrentPage = "home";
         IsBgPopOpen = true;
+    }
+
+    /// <summary>
+    /// The picker filter only checks the extension. PNGs (the only format the shared layer can
+    /// decode) are validated up front; other formats are accepted on the file being readable,
+    /// and the view falls back to the generated art if it cannot decode them.
+    /// </summary>
+    private static bool IsReadableImage(string path)
+    {
+        try
+        {
+            var bytes = File.ReadAllBytes(path);
+            if (bytes.Length == 0) return false;
+            if (!PngCodec.LooksLikePng(bytes)) return true;
+            PngCodec.Decode(bytes);
+            return true;
+        }
+        catch
+        {
+            return false;
+        }
     }
 
     [RelayCommand]
@@ -217,14 +222,11 @@ public partial class MainWindowViewModel : ViewModelBase
     [RelayCommand]
     private void ResetBackground()
     {
-        var previous = _customBg;
-        _customBg = null;
-        BgBitmap = PixelArtService.CreateBackgroundBitmap(IsDark);
+        BgArt = PixelArt.CreateBackground(IsDark);
         CustomBackgroundPath = null;
         BgBlur = 0;
         BgBrightness = 0;
         IsBgPopOpen = false;
-        previous?.Dispose();
     }
 
     // ==========================================================
@@ -232,7 +234,7 @@ public partial class MainWindowViewModel : ViewModelBase
     // ==========================================================
 
     [ObservableProperty]
-    private IImage? _avatarBitmap;
+    private PixelBuffer? _avatarBitmap;
 
     public ObservableCollection<AccountModel> Accounts { get; } = new();
 
@@ -317,7 +319,7 @@ public partial class MainWindowViewModel : ViewModelBase
         Accounts.Clear();
         foreach (var account in _launcher.Accounts.Accounts)
         {
-            var isSlim = SkinService.IsSlimForPlayerName(account.Name);
+            var isSlim = SkinRepository.IsSlimForPlayerName(account.Name);
             var initialAvatar = isSlim ? NoAccountAvatar : DefaultAvatar;
             var model = new AccountModel(account) { AvatarBitmap = initialAvatar };
             Accounts.Add(model);
@@ -329,27 +331,23 @@ public partial class MainWindowViewModel : ViewModelBase
         OnPropertyChanged(nameof(HasAccounts));
     }
 
-    private static IImage DefaultAvatar { get; } = PixelArtService.CreateAvatarBitmap();
+    private static PixelBuffer DefaultAvatar { get; } = AvatarComposer.Create(DefaultSkins.Pixels(slim: false));
 
     /// <summary>Shown in the sidebar while there is no account at all, or as the initial Alex placeholder.</summary>
-    private static IImage NoAccountAvatar { get; } = PixelArtService.CreateAlexAvatarBitmap();
+    private static PixelBuffer NoAccountAvatar { get; } = AvatarComposer.Create(DefaultSkins.Pixels(slim: true));
 
     private async Task LoadAvatarAsync(AccountModel model)
     {
-        var skinData = await SkinService.GetOrFetchSkinDataAsync(model.Name);
-        uint[] pixels;
+        var skinData = await SkinRepository.GetOrFetchAsync(model.Name);
 
-        if (skinData != null && SkinService.LoadSkinPixelsFromBytes(skinData.Bytes) is { } loaded)
-        {
-            pixels = loaded;
-        }
-        else
-        {
-            pixels = SkinService.CreateDefaultSkin(skinData?.IsSlim ?? SkinService.IsSlimForPlayerName(model.Name));
-        }
+        var pixels = skinData is not null
+            ? SkinTexture.Decode(skinData.Bytes)?.ToRenderPixels()
+            : null;
 
-        var avatar = SkinService.CreateAvatarFromSkin(pixels);
-        await Dispatcher.UIThread.InvokeAsync(() =>
+        pixels ??= DefaultSkins.Pixels(skinData?.IsSlim ?? SkinRepository.IsSlimForPlayerName(model.Name));
+
+        var avatar = AvatarComposer.Create(pixels);
+        await AppDispatcher.Current.InvokeAsync(() =>
         {
             model.AvatarBitmap = avatar;
             if (ReferenceEquals(model, CurrentAccount))
@@ -652,7 +650,7 @@ public partial class MainWindowViewModel : ViewModelBase
         }
     }
 
-    private IImage IconFor(Instance instance)
+    private PixelBuffer IconFor(Instance instance)
     {
         if (!string.IsNullOrEmpty(instance.IconPath) && File.Exists(instance.IconPath))
         {
@@ -660,19 +658,20 @@ public partial class MainWindowViewModel : ViewModelBase
 
             try
             {
-                var loaded = new Bitmap(instance.IconPath);
+                // Instance icons are icon.png, so the shared PNG decoder covers them.
+                var loaded = PngCodec.Decode(File.ReadAllBytes(instance.IconPath)).ToPixelBuffer();
                 _iconCache[instance.IconPath] = loaded;
                 return loaded;
             }
-            catch (Exception)
+            catch
             {
-                // A corrupt icon.png falls through to the generated block below.
+                // A corrupt (or non-PNG) icon falls through to the generated block below.
             }
         }
 
         // GetHashCode is randomised per process, so hash by hand to keep the icon stable.
         var hash = instance.Id.Aggregate(0, (acc, c) => acc * 31 + c);
-        return PixelArtService.CreateBlockBitmap(BlockIcons[Math.Abs(hash) % BlockIcons.Length]);
+        return PixelArt.CreateBlock(BlockIcons[Math.Abs(hash) % BlockIcons.Length]);
     }
 
     private void OpenFolder(string path)
@@ -888,11 +887,11 @@ public partial class MainWindowViewModel : ViewModelBase
 
     /// <summary>Progress reports arrive on downloader threads, so they are posted to the UI thread.</summary>
     private static IProgress<InstallProgress> Track(DownloadTaskModel task) =>
-        new CallbackProgress<InstallProgress>(p => Dispatcher.UIThread.Post(() => Apply(task, p)));
+        new CallbackProgress<InstallProgress>(p => AppDispatcher.Current.Post(() => Apply(task, p)));
 
     /// <summary>The launch button's progress card mirrors the same reports the download page shows.</summary>
     private IProgress<InstallProgress> TrackLaunch(DownloadTaskModel task) =>
-        new CallbackProgress<InstallProgress>(p => Dispatcher.UIThread.Post(() =>
+        new CallbackProgress<InstallProgress>(p => AppDispatcher.Current.Post(() =>
         {
             Apply(task, p);
             LaunchStepText = p.Stage;
@@ -980,7 +979,7 @@ public partial class MainWindowViewModel : ViewModelBase
             var installed = new HashSet<string>(
                 _launcher.Instances.Instances.Select(i => i.VersionId), StringComparer.OrdinalIgnoreCase);
 
-            var icon = PixelArtService.CreateBlockBitmap("grass");
+            var icon = PixelArt.CreateBlock("grass");
 
             _gameResources.Clear();
             foreach (var version in manifest.Versions.Where(v => v.IsRelease).Take(200))
@@ -1043,7 +1042,7 @@ public partial class MainWindowViewModel : ViewModelBase
 
             if (ct.IsCancellationRequested || CurrentResCategory != category) return;
 
-            var icon = PixelArtService.CreateBlockBitmap(category switch
+            var icon = PixelArt.CreateBlock(category switch
             {
                 "mod" => "dirt",
                 "shader" => "log",
@@ -1191,7 +1190,7 @@ public partial class MainWindowViewModel : ViewModelBase
 
             var gameDirectory = _launcher.Instances.GameDirectoryFor(instance.Source);
             await _modrinthInstaller.InstallAsync(version, gameDirectory, resource.Category, source,
-                new CallbackProgress<DownloadProgress>(p => Dispatcher.UIThread.Post(() =>
+                new CallbackProgress<DownloadProgress>(p => AppDispatcher.Current.Post(() =>
                 {
                     task.Status = "下载中";
                     task.Progress = Math.Clamp(p.Percent * 100, 0, 100);
@@ -1308,19 +1307,13 @@ public partial class MainWindowViewModel : ViewModelBase
         ApplyTheme();
         if (!IsCustomBackground)
         {
-            BgBitmap = PixelArtService.CreateBackgroundBitmap(IsDark);
+            BgArt = PixelArt.CreateBackground(IsDark);
         }
 
         PersistSettings();
     }
 
-    private void ApplyTheme()
-    {
-        if (Application.Current is not null)
-        {
-            Application.Current.RequestedThemeVariant = IsDark ? ThemeVariant.Dark : ThemeVariant.Light;
-        }
-    }
+    private void ApplyTheme() => ThemeChanged?.Invoke(IsDark);
 
     [RelayCommand]
     private void OpenGameRoot() => OpenFolder(GameRoot);
@@ -1420,18 +1413,7 @@ public partial class MainWindowViewModel : ViewModelBase
         if (!string.IsNullOrEmpty(settings.CustomBackgroundPath) &&
             File.Exists(settings.CustomBackgroundPath))
         {
-            try
-            {
-                _customBg?.Dispose();
-                _customBg = new Bitmap(settings.CustomBackgroundPath);
-                BgBitmap = _customBg;
-                CustomBackgroundPath = settings.CustomBackgroundPath;
-            }
-            catch (Exception)
-            {
-                _customBg = null;
-                CustomBackgroundPath = null;
-            }
+            CustomBackgroundPath = settings.CustomBackgroundPath;
         }
 
         BgBlur = settings.BackgroundBlur;

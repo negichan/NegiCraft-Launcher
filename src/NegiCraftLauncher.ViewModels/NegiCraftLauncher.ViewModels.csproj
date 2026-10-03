@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+    <!-- 关键约束：这个工程**不许**引用 Avalonia / WPF / 任何 UI 包。
+         它被 Windows(WPF) 与 macOS/Linux(Avalonia) 两边共用。
+         图像一律走 NegiCraftLauncher.Raster 的平台中立像素，由各自的视图层解码上屏。 -->
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="CommunityToolkit.Mvvm" Version="8.2.1" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\NegiCraftLauncher.Core\NegiCraftLauncher.Core.csproj" />
+    <ProjectReference Include="..\NegiCraftLauncher.Raster\NegiCraftLauncher.Raster.csproj" />
+  </ItemGroup>
+
+</Project>

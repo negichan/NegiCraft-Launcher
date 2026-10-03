@@ -2,7 +2,7 @@ using System.Collections.Generic;
 using System.ComponentModel;
 using System.Linq;
 using Avalonia.Controls;
-using NegiCraftLauncher.App.ViewModels;
+using NegiCraftLauncher.ViewModels;
 using NegiCraftLauncher.Pet;
 
 namespace NegiCraftLauncher.App.Services;

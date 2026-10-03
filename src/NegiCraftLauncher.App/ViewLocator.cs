@@ -2,7 +2,7 @@ using System;
 using System.Diagnostics.CodeAnalysis;
 using Avalonia.Controls;
 using Avalonia.Controls.Templates;
-using NegiCraftLauncher.App.ViewModels;
+using NegiCraftLauncher.ViewModels;
 
 namespace NegiCraftLauncher.App;
 
