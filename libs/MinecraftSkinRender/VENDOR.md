@@ -35,8 +35,30 @@ Assembly name and namespaces stay `MinecraftSkinRender` / `MinecraftSkinRender.O
 torso while `DrawSkinTop()` used `GetMatrix4(ModelPartType.Body)`; with a posed torso the jacket
 layer would have torn away from the body, so both now use the same matrix.
 
+## Split into two projects (local change)
+
+The vendored copy is now **two** projects, so the WPF side can reuse the pose maths without
+dragging in `libSkiaSharp`:
+
+- **`libs/MinecraftSkinRender.Core/`** — `RootNamespace` is still `MinecraftSkinRender`,
+  **zero `PackageReference`**. Holds `CubeModel`, `Enums`, `SkinAnimation`, `SkinModelObj`,
+  `Steve3DModel`, `Steve3DTexture`, `SkinRenderVersion`, plus a new `SkinRenderBase` carrying
+  everything that does not touch Skia: canvas size, skin type, back colour, mouse interaction,
+  pose maths, animation driving.
+- **`libs/MinecraftSkinRender/`** (this directory, Skia side) — only `SkinRender : SkinRenderBase`
+  (the `_skinTex` / `_cape` fields and `SetSkinTex` / `SetCapeTex`), `SkinTypeChecker`, `OpenGL/*`.
+  It `ProjectReference`s the Core project.
+
+Why split rather than duplicate: the `GetMatrix4` changes above are the whole point of vendoring,
+and two copies of them would drift visually. `SkinRenderBase` is the single source.
+
+`NegiCraftLauncher.Raster` references **only** `MinecraftSkinRender.Core` and inherits
+`SkinRenderBase` (see `SkinRenderSoftware.cs`) — that is why `libSkiaSharp.dll` stays out of the
+WPF build. It also ships its own hand-written PNG decoder (`PngCodec`) for the same reason.
+
 ## Re-syncing with upstream
 
 This is a fork; upstream updates are a **manual** merge — diff the new upstream
-`MinecraftSkinRender` and `MinecraftSkinRender.OpenGL` against this directory and re-apply the
-edits above.
+`MinecraftSkinRender` and `MinecraftSkinRender.OpenGL` against these two directories and
+re-apply the edits above. Keep the Core/Skia split in mind: new upstream code that touches
+`SKBitmap` belongs in the Skia side, everything else in Core.

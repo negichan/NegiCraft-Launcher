@@ -14,4 +14,10 @@
     <ItemGroup>
         <PackageReference Include="SkiaSharp" Version="3.119.2" />
     </ItemGroup>
+
+    <ItemGroup>
+        <!-- 几何表 / UV 表 / 位姿数学 / 动画都在 Core 里（零依赖），这里只补 OpenGL 与 SkiaSharp 贴图。
+             WPF 侧只引用 Core，不引用本工程 —— 那样才不会把 libSkiaSharp 带进 Windows 包。 -->
+        <ProjectReference Include="..\MinecraftSkinRender.Core\MinecraftSkinRender.Core.csproj" />
+    </ItemGroup>
 </Project>

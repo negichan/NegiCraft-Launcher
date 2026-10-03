@@ -72,21 +72,32 @@ public sealed class SoftwareRenderer
     /// 四边形按 <c>a-b-c-d</c> 环绕给点：<b>从面外侧看</b>的 左上 → 右上 → 右下 → 左下。
     /// 屏幕 Y 轴向下，所以正面朝向相机时屏幕空间绕序为正、<c>area &gt; 0</c>。
     /// </summary>
+    /// <param name="blend">
+    /// 是否做源覆盖混合。传 <c>false</c> 即 GL 关闭 <c>GL_BLEND</c> 时的行为：纹素的 alpha
+    /// 被忽略，颜色原样覆盖（包括 A=0 的纹素也会写下去挡住后面的面）。
+    /// 本体层用这个模式 —— 上游就是关着混合画本体的。
+    /// </param>
+    /// <param name="depthWrite">
+    /// 是否写深度。第二层（外套/帽子）上游用 <c>DepthMask(false)</c> 画，只测不写，
+    /// 否则那层自己的背面会把正面挡掉。
+    /// </param>
     public void DrawQuad(
         in ScreenVertex a, in ScreenVertex b, in ScreenVertex c, in ScreenVertex d,
-        uint[] texture, int textureWidth, int textureHeight)
+        uint[] texture, int textureWidth, int textureHeight,
+        bool blend = true, bool depthWrite = true)
     {
         // 近平面裁剪先做最简的：任何一个点跑到相机后面，整个面丢掉。
         // 皮肤预览里模型不会穿到相机背后，够用；真需要时再上完整的多边形裁剪。
         if (a.BehindNearPlane || b.BehindNearPlane || c.BehindNearPlane || d.BehindNearPlane) return;
 
-        DrawTriangle(a, b, c, texture, textureWidth, textureHeight);
-        DrawTriangle(a, c, d, texture, textureWidth, textureHeight);
+        DrawTriangle(a, b, c, texture, textureWidth, textureHeight, blend, depthWrite);
+        DrawTriangle(a, c, d, texture, textureWidth, textureHeight, blend, depthWrite);
     }
 
     private void DrawTriangle(
         in ScreenVertex a, in ScreenVertex b, in ScreenVertex c,
-        uint[] texture, int textureWidth, int textureHeight)
+        uint[] texture, int textureWidth, int textureHeight,
+        bool blend, bool depthWrite)
     {
         // 显式拷到局部：`in` 参数是只读引用，反复读字段会阻止 JIT 把它们提到寄存器里。
         var v0 = a;
@@ -190,13 +201,23 @@ public sealed class SoftwareRenderer
                 tv = ((tv % textureHeight) + textureHeight) % textureHeight;
 
                 var texel = texture[tv * textureWidth + tu];
+
+                if (!blend)
+                {
+                    // GL 关着混合时：alpha 被忽略，颜色原样落盘。透明纹素也照样写深度，
+                    // 所以它会挡住后面的面（跟 GL 一致）。
+                    color[index] = texel;
+                    if (depthWrite) depthBuffer[index] = depth;
+                    continue;
+                }
+
                 var alpha = texel >> 24;
                 if (alpha == 0) continue;
 
                 if (alpha == 255)
                 {
                     color[index] = texel;
-                    depthBuffer[index] = depth;
+                    if (depthWrite) depthBuffer[index] = depth;
                     continue;
                 }
 
@@ -214,6 +235,7 @@ public sealed class SoftwareRenderer
                 if (outAlpha > 255) outAlpha = 255;
 
                 color[index] = (outAlpha << 24) | (r << 16) | (g << 8) | bl;
+                if (depthWrite) depthBuffer[index] = depth;
             }
         }
 

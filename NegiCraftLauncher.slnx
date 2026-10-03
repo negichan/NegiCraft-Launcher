@@ -12,5 +12,6 @@
   </Folder>
   <Folder Name="/libs/">
     <Project Path="libs/MinecraftSkinRender/MinecraftSkinRender.csproj" />
+    <Project Path="libs/MinecraftSkinRender.Core/MinecraftSkinRender.Core.csproj" />
   </Folder>
 </Solution>
