@@ -20,6 +20,7 @@ using NegiCraftLauncher.Core.Auth;
 using NegiCraftLauncher.Core.Instances;
 using NegiCraftLauncher.Core.Java;
 using NegiCraftLauncher.Core.Launch;
+using NegiCraftLauncher.Skin.Services;
 using NegiCraftLauncher.Core.Modrinth;
 using NegiCraftLauncher.Core.Net;
 using NegiCraftLauncher.Core.Versions;

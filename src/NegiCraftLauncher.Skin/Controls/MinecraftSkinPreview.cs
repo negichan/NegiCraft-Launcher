@@ -10,7 +10,7 @@ using Avalonia.Layout;
 using Avalonia.Media;
 using Avalonia.Threading;
 
-namespace NegiCraftLauncher.App.Controls;
+namespace NegiCraftLauncher.Skin.Controls;
 
 public class MinecraftSkinPreview : Panel
 {
@@ -167,7 +167,7 @@ public class MinecraftSkinPreview : Panel
         {
             Text = PlayerName,
             Foreground = Brushes.White,
-            FontFamily = new FontFamily("avares://NegiCraftLauncher.App/Assets/Fonts#Jersey 10"),
+            FontFamily = new FontFamily("avares://NegiCraftLauncher.Skin/Assets/Fonts#Jersey 10"),
             FontSize = 12.5,
             HorizontalAlignment = HorizontalAlignment.Center,
             VerticalAlignment = VerticalAlignment.Center

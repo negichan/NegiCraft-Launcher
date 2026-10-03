@@ -11,7 +11,7 @@ using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Media.Imaging;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
-using NegiCraftLauncher.App.Controls;
+using NegiCraftLauncher.Skin.Controls;
 using NegiCraftLauncher.App.Models;
 using NegiCraftLauncher.App.ViewModels;
 using NegiCraftLauncher.App.Views;

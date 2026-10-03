@@ -4,7 +4,7 @@ using System.Text;
 using Avalonia.OpenGL;
 using MinecraftSkinRender.OpenGL;
 
-namespace NegiCraftLauncher.App.Controls.OpenGL;
+namespace NegiCraftLauncher.Skin.Controls.OpenGL;
 
 public class AvaloniaApi(GlInterface gl) : OpenGLApi
 {

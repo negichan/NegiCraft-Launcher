@@ -2,7 +2,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:vm="using:NegiCraftLauncher.App.ViewModels"
         xmlns:models="using:NegiCraftLauncher.App.Models"
-        xmlns:controls="using:NegiCraftLauncher.App.Controls"
+        xmlns:controls="using:NegiCraftLauncher.Skin.Controls"
         xmlns:pop="using:NegiCraftLauncher.App.Views"
         xmlns:materialIcons="clr-namespace:Material.Icons.Avalonia;assembly=Material.Icons.Avalonia"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"

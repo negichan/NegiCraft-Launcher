@@ -12,13 +12,13 @@ using Avalonia.OpenGL.Controls;
 using Avalonia.Platform;
 using Avalonia.Rendering;
 using Avalonia.Threading;
-using NegiCraftLauncher.App.Controls.OpenGL;
-using NegiCraftLauncher.App.Services;
+using NegiCraftLauncher.Skin.Controls.OpenGL;
+using NegiCraftLauncher.Skin.Services;
 using MinecraftSkinRender;
 using MinecraftSkinRender.OpenGL;
 using SkiaSharp;
 
-namespace NegiCraftLauncher.App.Controls;
+namespace NegiCraftLauncher.Skin.Controls;
 
 public class SkinRenderControl : OpenGlControlBase, ICustomHitTest
 {
@@ -160,7 +160,7 @@ public class SkinRenderControl : OpenGlControlBase, ICustomHitTest
     {
         try
         {
-            using var stream = AssetLoader.Open(new Uri("avares://NegiCraftLauncher.App/Assets/skin_alex.png"));
+            using var stream = AssetLoader.Open(new Uri("avares://NegiCraftLauncher.Skin/Assets/skin_alex.png"));
             _skinBitmap = SKBitmap.Decode(stream);
         }
         catch (Exception ex)

@@ -10,7 +10,7 @@ using Avalonia.Media.Imaging;
 using Avalonia.Platform;
 using SkiaSharp;
 
-namespace NegiCraftLauncher.App.Services;
+namespace NegiCraftLauncher.Skin.Services;
 
 public static class SkinService
 {
@@ -75,7 +75,7 @@ public static class SkinService
         // Check bundled assets (e.g. skin_miku_mew.png)
         try
         {
-            string assetUri = $"avares://NegiCraftLauncher.App/Assets/skin_{username.ToLowerInvariant()}.png";
+            string assetUri = $"avares://NegiCraftLauncher.Skin/Assets/skin_{username.ToLowerInvariant()}.png";
             if (AssetLoader.Exists(new Uri(assetUri)))
             {
                 using var stream = AssetLoader.Open(new Uri(assetUri));
@@ -477,7 +477,7 @@ public static class SkinService
     public static byte[] DefaultSkinBytes(bool slim)
     {
         using var stream = AssetLoader.Open(
-            new Uri($"avares://NegiCraftLauncher.App/Assets/{(slim ? "skin_alex" : "skin_steve")}.png"));
+            new Uri($"avares://NegiCraftLauncher.Skin/Assets/{(slim ? "skin_alex" : "skin_steve")}.png"));
         using var buffer = new MemoryStream();
         stream.CopyTo(buffer);
         return buffer.ToArray();

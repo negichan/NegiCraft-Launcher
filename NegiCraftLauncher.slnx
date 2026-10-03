@@ -2,6 +2,7 @@
   <Folder Name="/src/">
     <Project Path="src/NegiCraftLauncher.App/NegiCraftLauncher.App.csproj" />
     <Project Path="src/NegiCraftLauncher.Core/NegiCraftLauncher.Core.csproj" />
+    <Project Path="src/NegiCraftLauncher.Skin/NegiCraftLauncher.Skin.csproj" />
   </Folder>
   <Folder Name="/libs/">
     <Project Path="libs/MinecraftSkinRender/MinecraftSkinRender.csproj" />
