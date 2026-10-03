@@ -235,6 +235,10 @@ public partial class PetWindow : Window
     public PetWindow()
     {
         InitializeComponent();
+
+        // Register before the window is ever shown: the backend applies these styles on the next
+        // property update, and Show() always triggers one. See PetShellStyle for why.
+        Services.PetShellStyle.ApplyToolWindow(this);
     }
 
     public PetWindow(string initialPlayerName, MainWindowViewModel? launcherVm = null, Window? launcherWindow = null) : this()
