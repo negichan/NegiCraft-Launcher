@@ -1,0 +1,96 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:controls="clr-namespace:NegiCraftLauncher.App.Controls"
+        xmlns:materialIcons="clr-namespace:Material.Icons.Avalonia;assembly=Material.Icons.Avalonia"
+        x:Class="NegiCraftLauncher.App.Views.PetWindow"
+        Title="NegiPet"
+        Width="160" Height="320"
+        MinWidth="60" MinHeight="90"
+        WindowDecorations="None"
+        TransparencyLevelHint="Transparent"
+        Background="Transparent"
+        ShowInTaskbar="False"
+        Topmost="True"
+        CanResize="False"
+        WindowStartupLocation="Manual"
+        KeyDown="OnWindowKeyDown"
+        KeyUp="OnWindowKeyUp">
+
+    <Panel x:Name="RootPanel"
+           Background="Transparent"
+           Cursor="Hand"
+           PointerPressed="OnRootPointerPressed"
+           PointerMoved="OnRootPointerMoved"
+           PointerReleased="OnRootPointerReleased"
+           PointerCaptureLost="OnRootPointerCaptureLost"
+           ContextRequested="OnRootContextRequested"
+           DoubleTapped="OnRootDoubleTapped">
+        <Panel.ContextMenu>
+            <ContextMenu x:Name="PetContextMenu">
+                <MenuItem Header="置顶显示" x:Name="MenuTopmost" Click="OnToggleTopmostClick">
+                    <MenuItem.Icon>
+                        <materialIcons:MaterialIcon Kind="Check" Width="16" Height="16"/>
+                    </MenuItem.Icon>
+                </MenuItem>
+                <MenuItem Header="大小比例">
+                    <MenuItem Header="小 (75%)" Click="OnScale75Click"/>
+                    <MenuItem Header="标准 (100%)" Click="OnScale100Click"/>
+                    <MenuItem Header="大 (125%)" Click="OnScale125Click"/>
+                    <MenuItem Header="特大 (150%)" Click="OnScale150Click"/>
+                </MenuItem>
+                <MenuItem Header="潜行动作" x:Name="MenuSneak" Click="OnToggleSneakClick">
+                    <MenuItem.Icon>
+                        <materialIcons:MaterialIcon x:Name="MenuSneakIcon" Kind="Check" Width="16" Height="16" IsVisible="False"/>
+                    </MenuItem.Icon>
+                </MenuItem>
+                <Separator/>
+                <MenuItem Header="自由待机模式" x:Name="MenuFreeMode" Click="OnSelectFreeModeClick">
+                    <MenuItem.Icon>
+                        <materialIcons:MaterialIcon x:Name="MenuFreeModeIcon" Kind="Check" Width="16" Height="16" IsVisible="True"/>
+                    </MenuItem.Icon>
+                </MenuItem>
+                <MenuItem Header="操控模式 (WASD+空格)" x:Name="MenuControlMode" Click="OnToggleControlModeClick">
+                    <MenuItem.Icon>
+                        <materialIcons:MaterialIcon x:Name="MenuControlModeIcon" Kind="Check" Width="16" Height="16" IsVisible="False"/>
+                    </MenuItem.Icon>
+                </MenuItem>
+                <MenuItem Header="鼠标跟随模式" x:Name="MenuFollowMouse" Click="OnToggleFollowMouseClick">
+                    <MenuItem.Icon>
+                        <materialIcons:MaterialIcon x:Name="MenuFollowMouseIcon" Kind="Check" Width="16" Height="16" IsVisible="False"/>
+                    </MenuItem.Icon>
+                </MenuItem>
+                <MenuItem Header="前往指定坐标…" x:Name="MenuCoordMode" Click="OnPickCoordClick"/>
+                <MenuItem Header="交互模式" x:Name="MenuInteractMode" Click="OnToggleInteractModeClick">
+                    <MenuItem.Icon>
+                        <materialIcons:MaterialIcon x:Name="MenuInteractModeIcon" Kind="Check" Width="16" Height="16" IsVisible="False"/>
+                    </MenuItem.Icon>
+                </MenuItem>
+                <MenuItem Header="拦截模式（左Alt+CapsLock切换）" x:Name="MenuInteractSwallow" Click="OnToggleInteractSwallowClick" IsEnabled="False">
+                    <MenuItem.Icon>
+                        <materialIcons:MaterialIcon x:Name="MenuInteractSwallowIcon" Kind="Check" Width="16" Height="16" IsVisible="True"/>
+                    </MenuItem.Icon>
+                </MenuItem>
+                <Separator/>
+                <MenuItem Header="重置朝向" Click="OnResetRotationClick"/>
+                <Separator/>
+                <MenuItem Header="修改桌宠名字…" Click="OnChangeNameClick"/>
+                <MenuItem Header="恢复继承首页名字" x:Name="MenuResetName" Click="OnResetNameToInheritedClick"/>
+                <Separator/>
+                <MenuItem Header="更换皮肤" x:Name="MenuAccountsParent">
+                    <MenuItem Header="从本地文件加载…" Click="OnPickSkinFileClick"/>
+                    <Separator/>
+                </MenuItem>
+                <Separator/>
+                <MenuItem Header="打开启动器" Click="OnOpenLauncherClick"/>
+                <MenuItem Header="关闭桌宠" Click="OnClosePetClick"/>
+            </ContextMenu>
+        </Panel.ContextMenu>
+        <Viewbox Stretch="Uniform">
+            <controls:MinecraftSkinPreview x:Name="PetPreview"
+                                           Width="160" Height="320"
+                                           StageOffsetY="75"
+                                           CanDragRotate="False"
+                                           IsGlobalTracking="False"/>
+        </Viewbox>
+    </Panel>
+</Window>

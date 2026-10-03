@@ -1,6 +1,10 @@
+using System;
+using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Input;
 using Avalonia.Interactivity;
+using Avalonia.Platform;
 using Avalonia.Platform.Storage;
 using Avalonia.Threading;
 using NegiCraftLauncher.App.ViewModels;
@@ -10,13 +14,89 @@ namespace NegiCraftLauncher.App.Views;
 public partial class MainWindow : Window
 {
     private MainWindowViewModel? _vm;
+    private PetWindow? _petWindow;
+    private TrayIcon? _trayIcon;
+    private NativeMenuItem? _petTrayMenuItem;
+    private bool _isExplicitExit;
 
     public MainWindow()
     {
         InitializeComponent();
+        SetupTrayIcon();
     }
 
-    protected override void OnDataContextChanged(System.EventArgs e)
+    public PetWindow? PetWindowInstance => _petWindow;
+
+    private void SetupTrayIcon()
+    {
+        try
+        {
+            var menu = new NativeMenu();
+
+            var openLauncherItem = new NativeMenuItem { Header = "打开启动器" };
+            openLauncherItem.Click += (_, _) => Restore();
+            openLauncherItem.Command = new CommunityToolkit.Mvvm.Input.RelayCommand(Restore);
+            menu.Items.Add(openLauncherItem);
+
+            _petTrayMenuItem = new NativeMenuItem { Header = "桌面宠物" };
+            _petTrayMenuItem.Click += (_, _) => TogglePetWindow();
+            _petTrayMenuItem.Command = new CommunityToolkit.Mvvm.Input.RelayCommand(TogglePetWindow);
+            menu.Items.Add(_petTrayMenuItem);
+
+            menu.Items.Add(new NativeMenuItemSeparator());
+
+            var exitItem = new NativeMenuItem { Header = "退出启动器" };
+            exitItem.Click += (_, _) => ExitApplication();
+            exitItem.Command = new CommunityToolkit.Mvvm.Input.RelayCommand(ExitApplication);
+            menu.Items.Add(exitItem);
+
+            _trayIcon = new TrayIcon
+            {
+                Icon = new WindowIcon(AssetLoader.Open(new Uri("avares://NegiCraftLauncher.App/Assets/app.ico"))),
+                ToolTipText = "NegiCraft Launcher",
+                IsVisible = true,
+                Menu = menu
+            };
+            _trayIcon.Clicked += (_, _) => Restore();
+
+            TrayIcon.SetIcons(Application.Current!, new TrayIcons { _trayIcon });
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[TrayIcon] Init error: {ex.Message}");
+        }
+    }
+
+    public void ExitApplication()
+    {
+        _isExplicitExit = true;
+        _petWindow?.Close();
+        _petWindow = null;
+        if (_trayIcon != null)
+        {
+            _trayIcon.IsVisible = false;
+            _trayIcon.Dispose();
+            _trayIcon = null;
+        }
+        Close();
+        if (Application.Current?.ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
+        {
+            desktop.Shutdown();
+        }
+    }
+
+    protected override void OnClosing(WindowClosingEventArgs e)
+    {
+        if (!_isExplicitExit)
+        {
+            e.Cancel = true;
+            Hide();
+            return;
+        }
+        base.OnClosing(e);
+    }
+
+    protected override void OnDataContextChanged(EventArgs e)
     {
         base.OnDataContextChanged(e);
 
@@ -24,6 +104,8 @@ public partial class MainWindow : Window
         {
             _vm.HideWindowRequested -= Hide;
             _vm.ShowWindowRequested -= Restore;
+            _vm.OpenPetRequested -= OnOpenPetRequested;
+            _vm.RecallPetRequested -= ClosePetWindow;
             _vm.PropertyChanged -= OnViewModelPropertyChanged;
         }
 
@@ -32,9 +114,81 @@ public partial class MainWindow : Window
         {
             _vm.HideWindowRequested += Hide;
             _vm.ShowWindowRequested += Restore;
+            _vm.OpenPetRequested += OnOpenPetRequested;
+            _vm.RecallPetRequested += ClosePetWindow;
             _vm.PropertyChanged += OnViewModelPropertyChanged;
         }
     }
+
+    public void TogglePetWindow()
+    {
+        if (_petWindow != null && _petWindow.IsVisible)
+        {
+            ClosePetWindow();
+        }
+        else
+        {
+            OpenPetWindow();
+        }
+    }
+
+    public void OpenPetWindow()
+    {
+        if (_petWindow != null && _petWindow.IsVisible)
+        {
+            _petWindow.Activate();
+            UpdateTrayMenu();
+            return;
+        }
+
+        var currentName = _vm?.EffectivePetName ?? "pingplus";
+        _petWindow = new PetWindow(currentName, _vm, this);
+
+        var screens = Screens;
+        var primary = screens.Primary ?? (screens.All.Count > 0 ? screens.All[0] : null);
+        if (primary != null)
+        {
+            var workArea = primary.WorkingArea;
+            _petWindow.Position = new PixelPoint(
+                workArea.X + workArea.Width - (int)(190 * primary.Scaling),
+                workArea.Y + workArea.Height - (int)(290 * primary.Scaling)
+            );
+        }
+
+        _petWindow.Closed += (_, _) =>
+        {
+            _petWindow = null;
+            if (_vm != null) _vm.IsPetActive = false;
+            UpdateTrayMenu();
+        };
+        _petWindow.Show();
+        if (_vm != null)
+        {
+            _vm.IsPetActive = true;
+        }
+        UpdateTrayMenu();
+    }
+
+    public void ClosePetWindow()
+    {
+        _petWindow?.Close();
+        _petWindow = null;
+        if (_vm != null)
+        {
+            _vm.IsPetActive = false;
+        }
+        UpdateTrayMenu();
+    }
+
+    private void UpdateTrayMenu()
+    {
+        if (_petTrayMenuItem != null)
+        {
+            _petTrayMenuItem.Header = (_petWindow != null && _petWindow.IsVisible) ? "收起桌宠" : "桌面宠物";
+        }
+    }
+
+    private void OnOpenPetRequested() => OpenPetWindow();
 
     private void OnViewModelPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
     {
@@ -85,7 +239,7 @@ public partial class MainWindow : Window
 
     private void OnCloseClick(object? sender, RoutedEventArgs e)
     {
-        Close();
+        Hide();
     }
 
     private void OnPopoverBackgroundPointerPressed(object? sender, PointerPressedEventArgs e)

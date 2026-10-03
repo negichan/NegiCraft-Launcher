@@ -45,6 +45,9 @@ public sealed class LauncherSettings
 
     public string? CurrentInstanceId { get; set; }
 
+    /// <summary>桌宠独立自定义名称；为 null 或空时继承当前主账号名称。</summary>
+    public string? PetCustomName { get; set; }
+
     public string EffectiveGameRoot =>
         string.IsNullOrWhiteSpace(GameRoot) ? NclPaths.DefaultGameRoot : GameRoot;
 
