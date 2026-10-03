@@ -233,21 +233,23 @@ public class SkinRenderControl : OpenGlControlBase, ICustomHitTest
                 // Use cached or fetched skin, or fall back to bundled default for model
                 var data = await SkinService.GetOrFetchSkinDataAsync(username);
                 byte[] bytes;
-                SkinType skinType;
+                bool isSlim;
                 if (data != null && data.Bytes.Length > 0)
                 {
                     bytes = data.Bytes;
-                    skinType = data.IsSlim ? SkinType.NewSlim : SkinType.New;
+                    isSlim = data.IsSlim;
                 }
                 else
                 {
-                    bool isSlim = SkinService.IsSlimForPlayerName(username);
+                    isSlim = SkinService.IsSlimForPlayerName(username);
                     bytes = SkinService.DefaultSkinBytes(isSlim);
-                    skinType = isSlim ? SkinType.NewSlim : SkinType.New;
                 }
 
                 if (bytes.Length > 0)
                 {
+                    // Let the texture decide its own format: a 64x32 legacy skin has to render as
+                    // SkinType.Old, not as the 1.8 model the slim flag alone would imply.
+                    var skinType = SkinService.ResolveSkinType(bytes, isSlim);
                     Dispatcher.UIThread.Post(() => SetSkin(bytes, skinType));
                 }
             }

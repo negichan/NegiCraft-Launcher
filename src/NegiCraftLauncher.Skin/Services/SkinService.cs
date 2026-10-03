@@ -224,6 +224,36 @@ public static class SkinService
         return IsSlimForPlayerName(username);
     }
 
+    /// <summary>
+    /// Chooses the render model for a texture.
+    ///
+    /// A 64x32 (1.7-era) texture must render as <see cref="MinecraftSkinRender.SkinType.Old"/>: its UV
+    /// layout is entirely different, so handing it to the 1.8 model misaligns every face and draws the
+    /// limb overlay layer — which the legacy format never defines — as stray triangles, leaving the pet
+    /// looking like its limbs are detached or missing. Only 64x64 textures get the
+    /// classic/slim distinction, where <paramref name="isSlim"/> is the authoritative profile hint
+    /// (or, for offline names, a heuristic).
+    /// </summary>
+    public static MinecraftSkinRender.SkinType ResolveSkinType(byte[] bytes, bool isSlim)
+    {
+        if (IsLegacyTexture(bytes)) return MinecraftSkinRender.SkinType.Old;
+        return isSlim ? MinecraftSkinRender.SkinType.NewSlim : MinecraftSkinRender.SkinType.New;
+    }
+
+    /// <summary>True for a 1.7-era 64x32 texture (width is exactly twice the height).</summary>
+    public static bool IsLegacyTexture(byte[] bytes)
+    {
+        try
+        {
+            using var bmp = SKBitmap.Decode(bytes);
+            return bmp != null && bmp.Width == bmp.Height * 2;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
     public static async Task<byte[]?> FetchSkinBytesOnlineAsync(string username) =>
         await GetOrFetchSkinBytesAsync(username);
 
