@@ -26,6 +26,15 @@ public partial class App : Application
             return;
         }
 
+        // --skin <png>：不启窗口，直接出一张软件光栅化的皮肤预览，用来和 GL 版截图对齐。
+        // --compare <a.png> --with <b.png>：逐像素比两张预览图。
+        if (Array.IndexOf(e.Args, "--skin") >= 0 || Array.IndexOf(e.Args, "--compare") >= 0)
+        {
+            SkinPreview.Run(e.Args);
+            Shutdown();
+            return;
+        }
+
         MainWindow = new MainWindow();
         MainWindow.Show();
     }

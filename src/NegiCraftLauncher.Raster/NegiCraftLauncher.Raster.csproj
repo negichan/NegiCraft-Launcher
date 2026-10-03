@@ -17,4 +17,11 @@
     <EmbeddedResource Include="Assets\skin_steve.png" />
   </ItemGroup>
 
+  <ItemGroup>
+    <!-- 只引用零依赖的 Core：几何表、UV 表、位姿数学、走路动画。
+         刻意**不**引用 MinecraftSkinRender（Skia 侧那个）—— 那会把 SkiaSharp 拖进 WPF 包，
+         而 WPF 迁移的全部意义就是甩掉 libSkiaSharp。 -->
+    <ProjectReference Include="..\..\libs\MinecraftSkinRender.Core\MinecraftSkinRender.Core.csproj" />
+  </ItemGroup>
+
 </Project>

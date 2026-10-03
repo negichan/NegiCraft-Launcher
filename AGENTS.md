@@ -45,16 +45,51 @@
 ## 工程结构
 
 ```
-src/NegiCraftLauncher.App       启动器（WinExe）
-src/NegiCraftLauncher.Core      与 UI 无关的核心逻辑
-src/NegiCraftLauncher.Skin      皮肤解码 + OpenGL 渲染栈（App 与 Pet 共用）
-src/NegiCraftLauncher.Pet       桌宠本体 + IPetHost 宿主契约
-src/NegiCraftLauncher.Pet.App   独立桌宠（WinExe → NegiPet.exe）
-src/NegiCraftLauncher.Theme     设计 token + 控件主题（App 与 Pet.App 共用）
-libs/MinecraftSkinRender        vendored 渲染库
+src/NegiCraftLauncher.App         启动器（Avalonia，WinExe）
+src/NegiCraftLauncher.App.Wpf     启动器（原生 WPF，net10.0-windows，程序集名 NegiCraftLauncher）
+src/NegiCraftLauncher.Core        与 UI 无关的核心逻辑
+src/NegiCraftLauncher.ViewModels  UI 中立的 VM（零 UI 依赖，两个前端共用）
+src/NegiCraftLauncher.Raster      软件光栅化 + 平台中立像素层（PixelBuffer / PngCodec / SkinRenderSoftware）
+src/NegiCraftLauncher.Skin        皮肤解码 + OpenGL 渲染栈（App 与 Pet 共用）
+src/NegiCraftLauncher.Pet         桌宠本体 + IPetHost 宿主契约
+src/NegiCraftLauncher.Pet.App     独立桌宠（WinExe → NegiPet.exe）
+src/NegiCraftLauncher.Theme       设计 token + 控件主题（App 与 Pet.App 共用）
+libs/MinecraftSkinRender          vendored 渲染库（Skia 侧）
+libs/MinecraftSkinRender.Core     vendored 渲染库的零依赖核心（位姿数学、几何表）
 ```
 
-依赖方向：`Pet.App → Pet → Skin → MinecraftSkinRender`；`App → Pet`、`App → Skin`、`App → Theme`、`Pet.App → Theme`。`Core` 不参与 UI。
+依赖方向：`Pet.App → Pet → Skin → MinecraftSkinRender`；`App → Pet`、`App → Skin`、`App → Theme`、
+`Pet.App → Theme`。`Core` 不参与 UI。`App.Wpf` 与 `App` 平行，共用 `Core` / `ViewModels` / `Raster`。
+`Raster` **只引用 `MinecraftSkinRender.Core`**（不引用 Skia 侧），否则 `libSkiaSharp.dll` 会被拖回 WPF 侧。
+
+**Windows 走 WPF、macOS/Linux 走 Avalonia** 是既定方向；view 层各写各的（XAML 无共同编译器），
+共享的是 `Core` / `ViewModels` / `Raster`。详见 `docs/wpf-migration-plan.md`（不入库）。
+
+## 验证皮肤渲染（不用开窗口）
+
+WPF 前端的皮肤预览走软件光栅化，可以完全无 UI 出图，用来跟 GL 版逐像素对齐：
+
+```bash
+EXE=src/NegiCraftLauncher.App.Wpf/bin/Release/net10.0-windows/NegiCraftLauncher.exe
+$EXE --skin <皮肤.png> --out %TEMP%\x.png     # 四视角拼图 + x-front.png 单正面
+$EXE --skin <皮肤.png> --angle 180            # 只出某个角度
+$EXE --compare a.png --with b.png             # 逐像素对比
+```
+
+报告分别写 `%TEMP%\ncl-skin-preview.txt`（含 model/view/proj/head/leftArm 矩阵）与
+`%TEMP%\ncl-skin-compare.txt`。
+
+几个要点：
+
+- **验证锚点：四视角图里 180° 必须是纯棕发的后脑勺、不能有脸。** 绕序错了会左右镜像 +
+  第二层（外套/帽子）永远被本体挡住，而**单张正面截图看不出来**。
+- 对比结果**必须先做平移对齐再看**（`--compare` 已内置 ±24px 搜索）。GL 侧取景由 Avalonia
+  控件决定，整体错开十几像素就能让"差异 >8"冲到 25%。SoloFox 对齐后是 `R4.5/G4.7/B10`、>8 占 10%。
+- 软件后端**刻意不做光照** —— `AvaloniaApi.ShaderSource` 里的 `Unlit()` 把 GLSL 的
+  `ambient + diffuse` 换成了 `vec3(1.0)`，现行 GL 预览本来就是平的。别照抄 `OpenGLShader.cs`。
+- 披风用的是**另一张贴图**，`SkinRenderSoftware.BuildLayers` 里显式跳过 `ModelPartType.Cape`。
+  不跳的话它会拿皮肤贴图去采样头部区域，在身后糊出一块棕色板子（正面看不出来，180° 露馅）。
+- 性能结论一律以 **Release** 为准：Debug 下 Roslyn 不内联，同一份代码慢近一倍。
 
 桌宠有两种宿主：启动器进程内托管（`App/Services/PetHostAdapter.cs` 把 VM 适配成 `IPetHost`），以及独立 exe（`Pet.App/StandalonePetHost.cs`）。**独立版没有启动器专属功能**：隐藏“打开启动器”、账号换肤菜单为空。两边名字各存各的（启动器在 `settings.json`，独立版在 `%APPDATA%\NCL\pet.json`）。
 

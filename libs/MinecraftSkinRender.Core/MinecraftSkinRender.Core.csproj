@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <TargetFramework>net10.0</TargetFramework>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <Nullable>enable</Nullable>
+        <IsPackable>false</IsPackable>
+        <GenerateDocumentationFile>false</GenerateDocumentationFile>
+        <!-- Upstream code was written without nullable annotations; keep its warnings out of our build. -->
+        <NoWarn>$(NoWarn);CS8618</NoWarn>
+        <!-- 命名空间仍为 MinecraftSkinRender，与 Skia 侧那个程序集一致，调用方不用改 using。 -->
+        <RootNamespace>MinecraftSkinRender</RootNamespace>
+    </PropertyGroup>
+
+    <!-- 刻意零 PackageReference：这个程序集要能被 WPF 侧直接引用。
+         WPF 迁移的全部意义就是甩掉 libSkiaSharp，所以这里不能沾 SkiaSharp ——
+         哪怕只是"签名里出现"也不行，否则它会被复制进 WPF 的输出目录。 -->
+</Project>
