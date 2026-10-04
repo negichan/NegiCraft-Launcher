@@ -10,7 +10,7 @@ using Avalonia.Interactivity;
 using Avalonia.Media.Imaging;
 using Avalonia.Platform.Storage;
 using Avalonia.Threading;
-using Material.Icons.Avalonia;
+using NegiCraftLauncher.Icons.Avalonia;
 using NegiCraftLauncher.Pet.Avalonia.Services;
 using NegiCraftLauncher.Pet.Services;
 

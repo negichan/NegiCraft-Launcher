@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <!-- Avalonia 侧的图标控件（替代 Material.Icons.Avalonia 包）。
+         几何**数据**在 NegiCraftLauncher.Icons.Core —— 与 WPF 侧共用同一份生成结果，
+         所以两端枚举天然同步，加图标不会只加一边。 -->
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+    <RootNamespace>NegiCraftLauncher.Icons.Avalonia</RootNamespace>
+    <AssemblyName>NegiCraftLauncher.Icons.Avalonia</AssemblyName>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Avalonia" Version="12.1.3" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\NegiCraftLauncher.Icons.Core\NegiCraftLauncher.Icons.Core.csproj" />
+  </ItemGroup>
+
+</Project>

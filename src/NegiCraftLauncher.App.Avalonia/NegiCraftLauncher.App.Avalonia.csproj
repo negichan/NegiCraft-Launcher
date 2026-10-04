@@ -24,10 +24,12 @@
     <PackageReference Include="Avalonia.Desktop" Version="12.1.3" />
     <PackageReference Include="Avalonia.Fonts.Inter" Version="12.1.3" />
     <PackageReference Include="CommunityToolkit.Mvvm" Version="8.2.1" />
-    <PackageReference Include="Material.Icons.Avalonia" Version="3.0.2" />
   </ItemGroup>
 
   <ItemGroup>
+    <!-- 图标控件（自写）。原来的 Material.Icons.Avalonia 包会拖进 5.71 MB 的 Material.Icons.dll，
+         占整个安装包 78%；这里换成构建时按 XAML 里用到的 Kind 生成几何。 -->
+    <ProjectReference Include="..\NegiCraftLauncher.Icons.Avalonia\NegiCraftLauncher.Icons.Avalonia.csproj" />
     <ProjectReference Include="..\NegiCraftLauncher.Core\NegiCraftLauncher.Core.csproj" />
     <!-- Shared, UI-framework-neutral view models. Raster (the platform-neutral pixel layer)
          comes in transitively through it. -->

@@ -290,9 +290,11 @@ internal static class Gpu3dProbe
         };
         mesh.Freeze();
 
-        // 注意：这里**不能**写 `Material material;` —— `Material.Icons.WPF` 让全局命名空间里
-        // 多了一个 `Material` 命名空间，而命名空间查找优先于 using 指令，
-        // 于是 `Material` 被解析成命名空间、报 CS0118。走 GeometryModel3D.Material 属性绕开。
+        // 注意：这里**不能**写 `Material material;` —— 图标库（当时的 Material.Icons.WPF）会在全局
+        // 命名空间里塞一个 `Material` 命名空间，而命名空间查找优先于 using 指令，
+        // 于是 `Material` 被解析成命名空间、报 CS0118。图标库现在换成了自写的
+        // NegiCraftLauncher.Icons（不再有这个命名空间），但这个坑随时会被别的包再踩一次，
+        // 所以照旧走 GeometryModel3D.Material 属性赋值。
         var model = new GeometryModel3D { Geometry = mesh };
         model.Material = BuildMaterial(spec);
         return model;

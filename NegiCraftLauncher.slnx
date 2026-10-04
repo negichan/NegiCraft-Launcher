@@ -3,6 +3,9 @@
     <Project Path="src/NegiCraftLauncher.App.Avalonia/NegiCraftLauncher.App.Avalonia.csproj" />
     <Project Path="src/NegiCraftLauncher.App/NegiCraftLauncher.App.csproj" />
     <Project Path="src/NegiCraftLauncher.Core/NegiCraftLauncher.Core.csproj" />
+    <Project Path="src/NegiCraftLauncher.Icons/NegiCraftLauncher.Icons.csproj" />
+    <Project Path="src/NegiCraftLauncher.Icons.Avalonia/NegiCraftLauncher.Icons.Avalonia.csproj" />
+    <Project Path="src/NegiCraftLauncher.Icons.Core/NegiCraftLauncher.Icons.Core.csproj" />
     <Project Path="src/NegiCraftLauncher.Pet.Avalonia/NegiCraftLauncher.Pet.Avalonia.csproj" />
     <Project Path="src/NegiCraftLauncher.Pet.App.Avalonia/NegiCraftLauncher.Pet.App.Avalonia.csproj" />
     <Project Path="src/NegiCraftLauncher.Pet.App/NegiCraftLauncher.Pet.App.csproj" />
