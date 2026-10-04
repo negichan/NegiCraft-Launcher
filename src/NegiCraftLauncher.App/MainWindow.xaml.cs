@@ -456,6 +456,25 @@ public partial class MainWindow : Window
         if (dialog.ShowDialog(this) == true) _vm?.SetBackgroundCommand.Execute(dialog.FileName);
     }
 
+    private void OnPickVideoBackgroundClick(object sender, RoutedEventArgs e)
+    {
+        var dialog = new Microsoft.Win32.OpenFileDialog
+        {
+            Title = "选择视频背景",
+            Filter = "视频|*.mp4;*.webm;*.avi;*.mkv;*.mov;*.m4v;*.wmv|所有文件|*.*",
+            Multiselect = false,
+        };
+
+        if (dialog.ShowDialog(this) == true) _vm?.SetVideoBackgroundCommand.Execute(dialog.FileName);
+    }
+
+    /// <summary>
+    /// 同步 Wallpaper Engine 当前壁纸。<b>整个过程都在 VM 里</b>（探测、判定类型、兜底预览图），
+    /// 视图只负责触发 —— 那边不弹文件选择框，所以没有平台相关的东西要做。
+    /// </summary>
+    private void OnSyncWallpaperEngineClick(object sender, RoutedEventArgs e) =>
+        _vm?.SyncWallpaperEngineCommand.Execute(null);
+
     private void OnPickJavaClick(object sender, RoutedEventArgs e)
     {
         var dialog = new Microsoft.Win32.OpenFileDialog

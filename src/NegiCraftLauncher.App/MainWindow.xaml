@@ -1220,7 +1220,7 @@
 
                                         <Border Height="58">
                                             <neg:NegiGrid Columns="* Auto">
-                                                <TextBlock Text="背景图片" FontWeight="Medium" VerticalAlignment="Center" Foreground="#fafafa" />
+                                                <TextBlock Text="背景" FontWeight="Medium" VerticalAlignment="Center" Foreground="#fafafa" />
                                                 <neg:NegiStackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
                                                     <!-- 当前背景，一眼能认出选的是哪张 -->
                                                     <Border Width="52" Height="34" CornerRadius="8" ClipToBounds="True"
@@ -1232,16 +1232,38 @@
                                                             <Border Background="#000000" Opacity="{Binding BgDarkOpacity}" />
                                                         </Grid>
                                                     </Border>
+                                                    <!-- 视频壁纸的缩略位：不另开一个播放器去抽首帧（那要多一份解码），
+                                                         只放个胶片图标表示"这里挂的是视频"。 -->
+                                                    <Border Width="52" Height="34" CornerRadius="8"
+                                                            Background="#18181b" BorderBrush="#26262b" BorderThickness="1"
+                                                            Visibility="{Binding IsVideoBackground, Converter={StaticResource BoolToVis}}">
+                                                        <materialIcons:MaterialIcon Kind="VideoFilm" Width="18" Height="18"
+                                                                                    HorizontalAlignment="Center" VerticalAlignment="Center"
+                                                                                    Foreground="#a1a1aa" />
+                                                    </Border>
                                                     <Button Style="{StaticResource BtnSmOutlineStyle}" Content="调整"
                                                             Command="{Binding OpenBgPopCommand}"
-                                                            Visibility="{Binding IsCustomBackground, Converter={StaticResource BoolToVis}}" />
+                                                            Visibility="{Binding HasCustomBackground, Converter={StaticResource BoolToVis}}" />
                                                     <Button Style="{StaticResource BtnSmOutlineStyle}" Content="恢复默认"
                                                             Command="{Binding ResetBackgroundCommand}"
-                                                            Visibility="{Binding IsCustomBackground, Converter={StaticResource BoolToVis}}" />
+                                                            Visibility="{Binding HasCustomBackground, Converter={StaticResource BoolToVis}}" />
                                                     <Button Style="{StaticResource BtnSmOutlineStyle}" Click="OnPickBackgroundClick">
                                                         <neg:NegiStackPanel Orientation="Horizontal" Spacing="6">
                                                             <materialIcons:MaterialIcon Kind="ImageFrame" Width="14" Height="14" />
                                                             <TextBlock Text="选择图片" VerticalAlignment="Center" />
+                                                        </neg:NegiStackPanel>
+                                                    </Button>
+                                                    <Button Style="{StaticResource BtnSmOutlineStyle}" Click="OnPickVideoBackgroundClick">
+                                                        <neg:NegiStackPanel Orientation="Horizontal" Spacing="6">
+                                                            <materialIcons:MaterialIcon Kind="VideoFilm" Width="14" Height="14" />
+                                                            <TextBlock Text="选择视频" VerticalAlignment="Center" />
+                                                        </neg:NegiStackPanel>
+                                                    </Button>
+                                                    <!-- 一键搬 Wallpaper Engine 当前壁纸：视频原样播，其余用预览图兜底 -->
+                                                    <Button Style="{StaticResource BtnSmOutlineStyle}" Click="OnSyncWallpaperEngineClick">
+                                                        <neg:NegiStackPanel Orientation="Horizontal" Spacing="6">
+                                                            <materialIcons:MaterialIcon Kind="Wallpaper" Width="14" Height="14" />
+                                                            <TextBlock Text="同步 Wallpaper Engine" VerticalAlignment="Center" />
                                                         </neg:NegiStackPanel>
                                                     </Button>
                                                 </neg:NegiStackPanel>
@@ -1506,10 +1528,20 @@
                                      neg:Negi.CornerRadius="8" FontSize="13" Foreground="#fafafa" />
                         </neg:NegiGrid>
 
-                        <neg:NegiStackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right" Margin="0,4,0,0">
-                            <Button Style="{StaticResource BtnSmOutlineStyle}" Content="恢复默认" Command="{Binding ResetBackgroundCommand}" />
-                            <Button Style="{StaticResource BtnSmPrimaryStyle}" Content="完成" Command="{Binding CloseBgPopCommand}" />
-                        </neg:NegiStackPanel>
+                        <neg:NegiGrid Columns="* Auto" Margin="0,4,0,0">
+                            <!-- 同步入口放这里也放一份：调背景亮度/模糊时顺手就能换 -->
+                            <Button Grid.Column="0" HorizontalAlignment="Left" Style="{StaticResource BtnSmOutlineStyle}"
+                                    Click="OnSyncWallpaperEngineClick">
+                                <neg:NegiStackPanel Orientation="Horizontal" Spacing="6">
+                                    <materialIcons:MaterialIcon Kind="Wallpaper" Width="14" Height="14" />
+                                    <TextBlock Text="同步 Wallpaper Engine" VerticalAlignment="Center" />
+                                </neg:NegiStackPanel>
+                            </Button>
+                            <neg:NegiStackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right">
+                                <Button Style="{StaticResource BtnSmOutlineStyle}" Content="恢复默认" Command="{Binding ResetBackgroundCommand}" />
+                                <Button Style="{StaticResource BtnSmPrimaryStyle}" Content="完成" Command="{Binding CloseBgPopCommand}" />
+                            </neg:NegiStackPanel>
+                        </neg:NegiGrid>
                     </neg:NegiStackPanel>
                 </Border>
             </Grid>
