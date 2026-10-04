@@ -14,19 +14,30 @@ namespace NegiCraftLauncher.Pet;
 /// </summary>
 public sealed record PetPhysicsProfile
 {
-    /// <summary>出厂默认 —— 全部是 Minecraft 原版数值（重力沿用迁移前的 2400 DIP/s²）。</summary>
+    /// <summary>
+    /// 出厂默认。<b>水平速度已按用户要求调快</b>（行走 = 原疾跑、疾跑 = 行走 × 2），
+    /// 其余仍是 Minecraft 原版数值（重力沿用迁移前的 2400 DIP/s²）。
+    /// </summary>
     public static PetPhysicsProfile Default { get; } = new();
 
     // ---------------------------------------------------------------- 水平速度
 
-    /// <summary>潜行速度（格/s）。Minecraft 原版 1.295，= 行走 × 0.3。</summary>
+    /// <summary>
+    /// 潜行速度（格/s）。<b>用户只要求加快行走 / 疾跑，潜行没动</b> —— 所以它不再是
+    /// "行走 × 0.3"，而是一个独立的绝对值（原来 = 4.317 × 0.3）。要一起提就把这里改掉。
+    /// </summary>
     public double SneakBlocksPerSecond { get; init; } = 1.295;
 
-    /// <summary>行走速度（格/s）。Minecraft 原版 4.317。</summary>
-    public double WalkBlocksPerSecond { get; init; } = 4.317;
+    /// <summary>
+    /// 行走速度（格/s）。<b>用户要求：提到原来疾跑的速度</b>（原行走 4.317 → 现在 5.612）。
+    /// </summary>
+    public double WalkBlocksPerSecond { get; init; } = 5.612;
 
-    /// <summary>疾跑速度（格/s）。Minecraft 原版 5.612。</summary>
-    public double SprintBlocksPerSecond { get; init; } = 5.612;
+    /// <summary>
+    /// 疾跑速度（格/s）。<b>用户要求：= 行走 × 2</b>。刻意做成派生属性，
+    /// 这样改 <see cref="WalkBlocksPerSecond"/> 时两者不会走散。
+    /// </summary>
+    public double SprintBlocksPerSecond => WalkBlocksPerSecond * 2.0;
 
     /// <summary>跳跃中行走（格/s）—— 沿用原来的 200/180 比例，改行走会跟着改。</summary>
     public double JumpWalkBlocksPerSecond => WalkBlocksPerSecond * 10.0 / 9.0;
