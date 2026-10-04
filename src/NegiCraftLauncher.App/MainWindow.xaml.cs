@@ -56,10 +56,13 @@ public partial class MainWindow : Window
     /// <summary>
     /// WPF 的 <c>Border</c> 即使 <c>ClipToBounds=True</c> 也只裁矩形，圆角得自己给一条裁剪几何，
     /// 否则满幅的首页背景会在四个角上露出直角。
+    /// <para>半径用 <c>22.5</c> 而非 <c>22</c>：WPF 的 <c>BorderBrush</c> 描边画在
+    /// <c>CornerRadius</c> 的外侧（描边宽 1 ⇒ 半径 21.5~22.5），clip=22 会把外侧
+    /// 那半像素裁掉，描边看起来细一半。22.5 让描边完整、圆角仍贴齐。</para>
     /// </summary>
     private void OnShellSizeChanged(object sender, SizeChangedEventArgs e)
     {
-        Shell.Clip = new RectangleGeometry(new Rect(0, 0, e.NewSize.Width, e.NewSize.Height), 22, 22);
+        Shell.Clip = new RectangleGeometry(new Rect(0, 0, e.NewSize.Width, e.NewSize.Height), 22.5, 22.5);
     }
 
     /// <summary>
