@@ -242,6 +242,18 @@ public static class PetDebugCommands
                 });
             case "pet-track":
                 return PetDebugMailbox.Ui(() => "OK " + pet.TrackDebugInfo);
+            case "pet-motion":
+                // 只读探测物理状态：跳跃偏移（DIP）、这一帧「1 格 = 多少 DIP」、三个移动标志、
+                // 地面位置。调移动速度 / 跳跃高度时靠它直接量（跳跃时窗口不动，只有模型偏移，
+                // 所以 pet-area 的 window= 看不出来）。与 Avalonia 侧逐字节一致。
+                return PetDebugMailbox.Ui(() => "OK " + pet.MotionDebugInfo);
+            case "pet-physics":
+                // 物理内核的无头自测：不开窗、不依赖真实时间，按固定 dt 喂合成按键序列，
+                // 直接断言三档速度 / 双击窗口边界 / 跳跃高度与帧率无关。
+                // **双击疾跑只能靠它验** —— 调试桥一条命令往返约 250ms，down→up→down 要 500ms，
+                // 早就超出 350ms 的双击窗口了。不需要桌宠在跑，纯计算。
+                // 与 Avalonia 侧逐字节一致。
+                return PetDebugMailbox.Ui(() => "OK " + PetPhysicsSelfTest.Run());
             case "pet-area":
                 // 只读探测内核**真正用来夹取**的工作区（DIP）。多屏下这里能直接看出桌宠被夹在
                 // 哪块屏 —— WPF 侧过去只报主屏（SystemParameters.WorkArea），是条真 bug。
