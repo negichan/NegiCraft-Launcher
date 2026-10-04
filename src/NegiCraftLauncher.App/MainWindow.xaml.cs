@@ -183,6 +183,8 @@ public partial class MainWindow : Window
     /// </summary>
     private void ApplyVideoBackground()
     {
+        // 先定静音状态再换片：Load 内部会在 Open 之后断言一次，顺序反了会白做一次。
+        _videoBackground.Sound = _vm?.VideoBackgroundSound ?? false;
         _videoBackground.Load(_vm?.VideoBackgroundPath);
 
         var brush = _videoBackground.HasVideo ? _videoBackground.Brush : null;
@@ -191,6 +193,9 @@ public partial class MainWindow : Window
 
         UpdateVideoPlayback();
     }
+
+    /// <summary>调试桥用：视频播放器此刻真实的音频状态。</summary>
+    public string VideoBackgroundDebug => _videoBackground.DebugState;
 
     /// <summary>
     /// 背景只在首页可见，所以离开首页或窗口收进托盘时就暂停 ——
@@ -361,6 +366,13 @@ public partial class MainWindow : Window
         if (e.PropertyName == nameof(MainWindowViewModel.VideoBackgroundPath))
         {
             ApplyVideoBackground();
+            return;
+        }
+
+        // 声音开关：只改播放器的静音状态，不用重新换片。
+        if (e.PropertyName == nameof(MainWindowViewModel.VideoBackgroundSound))
+        {
+            _videoBackground.Sound = _vm?.VideoBackgroundSound ?? false;
             return;
         }
 

@@ -27,8 +27,8 @@ namespace NegiCraftLauncher.App.Services;
 /// <c>ContextMenuStrip</c>，那个画的是系统原生外观、跟深色主题对不上），
 /// 直接 <c>ShowTrayMenu()</c> 即可，两边都能用 <c>RenderTargetBitmap</c> 抓图。</para>
 ///
-/// <para><b>只有 WPF 侧有的动词</b>：<c>bgvideo</c>、<c>wallpaper-info</c> —— 视频背景是
-/// Windows 专属功能（Avalonia 侧没有视频面），Avalonia 的桥里刻意不加，
+/// <para><b>只有 WPF 侧有的动词</b>：<c>bgvideo</c>、<c>bgsound</c>、<c>wallpaper-info</c> ——
+/// 视频背景是 Windows 专属功能（Avalonia 侧没有视频面），Avalonia 的桥里刻意不加，
 /// 免得留一个永远用不上的分支。</para>
 /// </summary>
 public sealed class DebugBridge
@@ -176,6 +176,13 @@ public sealed class DebugBridge
                         }
                     });
                     return "OK";
+                case "bgsound":
+                    // 视频壁纸的声音开关：`bgsound on|off`。走的是和界面复选框相同的 VM 属性，
+                    // 所以既验了持久化，也验了视图那条 PropertyChanged 分支有没有把值落到播放器上
+                    // （结果看 `state` 里的 video=[muted=… volume=…]）。
+                    await PetDebugMailbox.Ui(() =>
+                        _vm.VideoBackgroundSound = arg.Equals("on", StringComparison.OrdinalIgnoreCase));
+                    return "OK";
                 case "wallpaper-info":
                     // Wallpaper Engine 探测结果。纯静态调用、不碰 VM，所以不用回 UI 线程。
                     return await Task.Run(() =>
@@ -275,6 +282,8 @@ public sealed class DebugBridge
         sb.Append($"bg=[brightness={_vm.BgBrightness} blur={_vm.BgBlur}] ");
         sb.Append($"bgimage={_vm.CustomBackgroundPath ?? "n/a"} ");
         sb.Append($"bgvideo={_vm.VideoBackgroundPath ?? "n/a"} ");
+        sb.Append($"bgsound={_vm.VideoBackgroundSound} ");
+        sb.Append($"video=[{(_window as MainWindow)?.VideoBackgroundDebug ?? "n/a"}] ");
 
         var preview = (_window as MainWindow)?.SkinPreview;
         sb.Append($"player={preview?.PlayerName ?? "n/a"} user={preview?.CurrentLoadedUser ?? "n/a"} ");

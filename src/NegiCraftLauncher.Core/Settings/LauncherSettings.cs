@@ -52,6 +52,14 @@ public sealed class LauncherSettings
     /// </summary>
     public string? VideoBackgroundPath { get; set; }
 
+    /// <summary>
+    ///     视频壁纸是否出声。<b>默认 <c>false</c>（静音）</b> —— 背景视频是替用户放着的，
+    ///     不是他主动点开播的，默认出声太唐突；而且这里没有音量控制，只有开关。
+    ///
+    ///     <para>跨平台共享：Avalonia 侧没有视频面，读到什么都不用管。</para>
+    /// </summary>
+    public bool VideoBackgroundSound { get; set; }
+
     public string? CurrentInstanceId { get; set; }
 
     /// <summary>桌宠独立自定义名称；为 null 或空时继承当前主账号名称。</summary>
