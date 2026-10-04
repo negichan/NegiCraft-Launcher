@@ -131,14 +131,23 @@ public class SkinRenderControl : OpenGlControlBase, ICustomHitTest
     }
 
     private double _renderScaling = 1.0;
+    private TopLevel? _topLevel;
 
     protected override void OnAttachedToVisualTree(VisualTreeAttachmentEventArgs e)
     {
         base.OnAttachedToVisualTree(e);
-        if (TopLevel.GetTopLevel(this) is { } top)
+
+        _topLevel = TopLevel.GetTopLevel(this);
+        if (_topLevel is { } top)
         {
             _renderScaling = top.RenderScaling;
+            // 窗口被拖到缩放率不同的显示器上时 TopLevel 会重算 RenderScaling。不订阅的话
+            // _renderScaling 会永远停在 attach 那一刻的值，GL 视口就按错的设备像素尺寸开
+            // （150% 下仍按 110x171 渲染，再被拉大到 165x257 显示 → 皮肤预览发糊）。
+            // WPF 侧的 SkinPreviewControl 是每帧重读 DPI（EnsureTarget），这里对齐它。
+            top.ScalingChanged += OnTopLevelScalingChanged;
         }
+
         _idleTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(16) };
         _idleTimer.Tick += (_, _) => RequestNextFrameRendering();
         _idleTimer.Start();
@@ -147,8 +156,18 @@ public class SkinRenderControl : OpenGlControlBase, ICustomHitTest
     protected override void OnDetachedFromVisualTree(VisualTreeAttachmentEventArgs e)
     {
         base.OnDetachedFromVisualTree(e);
+
+        if (_topLevel is { } top) top.ScalingChanged -= OnTopLevelScalingChanged;
+        _topLevel = null;
+
         _idleTimer?.Stop();
         _idleTimer = null;
+    }
+
+    private void OnTopLevelScalingChanged(object? sender, EventArgs e)
+    {
+        if (_topLevel is { } top && top.RenderScaling > 0) _renderScaling = top.RenderScaling;
+        RequestNextFrameRendering();
     }
 
     public bool HitTest(Point point)
