@@ -148,8 +148,19 @@ public class SkinRenderControl : OpenGlControlBase, ICustomHitTest
             top.ScalingChanged += OnTopLevelScalingChanged;
         }
 
+        // ⚠️ 这个 timer **只在确实有动画在跑时**才续帧。
+        //
+        // 它原来是无条件每 16ms 续一帧 —— 那样下面 OnOpenGlRender 末尾那段"有动画才续帧"
+        // 就完全白写了：桌宠不动的时候也会永远按 60fps 重画（计划 §9 的性能预算要求
+        // "idle 占用：静止时 CPU ≈ 0（停渲染，而不是常驻空转）"）。
+        //
+        // 姿势变化（旋转 / 转头 / 蹲走跳跑 / 挥击 / 被拎起来）都会自己 RequestNextFrameRendering，
+        // 所以这里只需要兜住"动画跑到一半"的连续帧。与 WPF 侧 SkinPreviewControl 同一套行为。
         _idleTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(16) };
-        _idleTimer.Tick += (_, _) => RequestNextFrameRendering();
+        _idleTimer.Tick += (_, _) =>
+        {
+            if (IsPoseAnimating) RequestNextFrameRendering();
+        };
         _idleTimer.Start();
     }
 
@@ -581,11 +592,28 @@ public class SkinRenderControl : OpenGlControlBase, ICustomHitTest
             _snapshotRequested = false;
         }
 
-        if (_dangleK > 0 || _isDangling || (_sneakK > 0 && _sneakK < 1) || _walkK > 0 || _isWalking || _jumpK > 0 || _isJumping || (_attackT < 1.0 && !_attackParked))
+        if (IsPoseAnimating)
         {
             RequestNextFrameRendering();
         }
     }
+
+    /// <summary>
+    /// 还有动画在跑吗？没有就不再续帧 —— 静止时 CPU ≈ 0（计划 §9 的性能预算）。
+    ///
+    /// <para><b>不能叫 <c>IsAnimating</c></b> —— <see cref="AvaloniaObject"/> 上已经有个同名方法
+    /// （<c>IsAnimating(AvaloniaProperty)</c>），会报 CS0108。判据与 WPF 侧
+    /// <c>SkinPoseDriver.IsAnimating</c> 逐条一致（那边是普通类，没这个冲突）。</para>
+    ///
+    /// <para>蹲下只在**过渡中**算"在动"：蹲稳之后姿势是定的。注意它**不含待机呼吸**
+    /// （常驻的，幅度 ±1.7°）—— 停止渲染后呼吸会停在当前相位，这是"静止即停渲染"的既定取舍。</para>
+    /// </summary>
+    private bool IsPoseAnimating =>
+        _dangleK > 0 || _isDangling ||
+        (_sneakK > 0 && _sneakK < 1) ||
+        _walkK > 0 || _isWalking ||
+        _jumpK > 0 || _isJumping ||
+        (_attackT < 1.0 && !_attackParked);
 
     private unsafe void CaptureFrameSnapshot(GlInterface gl, int fb, int w, int h)
     {
