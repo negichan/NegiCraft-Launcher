@@ -4,6 +4,7 @@ using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
+using System.Windows.Interop;
 using System.Windows.Media;
 using System.Windows.Threading;
 using Material.Icons.WPF;
@@ -50,6 +51,15 @@ public partial class PetWindow : Window
 
     /// <summary>皮肤预览控件。调试动词都挂在它上面。</summary>
     public SkinPreviewControl Preview => PetPreview;
+
+    /// <summary>
+    /// 内核上一帧真正用来夹取的工作区（DIP）。<c>pet-area</c> 动词读它 ——
+    /// 报内核看到的那个，而不是宿主以为的。
+    /// </summary>
+    public PetWorkArea CurrentWorkArea => _motion.LastWorkArea;
+
+    /// <summary>内核上一帧看到的窗口左上角（DIP）。</summary>
+    public PetPoint CurrentWindow => _motion.LastWindow;
 
     public PetInteractionMode CurrentMode
     {
@@ -217,6 +227,34 @@ public partial class PetWindow : Window
     // Services.PetNativeKeys（那份 GetAsyncKeyState + VK 常量两端共用，不用各写一遍）。
     [DllImport("user32.dll")]
     private static extern bool GetCursorPos(out WinPoint lpPoint);
+
+    // 多屏工作区查询。WPF 没有"取某块屏工作区"的托管 API（SystemParameters.WorkArea
+    // 只给主屏），只能自己问 Win32。
+    private const uint MonitorDefaultToNearest = 2;
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct Rect32
+    {
+        public int Left;
+        public int Top;
+        public int Right;
+        public int Bottom;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct MonitorInfo
+    {
+        public int cbSize;
+        public Rect32 rcMonitor;
+        public Rect32 rcWork;
+        public uint dwFlags;
+    }
+
+    [DllImport("user32.dll")]
+    private static extern IntPtr MonitorFromWindow(IntPtr hwnd, uint dwFlags);
+
+    [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+    private static extern bool GetMonitorInfoW(IntPtr hMonitor, ref MonitorInfo lpmi);
 
     private DispatcherTimer? _physicsTimer;
     private readonly System.Diagnostics.Stopwatch _physicsStopwatch = new();
@@ -406,13 +444,53 @@ public partial class PetWindow : Window
     /// <summary>把一帧物理需要的平台信息打包给内核。**全是 DIP** —— WPF 这边本来就是，不用换算。</summary>
     private PetMotionContext BuildMotionContext()
     {
-        var workArea = SystemParameters.WorkArea;
         return new PetMotionContext(
             new PetStage(Width, Height, _currentScale, PetPreview.StageOffsetY),
-            new PetWorkArea(workArea.X, workArea.Y, workArea.Width, workArea.Height),
+            WorkAreaDip(),
             new PetPoint(Left, Top),
             CursorDip(),
             PetPreview.CurrentYawDeg);
+    }
+
+    /// <summary>
+    /// 桌宠当前所在显示器的工作区（不含任务栏），**已换算成窗口用的 DIP**。
+    ///
+    /// <para><b>不能用 <see cref="SystemParameters.WorkArea"/></b> —— 那个永远只报**主屏**
+    /// （映射的是 <c>SPI_GETWORKAREA</c>）。桌宠被拖到副屏后，内核下一帧就按主屏工作区夹取，
+    /// 把窗口弹回主屏。拖拽期间 <c>IsDragging</c> 会绕过夹取，所以**松手那一下才发作**，
+    /// 很隐蔽。Avalonia 侧走 <c>Screens.ScreenFromVisual(this).WorkingArea</c>，
+    /// 两端行为必须对齐 —— 见 app.manifest 里那句"桌宠会跟着鼠标在屏幕间移动"。</para>
+    ///
+    /// <para><c>GetMonitorInfo</c> 给的是物理像素；PerMonitorV2 下 WPF 的 <c>Left/Top</c>
+    /// 换算用的也正是**窗口当前所在显示器**的 DPI（dotnet/wpf#4127），
+    /// 所以除一次 <see cref="DpiScale"/> 就落回同一个 DIP 空间。</para>
+    /// </summary>
+    private PetWorkArea WorkAreaDip()
+    {
+        var scale = DpiScale;
+        var hwnd = new WindowInteropHelper(this).Handle;
+
+        if (hwnd != IntPtr.Zero)
+        {
+            var monitor = MonitorFromWindow(hwnd, MonitorDefaultToNearest);
+            if (monitor != IntPtr.Zero)
+            {
+                var info = new MonitorInfo { cbSize = Marshal.SizeOf<MonitorInfo>() };
+                if (GetMonitorInfoW(monitor, ref info))
+                {
+                    var r = info.rcWork;
+                    return new PetWorkArea(
+                        r.Left / scale,
+                        r.Top / scale,
+                        (r.Right - r.Left) / scale,
+                        (r.Bottom - r.Top) / scale);
+                }
+            }
+        }
+
+        // 窗口还没上屏（HWND 不存在）或查监视器失败时退回主屏工作区 —— 也就是旧行为，别更差。
+        var fallback = SystemParameters.WorkArea;
+        return new PetWorkArea(fallback.X, fallback.Y, fallback.Width, fallback.Height);
     }
 
     /// <summary>

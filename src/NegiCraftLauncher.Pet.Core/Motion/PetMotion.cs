@@ -160,6 +160,18 @@ public sealed class PetMotion
     /// <summary>诊断串，<c>pet-track</c> 动词直接回它。</summary>
     public string DebugInfo { get; set; } = "";
 
+    /// <summary>
+    /// 上一帧宿主传进来的工作区（DIP）。<c>pet-area</c> 动词读它 —— 报的是
+    /// <b>内核真正拿来夹取的</b>那个矩形，而不是宿主以为的，验多屏夹取才有意义。
+    /// </summary>
+    public PetWorkArea LastWorkArea { get; private set; }
+
+    /// <summary>
+    /// 上一帧宿主传进来的窗口左上角（DIP）。配合 <see cref="LastWorkArea"/>
+    /// 判断桌宠落在哪块屏上。
+    /// </summary>
+    public PetPoint LastWindow { get; private set; }
+
     /// <summary>还有几个点没走到（当前目标算 1 个）。</summary>
     public int RemainingWaypointCount => (_hasNavTarget ? 1 : 0) + _navQueue.Count;
 
@@ -368,6 +380,10 @@ public sealed class PetMotion
         YawDelta = 0f;
         HasHeadLook = false;
         PositionDirty = false;
+
+        // 记在 dt 早退之前：即便这一帧被跳过，诊断串报的也该是最新的平台信息。
+        LastWorkArea = ctx.WorkArea;
+        LastWindow = ctx.Window;
 
         if (dt < MinStepSeconds) return;
         if (dt > MaxStepSeconds) dt = MaxStepSeconds;
