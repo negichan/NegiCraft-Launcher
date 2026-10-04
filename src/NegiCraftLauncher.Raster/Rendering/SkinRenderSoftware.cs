@@ -37,7 +37,7 @@ public sealed class SkinRenderSoftware : SkinRenderBase
     // 这里**刻意不做光照**，是有意为之：
     // 上游片元着色器本来会把每个纹素乘上 (0.15 + 漫反射)，但 Avalonia 的 GL 后端
     // 在 ShaderSource 里把那行替换成 vec3(1.0) 把光照抹掉了
-    // （见 src/NegiCraftLauncher.Skin/Controls/OpenGL/AvaloniaApi.cs 的 Unlit()）。
+    // （见 src/NegiCraftLauncher.Skin.Avalonia/Controls/OpenGL/AvaloniaApi.cs 的 Unlit()）。
     // 也就是说现行版本的皮肤预览本来就是平的。软件后端跟着平，两个平台才一致。
     // 实测：与 GL 截图对齐后，无光照平均差 R4.3/G4.1/B9.7，加光照反而涨到 R6.0/G9.0/B11.6。
 

@@ -1,42 +1,59 @@
-using System;
 using System.IO;
-using System.Linq;
 using System.Text;
-using System.Threading.Tasks;
-using Avalonia;
-using Avalonia.Controls;
-using Avalonia.Controls.ApplicationLifetimes;
-using Avalonia.Media.Imaging;
-using Avalonia.VisualTree;
-using NegiCraftLauncher.ViewModels;
-using NegiCraftLauncher.App.Views;
+using System.Windows;
+using System.Windows.Interop;
 using NegiCraftLauncher.Pet.Debug;
-using NegiCraftLauncher.Skin.Controls;
+using NegiCraftLauncher.ViewModels;
 
 namespace NegiCraftLauncher.App.Services;
 
 /// <summary>
-/// A local control channel for automated verification: set page/tab/popover state and render an
-/// offscreen screenshot without ever touching the mouse, keyboard focus, or window z-order.
-/// Only opened when the app is launched with --debug, so normal runs expose nothing.
+/// 自动化验证用的本地控制通道：设置页面 / 子页 / 弹窗状态并离屏出图，
+/// 全程不动鼠标、不抢键盘焦点、不改窗口层级。只在 <c>--debug</c> 启动时打开。
 ///
-/// The pet verbs are not handled here — they are shared with the standalone pet's bridge and live
-/// in <see cref="PetDebugCommands"/>. This class owns the launcher-only verbs (pages, accounts,
-/// downloads, tray) and the transport.
+/// <para><b>本文件是 <c>App/Services/DebugBridge.cs</c>（267 行）的 WPF 移植版。</b>
+/// 邮箱名（<c>ncl-debug</c>）、动词名、回复格式逐条对齐，
+/// 客户端 <c>design/_dbg.ps1</c> 与 <c>design/_smoke.ps1</c> 两个平台通用
+/// （它们是本地私有脚本，不随源码分发）。</para>
+///
+/// <para>桌宠动词不在这里 —— 它们与独立桌宠的桥共用，实现在
+/// <see cref="PetDebugCommands"/>。本类只管启动器专属动词（页面、账户、下载、托盘）与传输层。</para>
+///
+/// <para><b>与 Avalonia 版的两处差别</b>：</para>
+/// <list type="number">
+/// <item><c>tray-right</c>：Avalonia 靠反射调 <c>TrayIcon._impl.OnRightClicked</c> 才能把托盘弹窗
+/// 弄出来；WPF 的托盘是 WinForms <c>NotifyIcon</c>，直接 <c>ContextMenuStrip.Show()</c> 即可，
+/// 不需要反射。</item>
+/// <item><c>shot-tray</c>：WinForms 的 <c>ContextMenuStrip</c> 是原生窗口，没有 WPF 可视树，
+/// <c>RenderTargetBitmap</c> 抓不到，只能如实回错。Avalonia 那边能抓是因为它的托盘弹窗
+/// 是真正的 Avalonia 窗口（<c>TrayPopupRoot</c>）。</item>
+/// </list>
 /// </summary>
 public sealed class DebugBridge
 {
-    /// <summary>Mailbox directory under <c>%TEMP%</c>. The standalone pet uses its own (ncl-pet-debug).</summary>
+    /// <summary><c>%TEMP%</c> 下的邮箱目录名。独立桌宠用自己的（<c>ncl-pet-debug</c>）。</summary>
     public const string DefaultBoxName = "ncl-debug";
 
     private readonly Window _window;
     private readonly MainWindowViewModel _vm;
+
+    /// <summary>
+    /// 宿主顶层窗口的 HWND，<b>在 UI 线程上一次性取好</b>。
+    ///
+    /// <para>不能在 <see cref="Dispatch"/> 里现取：<c>WindowInteropHelper.Handle</c> 会碰
+    /// <c>Window</c>（一个 <c>DispatcherObject</c>），而 <c>Dispatch</c> 跑在轮询线程上 ——
+    /// 结果是每个动词都回 <c>ERR 调用线程无法访问此对象</c>。
+    /// 这也解释了为什么这个值必须在 <c>Show()</c> 之后、在 UI 线程上算。</para>
+    /// </summary>
+    private readonly IntPtr _mainHwnd;
+
     private PetDebugMailbox? _mailbox;
 
-    private DebugBridge(Window window, MainWindowViewModel vm)
+    private DebugBridge(Window window, MainWindowViewModel vm, IntPtr mainHwnd)
     {
         _window = window;
         _vm = vm;
+        _mainHwnd = mainHwnd;
     }
 
     public static void StartIfNeeded(Window window)
@@ -44,7 +61,8 @@ public sealed class DebugBridge
         if (!PetDebugMailbox.IsEnabled) return;
         if (window.DataContext is not MainWindowViewModel vm) return;
 
-        var bridge = new DebugBridge(window, vm);
+        // 这里就在 UI 线程上（App.OnStartup → Show 之后），HWND 一定已经建好。
+        var bridge = new DebugBridge(window, vm, new WindowInteropHelper(window).Handle);
         bridge._mailbox = new PetDebugMailbox(
             PetDebugMailbox.ResolveBoxName(DefaultBoxName), "ncl-debug", bridge.Dispatch);
         bridge._mailbox.Start();
@@ -58,10 +76,10 @@ public sealed class DebugBridge
 
         try
         {
-            // Pet verbs are shared with the standalone pet's bridge. The pet window can be closed,
-            // in which case the shared handler answers "ERR no pet window" — as it always did.
+            // 桌宠动词与独立桌宠的桥共用。桌宠窗口可以关着，那种情况下共用的处理分支
+            // 会回 "ERR no pet window" —— 与一直以来的行为一致。
             var pet = (_window as MainWindow)?.PetWindowInstance;
-            if (PetDebugCommands.TryHandle(pet, _vm.IsPetActive, verb, arg, _window.TryGetPlatformHandle()?.Handle ?? IntPtr.Zero) is { } shared)
+            if (PetDebugCommands.TryHandle(pet, _vm.IsPetActive, verb, arg, _mainHwnd) is { } shared)
             {
                 return await shared;
             }
@@ -117,13 +135,13 @@ public sealed class DebugBridge
                     });
                     return "OK";
                 case "pet":
-                    // Launcher-only: open/close the embedded pet window.
+                    // 启动器专属：开关进程内托管的桌宠窗口。
                     await PetDebugMailbox.Ui(() =>
                     {
-                        if (_window is MainWindow mw)
+                        if (_window is MainWindow host)
                         {
-                            if (arg == "open") mw.OpenPetWindow();
-                            else if (arg == "close") mw.ClosePetWindow();
+                            if (arg == "open") host.OpenPetWindow();
+                            else if (arg == "close") host.ClosePetWindow();
                         }
                     });
                     return "OK";
@@ -131,23 +149,22 @@ public sealed class DebugBridge
                     await PetDebugMailbox.Ui(() => _vm.DownloadThreads = int.Parse(arg));
                     return "OK";
                 case "demo":
-                    // Sample rows so the task-row template (buttons, bar, states) can be checked
-                    // without waiting on a real multi-hundred-MB download.
+                    // 示例任务行，用来检查任务行模板（按钮、进度条、状态）而不必真的等下几百 MB。
                     await PetDebugMailbox.Ui(() =>
                     {
                         _vm.Downloads.Clear();
-                        _vm.Downloads.Add(new DownloadTaskModel { Name = "安装 1.21.11" , Status = "下载中", Progress = 42, PercentText = "42%", Detail = "client.jar" });
+                        _vm.Downloads.Add(new DownloadTaskModel { Name = "安装 1.21.11", Status = "下载中", Progress = 42, PercentText = "42%", Detail = "client.jar" });
                         _vm.Downloads.Add(new DownloadTaskModel { Name = "下载 某模组", Status = "已暂停", Progress = 61, PercentText = "61%", Detail = "点「继续」接着下，已完成的文件会直接跳过。", IsFinished = true });
                         _vm.Downloads.Add(new DownloadTaskModel { Name = "安装 1.20.1", Status = "已完成", Progress = 100, PercentText = "100%", IsFinished = true });
                         _vm.RefreshHasDownloads();
                     });
                     return "OK";
                 case "skin":
-                    // Force an arbitrary skin PNG into the live 3D preview, to A/B wide vs slim.
+                    // 把任意皮肤 PNG 塞进主页的实时预览，用来 A/B 宽臂与细臂。
                     return await PetDebugMailbox.Ui(() =>
                     {
-                        if (_window.GetVisualDescendants().OfType<MinecraftSkinPreview>().FirstOrDefault()
-                            is not { } preview) return "ERR no SkinPreview";
+                        var preview = (_window as MainWindow)?.SkinPreview;
+                        if (preview is null) return "ERR no SkinPreview";
                         preview.ApplySkin(File.ReadAllBytes(arg));
                         return "OK " + arg;
                     });
@@ -156,8 +173,8 @@ public sealed class DebugBridge
                 case "skinsnap":
                     return await PetDebugMailbox.Ui(() =>
                     {
-                        var preview = _window.GetVisualDescendants().OfType<MinecraftSkinPreview>().FirstOrDefault();
-                        if (preview == null) return "ERR no preview";
+                        var preview = (_window as MainWindow)?.SkinPreview;
+                        if (preview is null) return "ERR no preview";
                         preview.SaveSnapshot(arg);
                         return "OK " + arg;
                     });
@@ -166,52 +183,22 @@ public sealed class DebugBridge
                 case "tray-right":
                     return await PetDebugMailbox.Ui(() =>
                     {
-                        var firstTray = TrayIcon.GetIcons(Application.Current!)?.FirstOrDefault();
-                        var implField = typeof(TrayIcon).GetField("_impl", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
-                        var impl = implField?.GetValue(firstTray);
-                        if (impl == null) return "ERR no impl";
-                        var method = impl.GetType().GetMethod("OnRightClicked", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
-                        if (method == null) return "ERR no OnRightClicked method";
-                        method.Invoke(impl, null);
-
-                        var desktop = Application.Current?.ApplicationLifetime as IClassicDesktopStyleApplicationLifetime;
-                        var trayWin = desktop?.Windows.FirstOrDefault(w => w.GetType().Name.Contains("TrayPopupRoot"));
-                        if (trayWin == null) return "OK (no window found)";
-
-                        if (!string.IsNullOrWhiteSpace(arg))
-                        {
-                            var size = trayWin.Bounds.Size;
-                            if (size.Width <= 0 || size.Height <= 0) size = new Size(180, 140);
-                            using var rtb = new RenderTargetBitmap(
-                                new PixelSize((int)Math.Ceiling(size.Width), (int)Math.Ceiling(size.Height)),
-                                new Vector(96, 96));
-                            rtb.Render(trayWin);
-                            rtb.Save(arg, new PngBitmapEncoderOptions());
-                        }
-                        return $"OK bounds={trayWin.Bounds.Width}x{trayWin.Bounds.Height} descendants={trayWin.GetVisualDescendants().Count()}";
+                        if (_window is not MainWindow host) return "ERR not main window";
+                        return host.ShowTrayMenuForDebug()
+                            ? "OK"
+                            : "ERR no tray menu";
                     });
                 case "shot-tray":
+                    // WinForms 的 ContextMenuStrip 是原生窗口，没有 WPF 可视树，抓不了图。
                     return await PetDebugMailbox.Ui(() =>
-                    {
-                        var desktop = Application.Current?.ApplicationLifetime as IClassicDesktopStyleApplicationLifetime;
-                        var trayWin = desktop?.Windows.FirstOrDefault(w => w.GetType().Name.Contains("TrayPopupRoot"));
-                        if (trayWin == null) return "ERR no tray window found";
-                        var size = trayWin.Bounds.Size;
-                        if (size.Width <= 0 || size.Height <= 0) size = new Size(180, 140);
-                        using var rtb = new RenderTargetBitmap(
-                            new PixelSize((int)Math.Ceiling(size.Width), (int)Math.Ceiling(size.Height)),
-                            new Vector(96, 96));
-                        rtb.Render(trayWin);
-                        rtb.Save(arg, new PngBitmapEncoderOptions());
-                        return $"OK {arg} w={trayWin.Bounds.Width} h={trayWin.Bounds.Height}";
-                    });
+                        "ERR WPF tray menu is a native WinForms window; use tray-right and read the screen");
                 case "quit":
-                    // Exit only once the reply is on disk, so the client sees OK rather than timing out.
+                    // 回复落盘之后再退出，客户端才能看到 OK 而不是超时。
                     _mailbox?.ExitAfterReply(() =>
                     {
-                        if (_window is MainWindow mw)
+                        if (_window is MainWindow host)
                         {
-                            mw.ExitApplication();
+                            host.ExitApplication();
                         }
                         else
                         {
@@ -236,9 +223,9 @@ public sealed class DebugBridge
         sb.Append($"pops=[acc={_vm.IsAccPopOpen} inst={_vm.IsInstPopOpen} dl={_vm.IsDlPopOpen} bg={_vm.IsBgPopOpen}] ");
         sb.Append($"threads={_vm.DownloadThreads} ");
 
-        var preview = _window.GetVisualDescendants().OfType<MinecraftSkinPreview>().FirstOrDefault();
+        var preview = (_window as MainWindow)?.SkinPreview;
         sb.Append($"player={preview?.PlayerName ?? "n/a"} user={preview?.CurrentLoadedUser ?? "n/a"} ");
-        sb.Append($"skintype={preview?.LiveSkinType?.ToString() ?? "n/a"} top={preview?.LiveTopLayer?.ToString() ?? "n/a"} stats=[{preview?.RenderStats ?? "n/a"}] ");
+        sb.Append($"skintype={preview?.LiveSkinType.ToString() ?? "n/a"} top={preview?.LiveTopLayer.ToString() ?? "n/a"} stats=[{preview?.RenderStats ?? "n/a"}] ");
 
         sb.Append($"downloads={_vm.Downloads.Count}");
         foreach (var t in _vm.Downloads)
@@ -249,19 +236,28 @@ public sealed class DebugBridge
         return sb.ToString();
     }
 
-    /// <summary>Renders the live visual tree offscreen; no window visibility or focus required.</summary>
+    /// <summary>离屏渲染实时可视树；不需要窗口可见、也不需要焦点。</summary>
     private string Shot(string path)
     {
-        if (_window.Content is not Visual content) return "ERR no content";
+        if (_window.Content is not FrameworkElement content) return "ERR no content";
 
-        // Render 1:1 in the visual's own DIP units; pre-scaling here made the offscreen pass
-        // re-arrange the tree at a different available size than the live window.
-        var size = content.Bounds.Size;
-        using var rtb = new RenderTargetBitmap(
-            new PixelSize((int)Math.Ceiling(size.Width), (int)Math.Ceiling(size.Height)),
-            new Vector(96, 96));
+        // 按可视元素自己的 DIP 尺寸 1:1 渲染；在这里预缩放会让离屏那趟用与实窗不同的
+        // 可用尺寸重新排布整棵树。
+        var size = content.RenderSize;
+        if (size.Width <= 0 || size.Height <= 0) size = new Size(_window.Width, _window.Height);
+
+        var rtb = new System.Windows.Media.Imaging.RenderTargetBitmap(
+            (int)Math.Ceiling(size.Width), (int)Math.Ceiling(size.Height), 96, 96,
+            System.Windows.Media.PixelFormats.Pbgra32);
         rtb.Render(content);
-        rtb.Save(path, new PngBitmapEncoderOptions());
+
+        var encoder = new System.Windows.Media.Imaging.PngBitmapEncoder();
+        encoder.Frames.Add(System.Windows.Media.Imaging.BitmapFrame.Create(rtb));
+        using (var stream = File.Create(path))
+        {
+            encoder.Save(stream);
+        }
+
         return $"OK {path}";
     }
 }

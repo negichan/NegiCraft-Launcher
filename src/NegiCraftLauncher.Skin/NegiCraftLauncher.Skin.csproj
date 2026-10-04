@@ -1,22 +1,30 @@
 <Project Sdk="Microsoft.NET.Sdk">
+
   <PropertyGroup>
-    <TargetFramework>net10.0</TargetFramework>
+    <!-- WPF 侧的皮肤预览控件（软件光栅化 → WriteableBitmap）。
+         与 Avalonia 的 NegiCraftLauncher.Skin.Avalonia/Controls/MinecraftSkinPreview 是**两份独立资产**：
+         那边内嵌 SkinRenderControl（OpenGlControlBase），WPF 的分层透明窗承载不了子 HWND。
+         启动器主页与桌宠共用本工程，所以它不能引用 App.Wpf。 -->
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
     <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <RootNamespace>NegiCraftLauncher.Skin</RootNamespace>
+    <EnableWindowsTargeting>true</EnableWindowsTargeting>
   </PropertyGroup>
 
   <ItemGroup>
-    <AvaloniaResource Include="Assets\**" />
+    <!-- ⚠️ WPF SDK **没有默认的 Resource 通配**（只默认收 .xaml），字体、图片、图标
+         都得显式包含。少了这条，pack://application:,,,/NegiCraftLauncher.Skin;component/Assets/Fonts
+         会静默回退到系统字体 —— 不报错，只是名牌上的 Jersey 10 变成了 Segoe UI。 -->
+    <Resource Include="Assets\Fonts\**" />
   </ItemGroup>
 
   <ItemGroup>
-    <!-- Avalonia metapackage is enough: it ships Avalonia.OpenGL, which OpenGlControlBase needs.
-         The platform backends stay in the executables. -->
-    <PackageReference Include="Avalonia" Version="12.1.3" />
-    <PackageReference Include="SkiaSharp" Version="3.119.4" />
+    <!-- 软件光栅化器与像素层。Raster 只引用 MinecraftSkinRender.Core，不带 SkiaSharp。 -->
+    <ProjectReference Include="..\NegiCraftLauncher.Raster\NegiCraftLauncher.Raster.csproj" />
   </ItemGroup>
 
-  <ItemGroup>
-    <ProjectReference Include="..\..\libs\MinecraftSkinRender\MinecraftSkinRender.csproj" />
-  </ItemGroup>
 </Project>

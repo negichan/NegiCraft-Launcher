@@ -1,25 +1,26 @@
-using System.Collections.Generic;
 using System.ComponentModel;
-using System.Linq;
-using Avalonia.Controls;
-using NegiCraftLauncher.ViewModels;
+using System.Windows;
 using NegiCraftLauncher.Pet;
+using NegiCraftLauncher.ViewModels;
 
 namespace NegiCraftLauncher.App.Services;
 
 /// <summary>
-/// Bridges the launcher (view model + main window) to the pet's <see cref="IPetHost"/> contract, so
-/// the embedded pet keeps its launcher-only behaviour — inherit the current account name, list
-/// accounts in the skin menu, reopen the launcher — without the pet library knowing about any of it.
+/// 把启动器（VM + 主窗口）接到桌宠的 <see cref="IPetHost"/> 契约上，让进程内托管的桌宠
+/// 保留启动器专属能力 —— 继承当前账号名、在换肤菜单里列出账号、重新打开启动器 ——
+/// 而桌宠本体完全不知道启动器的存在。
+///
+/// <para>与 Avalonia 版 <c>App/Services/PetHostAdapter.cs</c> 逻辑一字不差，
+/// 只有 <c>Avalonia.Controls.Window</c> → <see cref="Window"/> 这一处平台替换。</para>
 /// </summary>
 internal sealed class PetHostAdapter : IPetHost
 {
     private readonly MainWindowViewModel _vm;
     private readonly Window _launcherWindow;
 
-    // The VM outlives the pet window, and the pet can be toggled many times per session. Subscribing
-    // eagerly in the constructor would strand one adapter (and thus one closed window) per toggle, so
-    // only listen while the pet is actually attached.
+    // VM 活得比桌宠窗口久，而桌宠一个会话里可以被开关很多次。在构造函数里就订阅的话，
+    // 每开关一次都会留下一个收不到消息的适配器（连带一个已关闭的窗口），
+    // 所以只在桌宠真正挂上来的时候才监听。
     private PropertyChangedEventHandler? _listeners;
 
     public PetHostAdapter(MainWindowViewModel vm, Window launcherWindow)
@@ -40,8 +41,10 @@ internal sealed class PetHostAdapter : IPetHost
 
     public bool CanOpenLauncher => true;
 
-    // GPU 后端目前只在 Windows(WPF) 侧存在（Viewport3D）。这里照契约把值存进启动器设置，
-    // 免得两边共用一个 settings.json 时把 Windows 侧选的值抹掉；Avalonia 的桌宠窗口读到了也不会用。
+    /// <summary>
+    /// 直接读写启动器设置 —— 桌宠菜单和设置页改的是同一个值，两边不会漂开。
+    /// 设置页那边一改，<see cref="OnVmPropertyChanged"/> 会把通知改名转给桌宠。
+    /// </summary>
     public bool UseGpu
     {
         get => _vm.PetUseGpu;
@@ -50,7 +53,9 @@ internal sealed class PetHostAdapter : IPetHost
 
     public void OpenLauncher()
     {
-        _launcherWindow.IsVisible = true;
+        // WPF 的 Window.IsVisible 是只读的（Avalonia 那边可写），恢复显示要用 Show()。
+        // 窗口本来就可见时 Show() 是空操作，不会重复触发 Loaded。
+        _launcherWindow.Show();
         _launcherWindow.WindowState = WindowState.Normal;
         _launcherWindow.Activate();
     }
@@ -71,13 +76,14 @@ internal sealed class PetHostAdapter : IPetHost
 
     private void OnVmPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
-        // Rename the launcher's property to the contract's so the pet can match on it.
+        // 把启动器的属性名改成契约里的名字，桌宠才能匹配上。
         if (e.PropertyName == nameof(MainWindowViewModel.EffectivePetName))
         {
             _listeners?.Invoke(this, new PropertyChangedEventArgs(nameof(EffectiveName)));
         }
         else if (e.PropertyName == nameof(MainWindowViewModel.PetUseGpu))
         {
+            // 设置页里改了 GPU 开关 —— 已经开着的桌宠窗口要立刻跟着换后端。
             _listeners?.Invoke(this, new PropertyChangedEventArgs(nameof(UseGpu)));
         }
     }
