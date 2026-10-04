@@ -27,8 +27,11 @@ public enum WallpaperEngineKind
 }
 
 /// <summary>
-/// The wallpaper Wallpaper Engine currently has selected, plus whatever this launcher can actually
-/// do with it: play it (<see cref="VideoPath"/>) and/or show a still (<see cref="PreviewPath"/>).
+/// The wallpaper Wallpaper Engine currently has selected, plus the one thing this launcher can
+/// actually do with it: play it as a video background (<see cref="VideoPath"/>).
+///
+/// <para>场景 / 网页 / 应用三类壁纸要靠 WE 自己的引擎渲染，我们渲染不了，也<b>不做</b>「拿预览图
+/// 当静态背景」的兜底 —— 那等于把用户的动态壁纸悄悄换成一张截图。这几类一律只报类型、不改背景。</para>
 /// </summary>
 public sealed record WallpaperEngineWallpaper
 {
@@ -42,12 +45,6 @@ public sealed record WallpaperEngineWallpaper
 
     /// <summary>Set only when <see cref="Kind"/> is <see cref="WallpaperEngineKind.Video"/>.</summary>
     public string? VideoPath { get; init; }
-
-    /// <summary>
-    /// Best still image we could find — <c>project.json</c>'s <c>preview</c>, else a
-    /// <c>preview.jpg</c>/<c>.png</c> next to it, else the first texture in <c>materials/</c>.
-    /// </summary>
-    public string? PreviewPath { get; init; }
 
     public string? Title { get; init; }
 
@@ -72,12 +69,6 @@ public static class WallpaperEngineLocator
 
     private static readonly string[] VideoExtensions =
         [".mp4", ".webm", ".avi", ".mkv", ".mov", ".m4v", ".wmv", ".mpg", ".mpeg"];
-
-    private static readonly string[] PreviewFileNames =
-        ["preview.jpg", "preview.jpeg", "preview.png", "preview.gif", "preview.webp", "preview.bmp"];
-
-    private static readonly string[] ImageExtensions =
-        [".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp"];
 
     /// <summary>Wallpaper Engine's own process names (32- and 64-bit builds).</summary>
     private static readonly string[] ProcessNames = ["wallpaper64", "wallpaper32"];
@@ -122,16 +113,11 @@ public static class WallpaperEngineLocator
 
         var videoPath = kind == WallpaperEngineKind.Video && File.Exists(source) ? source : null;
 
-        var previewPath = kind == WallpaperEngineKind.Video
-            ? null
-            : FindPreview(projectDirectory, project?.Preview);
-
         return new WallpaperEngineWallpaper
         {
             Kind = kind,
             SourcePath = source,
             VideoPath = videoPath,
-            PreviewPath = previewPath,
             Title = string.IsNullOrWhiteSpace(project?.Title) ? Path.GetFileName(projectDirectory) : project!.Title,
             ProjectDirectory = projectDirectory,
         };
@@ -340,7 +326,7 @@ public static class WallpaperEngineLocator
         return null;
     }
 
-    private sealed record ProjectInfo(string? Type, string? Preview, string? Title);
+    private sealed record ProjectInfo(string? Type, string? Title);
 
     private static ProjectInfo? ReadProject(string? projectDirectory)
     {
@@ -360,7 +346,6 @@ public static class WallpaperEngineLocator
             var root = document.RootElement;
             return new ProjectInfo(
                 StringOrNull(root, "type"),
-                StringOrNull(root, "preview"),
                 StringOrNull(root, "title"));
         }
         catch (Exception)
@@ -377,10 +362,9 @@ public static class WallpaperEngineLocator
             : null;
 
     /// <summary>
-    /// config.json stores forward slashes even on Windows; both separators appear in
-    /// <c>project.json</c>'s <c>preview</c>. Normalise to the platform separator before touching the disk.
-    /// Relative values (such as a project's <c>preview</c>) are resolved against
-    /// <paramref name="baseDirectory"/>.
+    /// config.json stores forward slashes even on Windows; both separators appear in the config's
+    /// <c>file</c> value. Normalise to the platform separator before touching the disk.
+    /// Relative values are resolved against <paramref name="baseDirectory"/>.
     /// </summary>
     private static string? ResolvePath(string raw, string baseDirectory)
     {
@@ -425,45 +409,4 @@ public static class WallpaperEngineLocator
         "web" => WallpaperEngineKind.Web,
         _ => null,
     };
-
-    /// <summary>
-    /// Stills for a project wallpaper, in decreasing order of how much we trust them. Real projects
-    /// frequently declare a <c>preview</c> that is not on disk (the author renamed the texture), so
-    /// the generic <c>preview.jpg</c> and finally the raw scene texture are worth trying.
-    /// </summary>
-    private static string? FindPreview(string? projectDirectory, string? declaredPreview)
-    {
-        if (string.IsNullOrEmpty(projectDirectory) || !Directory.Exists(projectDirectory)) return null;
-
-        if (!string.IsNullOrWhiteSpace(declaredPreview))
-        {
-            var declared = ResolvePath(declaredPreview!, projectDirectory!);
-            if (declared is not null && File.Exists(declared)) return declared;
-        }
-
-        foreach (var name in PreviewFileNames)
-        {
-            var candidate = Path.Combine(projectDirectory!, name);
-            if (File.Exists(candidate)) return candidate;
-        }
-
-        return FindFirstImage(Path.Combine(projectDirectory!, "materials"));
-    }
-
-    private static string? FindFirstImage(string directory)
-    {
-        try
-        {
-            if (!Directory.Exists(directory)) return null;
-
-            return Directory.EnumerateFiles(directory)
-                .Where(f => ImageExtensions.Contains(Path.GetExtension(f), StringComparer.OrdinalIgnoreCase))
-                .OrderBy(f => f, StringComparer.OrdinalIgnoreCase)
-                .FirstOrDefault();
-        }
-        catch (Exception)
-        {
-            return null;
-        }
-    }
 }

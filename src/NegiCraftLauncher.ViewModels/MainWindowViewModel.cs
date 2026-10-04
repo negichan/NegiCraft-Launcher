@@ -298,9 +298,9 @@ public partial class MainWindowViewModel : ViewModelBase
     /// <summary>
     /// 把 Wallpaper Engine 当前选中的壁纸搬过来。
     ///
-    /// <para>只有视频类壁纸能原样播；场景 / 网页 / 应用类壁纸要靠 WE 自己的引擎渲染，
-    /// 我们渲染不了，退而求其次用它的预览图当静态背景，并明确告诉用户"这不是视频"。
-    /// 拿不到预览图时只提示、不改背景 —— 悄悄换成别的比什么都不做更糟。</para>
+    /// <para><b>只搬视频壁纸。</b>场景 / 网页 / 应用三类要靠 WE 自己的引擎渲染（场景是实时 3D 管线、
+    /// 网页是内嵌浏览器），我们渲染不了；也刻意<b>不做</b>「拿 preview.jpg 当静态背景」的兜底 ——
+    /// 那等于把用户的动态壁纸悄悄换成一张截图，比什么都不做更糟。这几类一律只报类型、不动背景。</para>
     /// </summary>
     [RelayCommand]
     private void SyncWallpaperEngine()
@@ -314,35 +314,29 @@ public partial class MainWindowViewModel : ViewModelBase
 
         var title = string.IsNullOrWhiteSpace(current.Title) ? "当前壁纸" : current.Title!;
 
-        if (current.Kind == WallpaperEngineKind.Video)
+        if (current.Kind != WallpaperEngineKind.Video)
         {
-            if (current.VideoPath is null)
-            {
-                ShowBanner($"Wallpaper Engine 的「{title}」是视频，但文件已经不在原处了。");
-                return;
-            }
-
-            SetVideoBackground(current.VideoPath);
-            ShowBanner($"已同步 Wallpaper Engine 的视频壁纸：{title}");
+            ShowBanner($"Wallpaper Engine 的「{title}」是{DescribeKind(current.Kind)}，目前只支持视频壁纸。");
             return;
         }
 
-        if (current.PreviewPath is null)
+        if (current.VideoPath is null)
         {
-            ShowBanner($"Wallpaper Engine 的「{title}」是{DescribeKind(current.Kind)}壁纸，拿不到预览图。");
+            ShowBanner($"Wallpaper Engine 的「{title}」是视频，但文件已经不在原处了。");
             return;
         }
 
-        SetBackground(current.PreviewPath);
-        ShowBanner($"Wallpaper Engine 的「{title}」是{DescribeKind(current.Kind)}壁纸，已用预览图代替。");
+        SetVideoBackground(current.VideoPath);
+        ShowBanner($"已同步 Wallpaper Engine 的视频壁纸：{title}");
     }
 
+    /// <summary>壁纸类型的中文说法，直接接在「是……」后面用，所以自带「壁纸」二字。</summary>
     private static string DescribeKind(WallpaperEngineKind kind) => kind switch
     {
-        WallpaperEngineKind.Scene => "场景",
-        WallpaperEngineKind.Application => "应用",
-        WallpaperEngineKind.Web => "网页",
-        _ => "未知类型的",
+        WallpaperEngineKind.Scene => "场景壁纸",
+        WallpaperEngineKind.Web => "网页壁纸",
+        WallpaperEngineKind.Application => "应用壁纸",
+        _ => "未知类型壁纸",
     };
 
     [RelayCommand]
