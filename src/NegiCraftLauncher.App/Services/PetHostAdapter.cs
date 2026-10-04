@@ -40,6 +40,14 @@ internal sealed class PetHostAdapter : IPetHost
 
     public bool CanOpenLauncher => true;
 
+    // GPU 后端目前只在 Windows(WPF) 侧存在（Viewport3D）。这里照契约把值存进启动器设置，
+    // 免得两边共用一个 settings.json 时把 Windows 侧选的值抹掉；Avalonia 的桌宠窗口读到了也不会用。
+    public bool UseGpu
+    {
+        get => _vm.PetUseGpu;
+        set => _vm.PetUseGpu = value;
+    }
+
     public void OpenLauncher()
     {
         _launcherWindow.IsVisible = true;
@@ -67,6 +75,10 @@ internal sealed class PetHostAdapter : IPetHost
         if (e.PropertyName == nameof(MainWindowViewModel.EffectivePetName))
         {
             _listeners?.Invoke(this, new PropertyChangedEventArgs(nameof(EffectiveName)));
+        }
+        else if (e.PropertyName == nameof(MainWindowViewModel.PetUseGpu))
+        {
+            _listeners?.Invoke(this, new PropertyChangedEventArgs(nameof(UseGpu)));
         }
     }
 }

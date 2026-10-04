@@ -39,6 +39,20 @@ internal sealed class StandalonePetHost : IPetHost
 
     public bool CanOpenLauncher => false;
 
+    /// <summary>独立版没有启动器设置页，所以这个值只由桌宠自己的右键菜单改，存在 pet.json 里。</summary>
+    public bool UseGpu
+    {
+        get => _settings.UseGpu;
+        set
+        {
+            if (_settings.UseGpu == value) return;
+
+            _settings.UseGpu = value;
+            _settings.Save();
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(UseGpu)));
+        }
+    }
+
     /// <summary>永远走不到：<see cref="CanOpenLauncher"/> 为 false 时菜单项是隐藏的。</summary>
     public void OpenLauncher()
     {

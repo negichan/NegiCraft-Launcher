@@ -60,6 +60,12 @@
                     <MenuItem Header="大 (125%)" Click="OnScale125Click" />
                     <MenuItem Header="特大 (150%)" Click="OnScale150Click" />
                 </MenuItem>
+                <MenuItem Header="GPU 渲染（硬件加速）" x:Name="MenuGpuRender" Click="OnToggleGpuRenderClick">
+                    <MenuItem.Icon>
+                        <materialIcons:MaterialIcon x:Name="MenuGpuRenderIcon" Kind="Check" Width="16" Height="16"
+                                                    Visibility="Collapsed" />
+                    </MenuItem.Icon>
+                </MenuItem>
                 <MenuItem Header="潜行动作" x:Name="MenuSneak" Click="OnToggleSneakClick">
                     <MenuItem.Icon>
                         <materialIcons:MaterialIcon x:Name="MenuSneakIcon" Kind="Check" Width="16" Height="16"

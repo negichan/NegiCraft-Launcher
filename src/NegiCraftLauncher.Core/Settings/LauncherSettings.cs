@@ -48,6 +48,17 @@ public sealed class LauncherSettings
     /// <summary>桌宠独立自定义名称；为 null 或空时继承当前主账号名称。</summary>
     public string? PetCustomName { get; set; }
 
+    /// <summary>
+    ///     桌宠是否用 GPU 硬件渲染。
+    ///
+    ///     <para>只有 Windows(WPF) 侧有这条后端 —— 那边是把模型塞进 <c>Viewport3D</c> 交给显卡；
+    ///     Avalonia 侧本来就走 OpenGL，读到了也无处可用，直接忽略即可。所以这个字段跨平台共享、
+    ///     语义是"我在这台机器上要不要开硬件后端"。</para>
+    ///
+    ///     <para>默认 false：软件光栅化是回归基线（确定性、可离屏出图），GPU 是可选加速项。</para>
+    /// </summary>
+    public bool PetUseGpu { get; set; }
+
     public string EffectiveGameRoot =>
         string.IsNullOrWhiteSpace(GameRoot) ? NclPaths.DefaultGameRoot : GameRoot;
 

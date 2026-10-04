@@ -301,6 +301,7 @@ public partial class PetWindow : Window
 
         UpdateResetNameMenuState();
         PopulateAccountMenu();
+        ApplyGpuSettingFromHost();
         StartShiftMonitoring();
         UpdateInteractHook();
         UpdateInteractUi();
@@ -340,6 +341,13 @@ public partial class PetWindow : Window
 
     private void OnHostPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
+        // 设置页里改了 GPU 开关 —— 已经开着的桌宠要立刻换后端，不能等重开。
+        if (e.PropertyName == nameof(IPetHost.UseGpu))
+        {
+            ApplyGpuSettingFromHost();
+            return;
+        }
+
         if (e.PropertyName != nameof(IPetHost.EffectiveName)) return;
 
         if (_host != null && !string.IsNullOrWhiteSpace(_host.EffectiveName))
@@ -347,6 +355,36 @@ public partial class PetWindow : Window
             PetPreview.PlayerName = _host.EffectiveName;
             UpdateResetNameMenuState();
         }
+    }
+
+    // ==========================================================
+    // 渲染后端（GPU / 软件）
+    // ==========================================================
+
+    /// <summary>
+    /// 把宿主存着的 GPU 开关应用到预览控件。宿主为 null（裸构造，只有 XAML 设计器会走）时
+    /// 保持默认的软件后端。
+    ///
+    /// <para>值本身不存在窗口里 —— <see cref="SkinPreviewControl.UseGpu"/> 就是唯一真相，
+    /// 免得菜单勾选状态和实际后端漂开。</para>
+    /// </summary>
+    private void ApplyGpuSettingFromHost()
+    {
+        PetPreview.UseGpu = _host?.UseGpu ?? false;
+        MenuGpuRenderIcon.Visibility = Vis(PetPreview.UseGpu);
+    }
+
+    /// <summary>
+    /// 切换 GPU / 软件渲染后端。值写回宿主（进程内托管 → 启动器设置；独立版 → pet.json），
+    /// 下次开桌宠沿用。设置页那边改的话由 <see cref="OnHostPropertyChanged"/> 兜住。
+    /// </summary>
+    private void OnToggleGpuRenderClick(object sender, RoutedEventArgs e)
+    {
+        var useGpu = !PetPreview.UseGpu;
+        PetPreview.UseGpu = useGpu;
+        MenuGpuRenderIcon.Visibility = Vis(useGpu);
+
+        if (_host is not null) _host.UseGpu = useGpu;
     }
 
     private void UpdateResetNameMenuState()

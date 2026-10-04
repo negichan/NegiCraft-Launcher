@@ -946,6 +946,9 @@
                                 <Button Style="{StaticResource SetNavBtnStyle}" Content="外观"
                                         neg:Negi.On="{Binding CurrentSettingsTab, Converter={StaticResource Equals}, ConverterParameter=外观}"
                                         Command="{Binding SelectSettingsTabCommand}" CommandParameter="外观" />
+                                <Button Style="{StaticResource SetNavBtnStyle}" Content="桌宠"
+                                        neg:Negi.On="{Binding CurrentSettingsTab, Converter={StaticResource Equals}, ConverterParameter=桌宠}"
+                                        Command="{Binding SelectSettingsTabCommand}" CommandParameter="桌宠" />
                                 <Button Style="{StaticResource SetNavBtnStyle}" Content="关于"
                                         neg:Negi.On="{Binding CurrentSettingsTab, Converter={StaticResource Equals}, ConverterParameter=关于}"
                                         Command="{Binding SelectSettingsTabCommand}" CommandParameter="关于" />
@@ -1191,6 +1194,31 @@
                                                     </Button>
                                                 </neg:NegiStackPanel>
                                             </neg:NegiGrid>
+                                        </Border>
+                                    </neg:NegiStackPanel>
+                                </Border>
+
+                                <!-- 桌宠 -->
+                                <Border Background="#111114" BorderBrush="#26262b" BorderThickness="1" CornerRadius="14" Padding="18,0"
+                                        Visibility="{Binding CurrentSettingsTab, Converter={StaticResource Equals}, ConverterParameter=桌宠}">
+                                    <neg:NegiStackPanel>
+                                        <Border Height="58" BorderBrush="#26262b" BorderThickness="0,0,0,1">
+                                            <neg:NegiGrid Columns="* Auto">
+                                                <neg:NegiStackPanel VerticalAlignment="Center" Spacing="2" Margin="0,0,16,0">
+                                                    <TextBlock Text="GPU 渲染（硬件加速）" FontWeight="Medium" Foreground="#fafafa" />
+                                                    <TextBlock Text="桌宠改用显卡渲染。关闭时走软件光栅化，稳定锁 60 帧、静止时停渲染。"
+                                                               FontSize="12" Foreground="#71717a" TextWrapping="Wrap" />
+                                                </neg:NegiStackPanel>
+                                                <CheckBox Grid.Column="1" IsChecked="{Binding PetUseGpu}" />
+                                            </neg:NegiGrid>
+                                        </Border>
+
+                                        <Border Height="58">
+                                            <neg:NegiStackPanel VerticalAlignment="Center" Spacing="2">
+                                                <TextBlock Text="仅对桌宠生效" FontWeight="Medium" Foreground="#fafafa" />
+                                                <TextBlock Text="启动器主页的皮肤预览始终走软件光栅化 —— 那条路要出确定性截图做像素回归。"
+                                                           FontSize="12" Foreground="#71717a" TextWrapping="Wrap" />
+                                            </neg:NegiStackPanel>
                                         </Border>
                                     </neg:NegiStackPanel>
                                 </Border>
