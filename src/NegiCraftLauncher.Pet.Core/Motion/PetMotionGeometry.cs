@@ -21,9 +21,19 @@ public readonly record struct PetStage(double Width, double Height, double Scale
 /// <summary>
 /// 一帧物理需要的全部外部输入。宿主每帧构造一次，内核不持有任何窗口引用。
 /// </summary>
+/// <param name="Stage">舞台几何。</param>
+/// <param name="WorkArea">屏幕工作区（DIP）—— 内核拿它的下边缘当地板、左右边当墙。</param>
+/// <param name="Window">窗口左上角（DIP）。</param>
+/// <param name="Cursor">光标（DIP），没有就 null。</param>
+/// <param name="CurrentYawDeg">当前朝向，宿主持有。</param>
+/// <param name="Surfaces">
+/// 可站立的窗口顶边（DIP）。宿主可以按 ~150ms 节流重建，内核每帧只读。
+/// <b>null = 只有工作区地板</b>（非 Windows 平台、或枚举失败时的兜底）。
+/// </param>
 public readonly record struct PetMotionContext(
     PetStage Stage,
     PetWorkArea WorkArea,
     PetPoint Window,
     PetPoint? Cursor,
-    float CurrentYawDeg);
+    float CurrentYawDeg,
+    IReadOnlyList<PetSurface>? Surfaces = null);
