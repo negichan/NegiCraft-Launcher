@@ -37,6 +37,18 @@ public sealed class SkinPreviewControl : Grid
     private const double ModelTop = 14;
     private const double NametagTop = 6;
 
+    /// <summary>
+    /// 渲染节流：桌面宠物按 <b>60fps</b> 就够了（计划 §9 的性能预算就是"稳定 60fps"）。
+    ///
+    /// <para><b>为什么必须封顶</b>：<see cref="CompositionTarget.Rendering"/> 的频率是 WPF 合成
+    /// 决定的，不保证等于显示器刷新率 —— 软件合成 / 没有 DWM 的环境下实测能到 <b>~250 次/秒</b>。
+    /// 而这里每帧都要跑一遍软件光栅化，不封顶就是白烧 CPU。</para>
+    ///
+    /// <para><c>dt</c> 是从墙钟算的，所以节流只改"多久画一次"，不改动画速度。
+    /// 显示器刷新率更高时想跟着提，把这个常数改小即可。</para>
+    /// </summary>
+    private const double MinFrameSeconds = 1.0 / 60.0;
+
     /// <summary>字体在**本程序集**里，所以要带 <c>;component</c>；写成裸 <c>/Assets/...</c>
     /// 会去入口程序集找，找不到就静默回退成系统字体。</summary>
     private const string FontUri =
@@ -201,6 +213,14 @@ public sealed class SkinPreviewControl : Grid
     private Window? _hostWindow;
     private string _loadedUser = string.Empty;
 
+    // ---- 「静止时停渲染」用（计划 §9 的性能预算：idle 占用 ≈ 0）----
+    // 姿势那边的脏标记归 SkinPoseDriver 管（旋转 / 转头 / 姿势开关 / 挥击）。
+    // 视图这边还有三件事不归它管，各记一份：
+    private bool _viewDirty = true;                 // 可见性 / DPI / 加载完成这类"视图层"变化
+    private double _lastJumpOffset = double.NaN;    // 跳跃位移（它只是把位图往上挪，不动姿势）
+    private long _frames;                           // 真正光栅化过的帧数（诊断 / 验收用）
+    private bool _wasVisible;
+
     public SkinPreviewControl()
     {
         _renderer.EnableTop = true;
@@ -293,8 +313,11 @@ public sealed class SkinPreviewControl : Grid
     /// <summary>是否画了第二层覆盖贴图（诊断用）。老皮肤（64x32）应当是 false。</summary>
     public bool LiveTopLayer => _renderer.EnableTop;
 
-    /// <summary>渲染诊断串：视口像素尺寸 + 上一帧耗时（对齐 Avalonia 侧的 <c>RenderStats</c> 字段位置）。</summary>
-    public string RenderStats => $"{_pixelWidth}x{_pixelHeight} {_lastFrameMs:F2}ms";
+    /// <summary>
+    /// 渲染诊断串：视口像素尺寸 + 上一帧耗时 + 累计光栅化帧数。
+    /// <c>frames=</c> 是"静止时停渲染"的验收锚点 —— 不动的时候它应当停止增长。
+    /// </summary>
+    public string RenderStats => $"{_pixelWidth}x{_pixelHeight} {_lastFrameMs:F2}ms frames={_frames}";
 
     /// <summary>模型当前朝向（度）。</summary>
     public float CurrentYawDeg => _pose.CurrentYawDeg;
@@ -315,6 +338,14 @@ public sealed class SkinPreviewControl : Grid
     {
         // 对齐到整数像素：否则材质过滤与文字栅格化会产生亚像素微颤。
         var snapped = Math.Round(jumpOffsetY);
+        // 只在这一格真的动了时才标脏 —— 桌宠心跳每 16ms 喂一次同样的值，不挡的话
+        // "静止时停渲染"就永远生效不了。
+        if (snapped != _lastJumpOffset)
+        {
+            _lastJumpOffset = snapped;
+            _viewDirty = true;
+        }
+
         _modelShift.Y = snapped;
         _nametagShift.Y = snapped;
         _shadowShift.Y = 0;
@@ -403,6 +434,7 @@ public sealed class SkinPreviewControl : Grid
 
     private void OnLoaded(object sender, RoutedEventArgs e)
     {
+        _viewDirty = true;
         AttachLoop();
         if (_loadedUser.Length == 0 && !string.IsNullOrWhiteSpace(PlayerName)) LoadFromUsername(PlayerName);
     }
@@ -421,6 +453,8 @@ public sealed class SkinPreviewControl : Grid
             _hostWindow = window;
             // 头跟着光标转：挂窗口级的 PreviewMouseMove，鼠标在任意子控件上都能收到。
             window.PreviewMouseMove += OnHostMouseMove;
+            // 窗口被拖到缩放率不同的显示器上时位图尺寸要跟着变 —— 静止时也得重画一次。
+            window.DpiChanged += OnHostDpiChanged;
         }
     }
 
@@ -433,19 +467,45 @@ public sealed class SkinPreviewControl : Grid
         if (_hostWindow is not null)
         {
             _hostWindow.PreviewMouseMove -= OnHostMouseMove;
+            _hostWindow.DpiChanged -= OnHostDpiChanged;
             _hostWindow = null;
         }
     }
 
+    private void OnHostDpiChanged(object sender, DpiChangedEventArgs e) => _viewDirty = true;
+
     private void OnRendering(object? sender, EventArgs e)
     {
         // 主页被切走（面板 Collapsed）或窗口最小化时不用画。
-        if (!IsVisible || ActualWidth <= 0) return;
+        if (!IsVisible || ActualWidth <= 0)
+        {
+            _wasVisible = false;
+            return;
+        }
+
+        // 从"看不见"回到"看得见"要补一帧 —— 否则隐藏期间攒下的变化永远画不出来。
+        if (!_wasVisible)
+        {
+            _wasVisible = true;
+            _viewDirty = true;
+        }
+
+        // ★ 静止时**不重画**：这是计划 §9 的性能预算那条"idle 占用：静止时 CPU ≈ 0（停渲染）"。
+        //   桌面上的桌宠大部分时间是不动的，让它每秒白跑几十次软件光栅化毫无意义。
+        //   代价只有一个：待机呼吸会停在当前相位（±1.7°，约 1 像素）。
+        //   只要姿势那边有动画（走/跑/跳/蹲/被拎/挥击）或视图这边有变化（跳跃位移、旋转、
+        //   转头、换肤、DPI、重新可见），立刻恢复逐帧重画。
+        if (!_pose.NeedsRepaint && !_viewDirty) return;
 
         var now = DateTime.UtcNow;
         var dt = (now - _lastFrame).TotalSeconds;
+
+        // ★ 再封顶 60fps（见 MinFrameSeconds）。**脏标记故意不清** —— 这一帧只是"还没到时候"，
+        //   不是"不用画"；下一帧一到点就会画出来。
+        if (dt < MinFrameSeconds) return;
+
         _lastFrame = now;
-        if (dt <= 0) return;
+        _viewDirty = false;
         if (dt > 0.1) dt = 0.1;
 
         _pose.Update(dt);
@@ -482,6 +542,7 @@ public sealed class SkinPreviewControl : Grid
         var started = System.Diagnostics.Stopwatch.GetTimestamp();
         _renderer.RenderTo(_buffer);
         _lastFrameMs = System.Diagnostics.Stopwatch.GetElapsedTime(started).TotalMilliseconds;
+        _frames++;
 
         _bitmap.WritePixels(new Int32Rect(0, 0, _pixelWidth, _pixelHeight), _buffer.Pixels, _pixelWidth * 4, 0);
     }

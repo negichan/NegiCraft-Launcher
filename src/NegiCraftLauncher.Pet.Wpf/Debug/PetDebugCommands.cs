@@ -306,6 +306,7 @@ public static class PetDebugCommands
             case "pet-state":
                 // 桌宠实时状态只读视图：它真正在渲染的名字（由宿主适配器负责保持同步），
                 // 外加模式 / 置顶 / 菜单开合。
+                // `render=` 里的 `frames=` 是**静止时停渲染**的验收锚点：桌宠不动时它应当停止增长。
                 return PetDebugMailbox.Ui(() =>
                 {
                     var preview = Preview(pet);
@@ -314,7 +315,8 @@ public static class PetDebugCommands
                     return $"petActive={isActive} petPlayerName={preview?.PlayerName ?? "n/a"} " +
                            $"effectiveName={host?.EffectiveName ?? "<null>"} customName={host?.CustomName ?? "<null>"} " +
                            $"mode={pet.CurrentMode} topmost={pet.Topmost} " +
-                           $"menuOpen={pet.IsPetContextMenuOpen} accounts=[{accounts}]";
+                           $"menuOpen={pet.IsPetContextMenuOpen} accounts=[{accounts}] " +
+                           $"render={preview?.RenderStats ?? "n/a"}";
                 });
             case "pet-hwnd":
                 // 只读探测桌宠窗口真实的 Win32 样式。这决定了 Alt+Tab / 任务视图 / 抢前台

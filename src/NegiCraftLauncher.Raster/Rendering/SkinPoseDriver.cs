@@ -59,21 +59,61 @@ public sealed class SkinPoseDriver
     /// <summary>模型当前朝向（度）。<c>RotateModel</c> 累加它，头部相对角由它算。</summary>
     public float CurrentYawDeg { get; private set; } = 24f;
 
-    public bool Sneaking { get; set; }
+    // 姿势 / 朝向被外部改过、但还没画出来的标记。与 IsAnimating 合起来就是"这一帧要不要重画"。
+    private bool _dirty = true;
 
-    public bool Dangling { get; set; }
+    private bool _sneaking;
+    private bool _dangling;
+    private bool _walking;
+    private bool _jumping;
+    private bool _sprinting;
 
-    public bool Walking { get; set; }
+    public bool Sneaking
+    {
+        get => _sneaking;
+        set { if (_sneaking != value) { _sneaking = value; _dirty = true; } }
+    }
 
-    public bool Jumping { get; set; }
+    public bool Dangling
+    {
+        get => _dangling;
+        set { if (_dangling != value) { _dangling = value; _dirty = true; } }
+    }
 
-    public bool Sprinting { get; set; }
+    public bool Walking
+    {
+        get => _walking;
+        set { if (_walking != value) { _walking = value; _dirty = true; } }
+    }
+
+    public bool Jumping
+    {
+        get => _jumping;
+        set { if (_jumping != value) { _jumping = value; _dirty = true; } }
+    }
+
+    public bool Sprinting
+    {
+        get => _sprinting;
+        set { if (_sprinting != value) { _sprinting = value; _dirty = true; } }
+    }
+
+    /// <summary>
+    /// 这一帧需不需要重画？—— 动画还在跑（<see cref="IsAnimating"/>），或者姿势 / 朝向被外部改过
+    /// （旋转、转头、蹲/走/跳/跑开关、挥击、被拎起来）。
+    ///
+    /// <para><b>宿主用它来"静止时停渲染"</b>：桌面上的桌宠大部分时间是不动的，让它每秒白跑
+    /// 60 次软件光栅化没有意义 —— 这是计划 §9 的性能预算里那条"idle 占用：静止时 CPU ≈ 0"。
+    /// 唯一的代价是待机呼吸会停在当前相位（幅度 ±1.7°、约 1 像素，看不出来）。</para>
+    /// </summary>
+    public bool NeedsRepaint => _dirty || IsAnimating;
 
     /// <summary>启动一次挥臂；传 <paramref name="parkAt"/> 则把动画定格在那个进度（0-1）。</summary>
     public void TriggerAttack(double? parkAt = null)
     {
         _attackT = parkAt ?? 0.0;
         _attackParked = parkAt.HasValue;
+        _dirty = true;
     }
 
     /// <summary>把模型摆回初始姿态：位置归零、朝向复位。</summary>
@@ -85,6 +125,7 @@ public sealed class SkinPoseDriver
         _renderer.Rot(0, CurrentYawDeg * 2f * (float)Math.PI);
         UpdateHeadRotate();
         UpdatePose();
+        _dirty = true;
     }
 
     /// <summary>绕竖直轴转 <paramref name="deltaYawDeg"/> 度。</summary>
@@ -96,17 +137,23 @@ public sealed class SkinPoseDriver
 
         _renderer.Rot(0, deltaYawDeg * 2f * (float)Math.PI);
         UpdateHeadRotate();
+        _dirty = true;
     }
 
     /// <summary>头部看向某个方向（相对世界，度）。</summary>
     public void SetHeadLookAt(float targetPitchDeg, float targetYawDeg)
     {
+        // 目标没变就什么都不做 —— 宿主的心跳是每 16ms 喂一次同样的值，
+        // 不挡住的话脏标记会一直被点亮，"静止时停渲染"永远生效不了。
+        if (_lastTargetPitchDeg == targetPitchDeg && _lastTargetYawDeg == targetYawDeg) return;
+
         _lastTargetPitchDeg = targetPitchDeg;
         _lastTargetYawDeg = targetYawDeg;
         UpdateHeadRotate();
+        _dirty = true;
     }
 
-    /// <summary>推进 <paramref name="dt"/> 秒，然后 Tick 渲染器并重算姿态。</summary>
+    /// <summary>推进 <paramref name="dt"/> 秒，然后 Tick 渲染器并重算姿态。跑完即清掉脏标记。</summary>
     public void Update(double dt)
     {
         _idleClock += dt;
@@ -128,12 +175,22 @@ public sealed class SkinPoseDriver
         _renderer.Tick(dt);
         UpdateHeadRotate();
         UpdatePose();
+        _dirty = false;
     }
 
-    /// <summary>还有动画在跑吗？没有的话上层可以停下来省点 CPU。</summary>
+    /// <summary>
+    /// 还有动画在跑吗？没有的话上层可以停下来省点 CPU。
+    ///
+    /// <para><b>与 Avalonia 侧 <c>SkinRenderControl.OnOpenGlRender</c> 末尾那段判据逐条一致</b>
+    /// （那边是生产在跑的版本，这里是它的具名版）—— 两端的渲染节奏要对齐。
+    /// 蹲下只在**过渡中**算"在动"：蹲稳之后姿势是定的，没必要继续重画。</para>
+    ///
+    /// <para>注意它**不含待机呼吸**（那是常驻的），所以"静止"是真的静止 ——
+    /// 这也是为什么 <see cref="NeedsRepaint"/> 要另外记一份 <c>_dirty</c>。</para>
+    /// </summary>
     public bool IsAnimating =>
         _dangleK > 0 || Dangling ||
-        _sneakK > 0 || Sneaking ||
+        (_sneakK > 0 && _sneakK < 1) ||
         _walkK > 0 || Walking ||
         _jumpK > 0 || Jumping ||
         (_attackT < 1.0 && !_attackParked);
