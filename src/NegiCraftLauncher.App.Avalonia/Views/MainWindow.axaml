@@ -325,9 +325,12 @@
         </Style>
     </Window.Styles>
 
-    <!-- Outermost Window Shell: 22px border radius, background #09090b -->
+    <!-- Outermost Window Shell: 22px border radius, background #09090b,
+         1px border #26262b (BorderLineBrush) — matches design/mockup.html .window. -->
     <Border x:Name="Shell"
             Background="#09090b"
+            BorderBrush="{DynamicResource BorderLineBrush}"
+            BorderThickness="1"
             CornerRadius="22"
             ClipToBounds="True"
             BoxShadow="0 30 80 -20 #CC000000">
