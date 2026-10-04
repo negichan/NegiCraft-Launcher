@@ -465,6 +465,13 @@
                     <Image Source="{Binding CustomBackgroundPath, Converter={StaticResource PathToBitmap}}"
                            Stretch="UniformToFill"
                            Visibility="{Binding IsCustomBackground, Converter={StaticResource BoolToVis}}" />
+                    <!-- 视频壁纸。与上面两张图互斥（VM 里保证），排在最后所以它在上层。
+                         Fill 由 MainWindow 代码挂：同一个 DrawingBrush 还要挂到侧栏背板上，
+                         两处共用一份 MediaPlayer，才能只解码一次且画面严格对齐。
+                         放在 BgLayer 里是为了跟着 BgBlur 一起模糊。 -->
+                    <Rectangle x:Name="BgVideo"
+                               Stretch="Fill"
+                               Visibility="{Binding IsVideoBackground, Converter={StaticResource BoolToVis}}" />
                 </Grid>
 
                 <!-- 亮度：负值压黑、正值提白 -->
@@ -554,6 +561,20 @@
                             <BlurEffect Radius="18" />
                         </Image.Effect>
                     </Image>
+                    <!-- 视频壁纸也要在这里再画一遍，否则玻璃后面还是旧静态背景，一眼假。
+                         和上面两张图同样的对齐手法（Margin -12,-12 + 壳尺寸）。
+                         Fill 与 BgVideo 共用同一个 DrawingBrush（MainWindow 挂上去）。 -->
+                    <Rectangle x:Name="SidebarVideo"
+                               Stretch="Fill"
+                               HorizontalAlignment="Left" VerticalAlignment="Top"
+                               Margin="-12,-12,0,0"
+                               Width="{Binding ActualWidth, ElementName=Shell}"
+                               Height="{Binding ActualHeight, ElementName=Shell}"
+                               Visibility="{Binding IsVideoBackground, Converter={StaticResource BoolToVis}}">
+                        <Rectangle.Effect>
+                            <BlurEffect Radius="18" />
+                        </Rectangle.Effect>
+                    </Rectangle>
                     <!-- 与背景层同一条底部遮罩，玻璃才不会更亮 -->
                     <Border>
                         <Border.Background>
