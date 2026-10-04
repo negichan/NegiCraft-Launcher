@@ -1,3 +1,4 @@
+using System;
 using MinecraftSkinRender;
 
 namespace NegiCraftLauncher.Raster.Rendering;
@@ -8,6 +9,11 @@ namespace NegiCraftLauncher.Raster.Rendering;
 /// <para>它只跟 <see cref="SkinRenderBase"/> 打交道（Tick / Rot / SetPos / 各部件旋转），
 /// 所以 WPF 的启动器主页预览和 WPF 桌宠可以共用同一份；Avalonia 侧那份原样留在
 /// <c>SkinRenderControl</c> 里不动 —— 它已经在跑，没有必要为一致性去动一个能用的东西。</para>
+///
+/// <para><b>可以同时驱动多个后端</b>（构造时传多个）。桌宠开 GPU 模式时就是这么用的：
+/// 显示走 <c>SkinRenderGpu</c>，同时把 <c>SkinRenderSoftware</c> 一起驱动着 ——
+/// 后者不参与显示，只为离屏截图（<c>SaveSnapshot</c> / 调试桥 <c>pet-skinsnap</c>）保留一份
+/// 状态同步的软件后端。WPF 的 3D 内容抓不到离屏位图，没有这一份就没法出图。</para>
 ///
 /// <para>数值全部照抄 Avalonia 版，改动任何一条都会让两个平台的姿态对不上：</para>
 /// <list type="bullet">
@@ -40,7 +46,8 @@ public sealed class SkinPoseDriver
     // 空手挥击在 Minecraft 里是 6 个游戏刻。
     private const double AttackDuration = 0.3;
 
-    private readonly SkinRenderBase _renderer;
+    /// <summary>姿势要同时施加到哪些后端。至少一个；多个时状态必然一致（同一份输入、同一份数学）。</summary>
+    private readonly SkinRenderBase[] _renderers;
 
     private double _idleClock;
     private double _walkClock;
@@ -54,7 +61,11 @@ public sealed class SkinPoseDriver
     private float _lastTargetPitchDeg;
     private float _lastTargetYawDeg;
 
-    public SkinPoseDriver(SkinRenderBase renderer) => _renderer = renderer;
+    public SkinPoseDriver(params SkinRenderBase[] renderers)
+    {
+        if (renderers.Length == 0) throw new ArgumentException("至少要有一个后端。", nameof(renderers));
+        _renderers = renderers;
+    }
 
     /// <summary>模型当前朝向（度）。<c>RotateModel</c> 累加它，头部相对角由它算。</summary>
     public float CurrentYawDeg { get; private set; } = 24f;
@@ -119,10 +130,14 @@ public sealed class SkinPoseDriver
     /// <summary>把模型摆回初始姿态：位置归零、朝向复位。</summary>
     public void Reset()
     {
-        _renderer.ResetPos();
-        // 抬 0.3 个单位，头落在 Y≈36px、脚在 Y≈209px。
-        _renderer.SetPos(0, 0.3f);
-        _renderer.Rot(0, CurrentYawDeg * 2f * (float)Math.PI);
+        foreach (var r in _renderers)
+        {
+            r.ResetPos();
+            // 抬 0.3 个单位，头落在 Y≈36px、脚在 Y≈209px。
+            r.SetPos(0, 0.3f);
+            r.Rot(0, CurrentYawDeg * 2f * (float)Math.PI);
+        }
+
         UpdateHeadRotate();
         UpdatePose();
         _dirty = true;
@@ -135,7 +150,8 @@ public sealed class SkinPoseDriver
         while (CurrentYawDeg > 180f) CurrentYawDeg -= 360f;
         while (CurrentYawDeg < -180f) CurrentYawDeg += 360f;
 
-        _renderer.Rot(0, deltaYawDeg * 2f * (float)Math.PI);
+        foreach (var r in _renderers) r.Rot(0, deltaYawDeg * 2f * (float)Math.PI);
+
         UpdateHeadRotate();
         _dirty = true;
     }
@@ -172,7 +188,8 @@ public sealed class SkinPoseDriver
         _jumpK = Math.Clamp(_jumpK + ((Jumping ? 1 : -1) * dt / JumpTransition), 0, 1);
         if (_attackT < 1.0 && !_attackParked) _attackT = Math.Min(1.0, _attackT + dt / AttackDuration);
 
-        _renderer.Tick(dt);
+        foreach (var r in _renderers) r.Tick(dt);
+
         UpdateHeadRotate();
         UpdatePose();
         _dirty = false;
@@ -219,10 +236,12 @@ public sealed class SkinPoseDriver
             headRoll = dk * shakeRoll;
         }
 
-        _renderer.HeadRotate = new System.Numerics.Vector3(
+        var rotate = new System.Numerics.Vector3(
             headRoll * 2.0f * (float)Math.PI,
             headPitch * 2.0f * (float)Math.PI,
             headYaw * 2.0f * (float)Math.PI);
+
+        foreach (var r in _renderers) r.HeadRotate = rotate;
     }
 
     private void UpdatePose()
@@ -262,12 +281,21 @@ public sealed class SkinPoseDriver
 
         var shoulderOffsetZ = (float)(0.75 * Math.Sin(bodyTurn)) * (1 - dk);
 
-        _renderer.BodyPos = new System.Numerics.Vector3(0, CrouchBodyY * px, CrouchBodyZ * px);
-        _renderer.HeadPos = new System.Numerics.Vector3(0, CrouchHeadY * px, 0);
-        _renderer.LeftArmPos = new System.Numerics.Vector3(0, CrouchArmY * px, (CrouchArmZ * px) - shoulderOffsetZ);
-        _renderer.RightArmPos = new System.Numerics.Vector3(0, CrouchArmY * px, (CrouchArmZ * px) + shoulderOffsetZ);
-        _renderer.LeftLegPos = new System.Numerics.Vector3(0, 0, CrouchLegZ * px);
-        _renderer.RightLegPos = _renderer.LeftLegPos;
+        var bodyPos = new System.Numerics.Vector3(0, CrouchBodyY * px, CrouchBodyZ * px);
+        var headPos = new System.Numerics.Vector3(0, CrouchHeadY * px, 0);
+        var leftArmPos = new System.Numerics.Vector3(0, CrouchArmY * px, (CrouchArmZ * px) - shoulderOffsetZ);
+        var rightArmPos = new System.Numerics.Vector3(0, CrouchArmY * px, (CrouchArmZ * px) + shoulderOffsetZ);
+        var legPos = new System.Numerics.Vector3(0, 0, CrouchLegZ * px);
+
+        foreach (var r in _renderers)
+        {
+            r.BodyPos = bodyPos;
+            r.HeadPos = headPos;
+            r.LeftArmPos = leftArmPos;
+            r.RightArmPos = rightArmPos;
+            r.LeftLegPos = legPos;
+            r.RightLegPos = legPos;
+        }
 
         // 待机呼吸；蹲下时再加一份外摆并把胳膊往后带，让它们垂着而不是荡着。
         var idle = (float)((0.02 * Math.PI) + (0.03 * Math.Cos(2 * _idleClock))) * RadToRotateInput;
@@ -286,7 +314,8 @@ public sealed class SkinPoseDriver
         var jumpLegSwing = 0.22f * RadToRotateInput * jk;
 
         var walkBob = (float)(Math.Abs(Math.Sin(_walkClock)) * 0.025) * wk * (1.0f - jk);
-        _renderer.SetPos(0, 0.3f + (0.12f * dk) + walkBob);
+        var standPos = 0.3f + (0.12f * dk) + walkBob;
+        foreach (var r in _renderers) r.SetPos(0, standPos);
 
         // 被拎起来：胳膊举过头顶去抓光标，还带点扑腾。
         var flutter = (float)(Math.Sin(_idleClock * 16.0) * 0.08 * RadToRotateInput);
@@ -304,8 +333,14 @@ public sealed class SkinPoseDriver
 
         var leftArmYaw = bodyTurn * 0.8f * RadToRotateInput * (1 - dk);
 
-        _renderer.LeftArmRotate = new System.Numerics.Vector3(finalArmLX, finalArmLY, leftArmYaw);
-        _renderer.RightArmRotate = new System.Numerics.Vector3(finalArmRX + attackRoll, finalArmRY + attackPitch, attackYaw);
+        var leftArmRotate = new System.Numerics.Vector3(finalArmLX, finalArmLY, leftArmYaw);
+        var rightArmRotate = new System.Numerics.Vector3(finalArmRX + attackRoll, finalArmRY + attackPitch, attackYaw);
+
+        foreach (var r in _renderers)
+        {
+            r.LeftArmRotate = leftArmRotate;
+            r.RightArmRotate = rightArmRotate;
+        }
 
         // 腿：走路摆动 + 起跳分开 + 被拎起来时乱蹬。
         var kick = (float)(Math.Sin(_idleClock * 13.5) * 0.65 * RadToRotateInput);
@@ -314,15 +349,23 @@ public sealed class SkinPoseDriver
         var leftLegY = ((1 - dk) * ((legSwing * (1 - (jk * 0.5f))) + jumpLegSwing)) + (kick * dk);
         var rightLegY = ((1 - dk) * ((-legSwing * (1 - (jk * 0.5f))) - jumpLegSwing)) - (kick * dk);
 
-        _renderer.LeftLegRotate = new System.Numerics.Vector3(legSplay * dk, leftLegY, 0);
-        _renderer.RightLegRotate = new System.Numerics.Vector3(-legSplay * dk, rightLegY, 0);
+        var leftLegRotate = new System.Numerics.Vector3(legSplay * dk, leftLegY, 0);
+        var rightLegRotate = new System.Numerics.Vector3(-legSplay * dk, rightLegY, 0);
+
+        foreach (var r in _renderers)
+        {
+            r.LeftLegRotate = leftLegRotate;
+            r.RightLegRotate = rightLegRotate;
+        }
 
         var bodySwing = (float)(Math.Sin(_idleClock * 13.5) * 0.05 * RadToRotateInput);
         var walkBodyTilt = (float)(Math.Sin(_walkClock) * 0.03 * RadToRotateInput) * wk * (1.0f - jk);
 
-        _renderer.BodyRotate = new System.Numerics.Vector3(
+        var bodyRotate = new System.Numerics.Vector3(
             0,
             ((CrouchBodyLean * e) - (0.06f * dk) + sprintBodyLean) * RadToRotateInput,
             (bodySwing * dk) + walkBodyTilt + attackBodyYaw);
+
+        foreach (var r in _renderers) r.BodyRotate = bodyRotate;
     }
 }

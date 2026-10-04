@@ -7,6 +7,7 @@ using System.Windows.Media.Imaging;
 using System.Windows.Shapes;
 using NegiCraftLauncher.Raster;
 using NegiCraftLauncher.Raster.Rendering;
+using NegiCraftLauncher.Skin.Wpf.Rendering;
 
 namespace NegiCraftLauncher.Skin.Wpf.Controls;
 
@@ -26,6 +27,15 @@ namespace NegiCraftLauncher.Skin.Wpf.Controls;
 ///
 /// <para>红利：这条路是确定性的 —— 同一帧渲染两次逐像素相同，所以 <see cref="SaveSnapshot"/>
 /// 不需要 Avalonia 那边"先上膛再开火"的两次往返。</para>
+///
+/// <para><b><see cref="UseGpu"/>：可选换成 WPF <c>Viewport3D</c> 的硬件后端</b>。
+/// 只影响"显示"这一层 —— 姿势数学、阴影、名牌、跳跃位移全都照旧。两条后端的出图已用
+/// <c>--gpu</c> 探针逐像素对齐过（真实皮肤平均绝对差 R1.1/G1.5/B1.2）。</para>
+///
+/// <para>为什么开 GPU 时软件后端<b>也</b>留着：<see cref="SaveSnapshot"/> 与调试桥的
+/// <c>pet-skinsnap</c> 都靠它出图 —— WPF 抓不到离屏的 3D 内容（<c>RenderTargetBitmap</c>
+/// 走软件管线，抓出来恒为全透明）。软件后端不参与显示、只跟着同一个
+/// <see cref="SkinPoseDriver"/> 走，状态与显示的那一份逐帧一致。</para>
 /// </summary>
 public sealed class SkinPreviewControl : Grid
 {
@@ -43,6 +53,9 @@ public sealed class SkinPreviewControl : Grid
     /// <para><b>为什么必须封顶</b>：<see cref="CompositionTarget.Rendering"/> 的频率是 WPF 合成
     /// 决定的，不保证等于显示器刷新率 —— 软件合成 / 没有 DWM 的环境下实测能到 <b>~250 次/秒</b>。
     /// 而这里每帧都要跑一遍软件光栅化，不封顶就是白烧 CPU。</para>
+    ///
+    /// <para><b>只对软件后端封顶</b>：GPU 模式（<see cref="UseGpu"/>）每帧只更新十几次矩阵，
+    /// 光栅化在显卡上，跟着合成器的节奏走就好，不用省。</para>
     ///
     /// <para><c>dt</c> 是从墙钟算的，所以节流只改"多久画一次"，不改动画速度。
     /// 显示器刷新率更高时想跟着提，把这个常数改小即可。</para>
@@ -151,6 +164,28 @@ public sealed class SkinPreviewControl : Grid
         set => SetValue(StageOffsetYProperty, value);
     }
 
+    public static readonly DependencyProperty UseGpuProperty =
+        DependencyProperty.Register(
+            nameof(UseGpu),
+            typeof(bool),
+            typeof(SkinPreviewControl),
+            new PropertyMetadata(false, OnUseGpuChanged));
+
+    /// <summary>
+    /// 用 WPF <c>Viewport3D</c> 的硬件后端显示，而不是软件光栅化位图。
+    ///
+    /// <para>默认 false —— 软件后端是回归基线（确定性、可离屏出图）。GPU 模式是可选加速项，
+    /// 桌面宠物上才值得开（启动器主页预览就一个小人，软件后端足够了）。</para>
+    ///
+    /// <para>切到 true 时才惰性建 <c>Viewport3D</c>：它一旦进了可视树就会让这个窗口参与 3D 合成，
+    /// 不用的时候不该付这个代价。</para>
+    /// </summary>
+    public bool UseGpu
+    {
+        get => (bool)GetValue(UseGpuProperty);
+        set => SetValue(UseGpuProperty, value);
+    }
+
     public static readonly DependencyProperty CanDragRotateProperty =
         DependencyProperty.Register(
             nameof(CanDragRotate),
@@ -187,8 +222,28 @@ public sealed class SkinPreviewControl : Grid
     // 可视树
     // ==========================================================
 
-    private readonly SkinRenderSoftware _renderer = new();
-    private readonly SkinPoseDriver _pose;
+    private readonly SkinRenderSoftware _software = new();
+
+    /// <summary>GPU 后端的几何/贴图来源。惰性建 —— 只有 <see cref="UseGpu"/> 为 true 时才存在。</summary>
+    private SkinRenderGpu? _gpu;
+
+    /// <summary>把 <see cref="_gpu"/> 搬进可视树的那个 <c>Viewport3D</c> 宿主。</summary>
+    private SkinGpuViewport? _viewport;
+
+    /// <summary>姿势驱动。开 GPU 后它会同时驱动软件与 GPU 两个后端（见 <see cref="EnsureGpuBackend"/>）。</summary>
+    private SkinPoseDriver _pose;
+
+    private bool _useGpu;
+
+    /// <summary>
+    /// <see cref="StageOffsetY"/> 的本地副本。必须存一份 —— GPU 视口是惰性建的，
+    /// 建的时候变更回调早就跑过了，拿不到当时的偏移量（见 <see cref="ApplyStageOffset"/>）。
+    /// </summary>
+    private double _stageOffsetY;
+
+    /// <summary>最近一次设进来的皮肤。惰性建 GPU 后端时要拿它把两边的贴图补齐。</summary>
+    private SkinTexture? _lastTexture;
+
     private readonly Image _model;
     private readonly Ellipse _shadow;
     private readonly Border _nametag;
@@ -223,9 +278,9 @@ public sealed class SkinPreviewControl : Grid
 
     public SkinPreviewControl()
     {
-        _renderer.EnableTop = true;
-        _renderer.SampleScale = 2;
-        _pose = new SkinPoseDriver(_renderer);
+        _software.EnableTop = true;
+        _software.SampleScale = 2;
+        _pose = new SkinPoseDriver(_software);
 
         Width = StageWidth;
         Height = StageHeight;
@@ -308,16 +363,20 @@ public sealed class SkinPreviewControl : Grid
     public string? CurrentLoadedUser => _loadedUser;
 
     /// <summary>当前生效的皮肤格式（诊断用）。与 Avalonia 侧 <c>MinecraftSkinPreview.LiveSkinType</c> 同名同义。</summary>
-    public MinecraftSkinRender.SkinType LiveSkinType => _renderer.SkinType;
+    public MinecraftSkinRender.SkinType LiveSkinType => _software.SkinType;
 
     /// <summary>是否画了第二层覆盖贴图（诊断用）。老皮肤（64x32）应当是 false。</summary>
-    public bool LiveTopLayer => _renderer.EnableTop;
+    public bool LiveTopLayer => _software.EnableTop;
+
+    /// <summary>当前显示后端（诊断用）：<c>software</c> 或 <c>gpu</c>。</summary>
+    public string LiveBackend => _useGpu && _viewport is not null ? "gpu" : "software";
 
     /// <summary>
-    /// 渲染诊断串：视口像素尺寸 + 上一帧耗时 + 累计光栅化帧数。
+    /// 渲染诊断串：视口像素尺寸 + 上一帧耗时 + 累计渲染帧数 + 后端。
     /// <c>frames=</c> 是"静止时停渲染"的验收锚点 —— 不动的时候它应当停止增长。
     /// </summary>
-    public string RenderStats => $"{_pixelWidth}x{_pixelHeight} {_lastFrameMs:F2}ms frames={_frames}";
+    public string RenderStats =>
+        $"{_pixelWidth}x{_pixelHeight} {_lastFrameMs:F2}ms frames={_frames} backend={LiveBackend}";
 
     /// <summary>模型当前朝向（度）。</summary>
     public float CurrentYawDeg => _pose.CurrentYawDeg;
@@ -362,7 +421,9 @@ public sealed class SkinPreviewControl : Grid
         var texture = SkinTexture.Decode(pngBytes);
         if (texture is null) return;
 
-        _renderer.SetSkin(texture);
+        _lastTexture = texture;
+        _software.SetSkin(texture);
+        _gpu?.SetSkin(texture);
         _pose.Reset();
         RenderFrame();
     }
@@ -370,13 +431,21 @@ public sealed class SkinPreviewControl : Grid
     /// <summary>
     /// 把当前这一帧按真实像素尺寸写盘。<b>与 Avalonia 版不同，这里不需要先"上膛"</b> ——
     /// 软件渲染是同步且确定性的，调用即出图。
+    ///
+    /// <para><b>GPU 模式下也走软件后端</b>：显示的那一份在显卡上，WPF 抓不到离屏的 3D 内容
+    /// （<c>RenderTargetBitmap</c> 走软件管线，抓出来恒为全透明）。而软件后端一直被同一个
+    /// <see cref="SkinPoseDriver"/> 驱动着，姿势状态与显示的那一份逐帧一致 ——
+    /// 所以这张图和屏幕上看到的模型是同一个姿势。</para>
     /// </summary>
     public void SaveSnapshot(string filePath)
     {
         EnsureTarget();
         if (_buffer is null) return;
 
-        RenderFrame();
+        _software.Width = _pixelWidth;
+        _software.Height = _pixelHeight;
+        _software.RenderTo(_buffer);
+
         File.WriteAllBytes(filePath, PngCodec.Encode(_buffer));
     }
 
@@ -422,10 +491,28 @@ public sealed class SkinPreviewControl : Grid
     {
         if (d is not SkinPreviewControl preview) return;
 
-        var offset = e.NewValue is double v ? v : 0.0;
-        preview._shadow.Margin = new Thickness(0, ShadowTop + offset, 0, 0);
-        preview._model.Margin = new Thickness(0, ModelTop + offset, 0, 0);
-        preview._nametag.Margin = new Thickness(0, NametagTop + offset, 0, 0);
+        preview._stageOffsetY = e.NewValue is double v ? v : 0.0;
+        preview.ApplyStageOffset();
+    }
+
+    /// <summary>
+    /// 把"整台舞台往下挪多少"铺到三个可视元素 + GPU 视口上。
+    ///
+    /// <para><b>GPU 视口必须一起挪</b>：它是**惰性**建的，<see cref="EnsureGpuBackend"/> 跑的时候
+    /// <see cref="StageOffsetY"/> 早就设好了（桌宠在 XAML 里写死 75），不会再触发一次变更回调。
+    /// 漏掉的后果是 GPU 模式下整台模型比软件模式**高 75 像素** —— 看着像"GPU 渲染是坏的"，
+    /// 其实是取景位置错了（踩过：桌宠两模式的抓屏差 29%）。</para>
+    /// </summary>
+    private void ApplyStageOffset()
+    {
+        _shadow.Margin = new Thickness(0, ShadowTop + _stageOffsetY, 0, 0);
+        _model.Margin = new Thickness(0, ModelTop + _stageOffsetY, 0, 0);
+        _nametag.Margin = new Thickness(0, NametagTop + _stageOffsetY, 0, 0);
+
+        if (_viewport is not null)
+        {
+            _viewport.View.Margin = new Thickness(0, ModelTop + _stageOffsetY, 0, 0);
+        }
     }
 
     // ==========================================================
@@ -501,8 +588,8 @@ public sealed class SkinPreviewControl : Grid
         var dt = (now - _lastFrame).TotalSeconds;
 
         // ★ 再封顶 60fps（见 MinFrameSeconds）。**脏标记故意不清** —— 这一帧只是"还没到时候"，
-        //   不是"不用画"；下一帧一到点就会画出来。
-        if (dt < MinFrameSeconds) return;
+        //   不是"不用画"；下一帧一到点就会画出来。GPU 模式不封顶。
+        if (!_useGpu && dt < MinFrameSeconds) return;
 
         _lastFrame = now;
         _viewDirty = false;
@@ -534,17 +621,91 @@ public sealed class SkinPreviewControl : Grid
     private void RenderFrame()
     {
         EnsureTarget();
-        if (_buffer is null || _bitmap is null) return;
-        if (!_renderer.HaveSkin) return;
+        if (_pixelWidth <= 0 || _pixelHeight <= 0) return;
 
-        _renderer.Width = _pixelWidth;
-        _renderer.Height = _pixelHeight;
+        // GPU 模式：真正的光栅化在显卡上，CPU 这边一帧只有十几次矩阵乘法。
+        // 投影矩阵的宽高比取自 Width/Height，所以必须和画布同尺寸 —— 否则取景会被拉歪。
+        if (_useGpu && _gpu is not null && _viewport is not null)
+        {
+            if (!_gpu.HaveSkin) return;
+
+            _gpu.Width = _pixelWidth;
+            _gpu.Height = _pixelHeight;
+            var gpuStarted = System.Diagnostics.Stopwatch.GetTimestamp();
+            _viewport.Sync(_gpu);
+            _lastFrameMs = System.Diagnostics.Stopwatch.GetElapsedTime(gpuStarted).TotalMilliseconds;
+            _frames++;
+            return;
+        }
+
+        if (_buffer is null || _bitmap is null) return;
+        if (!_software.HaveSkin) return;
+
+        _software.Width = _pixelWidth;
+        _software.Height = _pixelHeight;
         var started = System.Diagnostics.Stopwatch.GetTimestamp();
-        _renderer.RenderTo(_buffer);
+        _software.RenderTo(_buffer);
         _lastFrameMs = System.Diagnostics.Stopwatch.GetElapsedTime(started).TotalMilliseconds;
         _frames++;
 
         _bitmap.WritePixels(new Int32Rect(0, 0, _pixelWidth, _pixelHeight), _buffer.Pixels, _pixelWidth * 4, 0);
+    }
+
+    // ==========================================================
+    // GPU 后端
+    // ==========================================================
+
+    private static void OnUseGpuChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
+    {
+        if (d is not SkinPreviewControl preview) return;
+
+        preview._useGpu = e.NewValue is true;
+        if (preview._useGpu) preview.EnsureGpuBackend();
+
+        // 两个可视元素都常驻（建好之后），靠 Visibility 切 —— 这样来回切设置不用重建后端，
+        // 姿势 / 朝向也不会丢。
+        if (preview._viewport is not null)
+        {
+            preview._viewport.View.Visibility = preview._useGpu ? Visibility.Visible : Visibility.Collapsed;
+        }
+
+        preview._model.Visibility = preview._useGpu ? Visibility.Collapsed : Visibility.Visible;
+        preview._viewDirty = true;
+    }
+
+    /// <summary>
+    /// 惰性建 GPU 后端。建好之后 <see cref="_pose"/> 会同时驱动软件与 GPU 两个后端 ——
+    /// 软件那份不参与显示，只服务于 <see cref="SaveSnapshot"/>。
+    /// </summary>
+    private void EnsureGpuBackend()
+    {
+        if (_gpu is not null) return;
+
+        _gpu = new SkinRenderGpu();
+        _viewport = new SkinGpuViewport();
+
+        var view = _viewport.View;
+        view.Width = ModelWidth;
+        view.Height = ModelHeight;
+        view.HorizontalAlignment = HorizontalAlignment.Center;
+        view.VerticalAlignment = VerticalAlignment.Top;
+        // 与软件后端那张位图同一个槽位 —— 含 StageOffsetY（桌宠是 75）。
+        view.Margin = new Thickness(0, ModelTop + _stageOffsetY, 0, 0);
+        // 与模型位图共用同一个位移变换 —— 跳跃时"人物往上飘、影子留在地上"的效果两边一致。
+        view.RenderTransform = _modelShift;
+        view.IsHitTestVisible = false;
+        view.Visibility = Visibility.Collapsed;
+
+        // 阴影(0) / 位图(1) / 名牌(2) —— 插在中间，与位图同一个槽位。
+        Children.Insert(1, view);
+
+        _pose = new SkinPoseDriver(_software, _gpu);
+
+        if (_lastTexture is not null)
+        {
+            _gpu.SetSkin(_lastTexture);
+            _pose.Reset();
+        }
     }
 
     private void LoadFromUsername(string username)
