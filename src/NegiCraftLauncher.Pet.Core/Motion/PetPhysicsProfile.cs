@@ -57,6 +57,43 @@ public sealed record PetPhysicsProfile
     /// <summary>朝行进方向转身的最大角速度（deg/s）。</summary>
     public double MoveTurnSpeed { get; init; } = 720.0;
 
+    // ---------------------------------------------------------------- 拖拽抛出
+    // **只有甩出去才飞**：松手时速度过了 ThrowMinBlocksPerSecond 才进入抛体飞行；
+    // 低于它就只是"轻轻放下"，停在原地 —— 保持"自由移动、只有主动动作才受重力"的语义。
+
+    /// <summary>
+    /// 松手时的速度超过它才算"甩出去"（格/s）。低于它就只是轻轻放下、停在原地。
+    /// 2 格/s ≈ 128 DIP/s —— 刻意慢放约 6 DIP/帧，普通"摆放"够不到。
+    /// </summary>
+    public double ThrowMinBlocksPerSecond { get; init; } = 2.0;
+
+    /// <summary>
+    /// 甩出去的速度上限（格/s）。手抖一下不该把桌宠甩到屏幕外；
+    /// 18 格/s 在 45° 下射程约 8.6 格（≈550 DIP），够"飞一段"又不至于失控。
+    /// </summary>
+    public double ThrowMaxBlocksPerSecond { get; init; } = 18.0;
+
+    /// <summary>落地弹跳的恢复系数（0 = 不弹、1 = 原速弹回）。</summary>
+    public double BounceRestitution { get; init; } = 0.45;
+
+    /// <summary>撞左右墙 / 天花板的恢复系数。</summary>
+    public double WallRestitution { get; init; } = 0.55;
+
+    /// <summary>每次触地后水平速度保留多少（模拟地面摩擦）。</summary>
+    public double BounceHorizontalRetention { get; init; } = 0.7;
+
+    /// <summary>
+    /// 反弹后的竖直速度低于它就停下（格/s）。1.2 格/s 只能弹起约 2 DIP —— 肉眼不可见，
+    /// 再弹下去只会看到桌宠在台面上抖。
+    /// </summary>
+    public double BounceMinBlocksPerSecond { get; init; } = 1.2;
+
+    /// <summary>
+    /// 估算松手速度的取样时间窗（秒）。只对最近这段时间内的采样做最小二乘回归 ——
+    /// 手停住 200ms 再松手，窗内位置全一样，速度自然算成 0（"放下"而不是"甩"）。
+    /// </summary>
+    public double ThrowSampleWindowSeconds { get; init; } = 0.12;
+
     // ---------------------------------------------------------------- 跟随 / 导航阈值（DIP）
 
     /// <summary>跟随鼠标的停靠半径：光标在身旁这么近就停下。</summary>
