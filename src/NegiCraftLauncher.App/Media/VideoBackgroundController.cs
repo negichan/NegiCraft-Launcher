@@ -27,6 +27,10 @@ internal sealed class VideoBackgroundController : IDisposable
 {
     private readonly MediaPlayer _player = new()
     {
+        // 默认静音。WPF 在 Open 之前还是之后设都认 —— 实测（design/_audioprobe + _audiometer）
+        // 设备峰值：静音 0.00000（静态）vs 不静音 0.12522（59 个不同值，活跃），
+        // 且"只在 Open 前设"与"Open 后再断言"结果一致。所以下面 ApplySound() 的重复断言
+        // 是防御性的，不是在补某个已知的丢失问题。
         IsMuted = true,
         Volume = 0,
         // 暂停时也要能出画面（切页面会暂停，回来得立刻有帧）。
@@ -36,6 +40,7 @@ internal sealed class VideoBackgroundController : IDisposable
     private readonly VideoDrawing _drawing;
 
     private string? _path;
+    private bool _sound;
     private bool _disposed;
 
     public VideoBackgroundController()
@@ -58,6 +63,56 @@ internal sealed class VideoBackgroundController : IDisposable
 
     /// <summary>主背景层与侧栏背板共用的画刷。</summary>
     public Brush Brush { get; }
+
+    /// <summary>
+    /// 是否出声。<b>默认 <c>false</c>（静音）</b>。值没变时不做任何事，所以可以随便重复设。
+    /// </summary>
+    public bool Sound
+    {
+        get => _sound;
+        set
+        {
+            if (_sound == value) return;
+            _sound = value;
+            ApplySound();
+        }
+    }
+
+    /// <summary>
+    /// 把 <see cref="Sound"/> 落到播放器上。<c>Volume</c> 和 <c>IsMuted</c> 一起设：
+    /// 光靠 <c>IsMuted</c> 在某些驱动/音频会话上不够干净，<c>Volume=0</c> 是第二道保险。
+    /// </summary>
+    private void ApplySound()
+    {
+        if (_disposed) return;
+
+        try
+        {
+            _player.IsMuted = !_sound;
+            _player.Volume = _sound ? 1.0 : 0.0;
+        }
+        catch (Exception)
+        {
+        }
+    }
+
+    /// <summary>诊断用：播放器此刻的状态（调试桥拿它确认开关有没有落到播放器上）。</summary>
+    public string DebugState
+    {
+        get
+        {
+            try
+            {
+                return $"muted={_player.IsMuted} volume={_player.Volume:0.##} " +
+                       $"hasAudio={_player.HasAudio} pos={_player.Position.TotalSeconds:0.0}s " +
+                       $"source={(string.IsNullOrEmpty(_path) ? "n/a" : Path.GetFileName(_path))}";
+            }
+            catch (Exception ex)
+            {
+                return $"(unavailable: {ex.GetType().Name})";
+            }
+        }
+    }
 
     /// <summary>当前是否挂着一个视频（打开失败后会被清掉）。</summary>
     public bool HasVideo => _path is not null;
@@ -91,6 +146,8 @@ internal sealed class VideoBackgroundController : IDisposable
         try
         {
             _player.Open(new Uri(Path.GetFullPath(path!)));
+            // 换片时 _sound 可能已经和上一次不同，Open 之后重落一遍（首次挂载时与字段初始化等价）。
+            ApplySound();
         }
         catch (Exception ex)
         {
@@ -124,6 +181,9 @@ internal sealed class VideoBackgroundController : IDisposable
         {
             _drawing.Rect = new Rect(0, 0, _player.NaturalVideoWidth, _player.NaturalVideoHeight);
         }
+
+        // 防御性再落一遍：成本为零，且不依赖"DP 值一定全程有效"这种假设。
+        ApplySound();
 
         try
         {

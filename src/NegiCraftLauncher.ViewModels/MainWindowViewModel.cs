@@ -181,6 +181,18 @@ public partial class MainWindowViewModel : ViewModelBase
         PersistSettings();
     }
 
+    /// <summary>
+    /// 视频壁纸是否出声。<b>默认关（静音）</b> —— 背景视频是我们替用户放着的，不是他主动点开播的，
+    /// 突然出声很唐突；而且这里没有音量控制，只有开关。想要声音的用户自己打开。
+    ///
+    /// <para>和 <see cref="VideoBackgroundPath"/> 一样，VM 只存值、不碰播放器 ——
+    /// 真正把它应用到 <c>MediaPlayer</c> 的是视图侧的 <c>VideoBackgroundController</c>。</para>
+    /// </summary>
+    [ObservableProperty]
+    private bool _videoBackgroundSound;
+
+    partial void OnVideoBackgroundSoundChanged(bool value) => PersistSettings();
+
     [ObservableProperty]
     private double _bgBlur;
 
@@ -355,6 +367,7 @@ public partial class MainWindowViewModel : ViewModelBase
     {
         BgArt = PixelArt.CreateBackground(IsDark);
         VideoBackgroundPath = null;
+        VideoBackgroundSound = false;
         CustomBackgroundPath = null;
         BgBlur = 0;
         BgBrightness = 0;
@@ -1557,6 +1570,7 @@ public partial class MainWindowViewModel : ViewModelBase
 
             BgBlur = settings.BackgroundBlur;
             BgBrightness = settings.BackgroundBrightness;
+            VideoBackgroundSound = settings.VideoBackgroundSound;
         }
         finally
         {
@@ -1589,6 +1603,7 @@ public partial class MainWindowViewModel : ViewModelBase
         settings.VideoBackgroundPath = VideoBackgroundPath;
         settings.BackgroundBlur = BgBlur;
         settings.BackgroundBrightness = BgBrightness;
+        settings.VideoBackgroundSound = VideoBackgroundSound;
 
         // Sliders fire on every tick; write once they settle.
         _saveDebounce?.Cancel();
