@@ -62,6 +62,18 @@
                           BlurRadius="50" ShadowDepth="20" Direction="270"
                           Color="#000000" Opacity="0.87" RenderingBias="Performance" />
 
+        <!-- 托盘右键菜单。WinForms 的 ContextMenuStrip 画的是系统原生外观（浅灰、9pt），
+             和应用的深色主题完全对不上 —— Avalonia 侧的托盘菜单是 TrayPopupRoot，
+             走的正是这套 ContextMenu / MenuItem 主题。所以这里也换成 WPF 的 ContextMenu，
+             右键时由代码在光标处打开（见 SetupTrayIcon / ShowTrayMenu）。
+             Tag="pet" 是给 UpdateTrayMenu 定位「桌面宠物 / 收起桌宠」那一项的锚点。 -->
+        <ContextMenu x:Key="TrayMenu" x:Shared="False">
+            <MenuItem Header="打开启动器" Click="OnTrayOpenLauncherClick" />
+            <MenuItem Header="桌面宠物" Tag="pet" Click="OnTrayTogglePetClick" />
+            <Separator />
+            <MenuItem Header="退出启动器" Click="OnTrayExitClick" />
+        </ContextMenu>
+
         <!-- ================= 样式 ================= -->
 
         <!-- 导航按钮：42x42，圆角 12，图标 20x20。

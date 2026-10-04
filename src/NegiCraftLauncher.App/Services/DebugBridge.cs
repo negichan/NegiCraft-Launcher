@@ -19,15 +19,11 @@ namespace NegiCraftLauncher.App.Services;
 /// <para>桌宠动词不在这里 —— 它们与独立桌宠的桥共用，实现在
 /// <see cref="PetDebugCommands"/>。本类只管启动器专属动词（页面、账户、下载、托盘）与传输层。</para>
 ///
-/// <para><b>与 Avalonia 版的两处差别</b>：</para>
-/// <list type="number">
-/// <item><c>tray-right</c>：Avalonia 靠反射调 <c>TrayIcon._impl.OnRightClicked</c> 才能把托盘弹窗
-/// 弄出来；WPF 的托盘是 WinForms <c>NotifyIcon</c>，直接 <c>ContextMenuStrip.Show()</c> 即可，
-/// 不需要反射。</item>
-/// <item><c>shot-tray</c>：WinForms 的 <c>ContextMenuStrip</c> 是原生窗口，没有 WPF 可视树，
-/// <c>RenderTargetBitmap</c> 抓不到，只能如实回错。Avalonia 那边能抓是因为它的托盘弹窗
-/// 是真正的 Avalonia 窗口（<c>TrayPopupRoot</c>）。</item>
-/// </list>
+/// <para><b>与 Avalonia 版的差别</b>：两个托盘动词<b>行为已对齐</b>，只是内部机制不同 ——
+/// Avalonia 的托盘弹窗是 <c>TrayPopupRoot</c>，得靠反射调 <c>TrayIcon._impl.OnRightClicked</c>
+/// 才会出现；WPF 侧托盘菜单是自己弹的 WPF <c>ContextMenu</c>（不是 WinForms
+/// <c>ContextMenuStrip</c>，那个画的是系统原生外观、跟深色主题对不上），
+/// 直接 <c>ShowTrayMenu()</c> 即可，两边都能用 <c>RenderTargetBitmap</c> 抓图。</para>
 /// </summary>
 public sealed class DebugBridge
 {
@@ -189,9 +185,11 @@ public sealed class DebugBridge
                             : "ERR no tray menu";
                     });
                 case "shot-tray":
-                    // WinForms 的 ContextMenuStrip 是原生窗口，没有 WPF 可视树，抓不了图。
                     return await PetDebugMailbox.Ui(() =>
-                        "ERR WPF tray menu is a native WinForms window; use tray-right and read the screen");
+                    {
+                        if (_window is not MainWindow host) return "ERR not main window";
+                        return host.ShotTrayMenuForDebug(arg);
+                    });
                 case "quit":
                     // 回复落盘之后再退出，客户端才能看到 OK 而不是超时。
                     _mailbox?.ExitAfterReply(() =>

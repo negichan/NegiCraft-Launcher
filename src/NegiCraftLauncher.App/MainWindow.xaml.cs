@@ -1,8 +1,12 @@
 using System.ComponentModel;
+using System.IO;
 using System.Windows;
+using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using System.Windows.Interop;
 using System.Windows.Media;
+using System.Windows.Media.Imaging;
 using NegiCraftLauncher.Pet;
 using NegiCraftLauncher.ViewModels;
 using Forms = System.Windows.Forms;
@@ -15,7 +19,10 @@ namespace NegiCraftLauncher.App;
 /// <list type="bullet">
 /// <item><c>BeginMoveDrag</c> → <see cref="Window.DragMove"/>（必须按着左键调）。</item>
 /// <item><c>StorageProvider.OpenFilePickerAsync</c> → <see cref="Microsoft.Win32.OpenFileDialog"/>。</item>
-/// <item><c>TrayIcon</c>（Avalonia 自带）→ WinForms 的 <see cref="Forms.NotifyIcon"/>，WPF 没有托盘 API。</item>
+/// <item><c>TrayIcon</c>（Avalonia 自带）→ WinForms 的 <see cref="Forms.NotifyIcon"/>，WPF 没有托盘 API。
+///   但<b>菜单不交给 WinForms</b>：<see cref="Forms.ContextMenuStrip"/> 画的是系统原生外观，
+///   与深色主题对不上。托盘只用 <c>NotifyIcon</c> 显示图标，右键自己弹 WPF 的
+///   <see cref="ContextMenu"/>（<c>TrayMenu</c>），样式走主题里那套 ContextMenu / MenuItem。</item>
 /// </list>
 /// </summary>
 public partial class MainWindow : Window
@@ -23,7 +30,8 @@ public partial class MainWindow : Window
     private MainWindowViewModel? _vm;
     private PetWindow? _petWindow;
     private Forms.NotifyIcon? _trayIcon;
-    private Forms.ToolStripMenuItem? _petTrayMenuItem;
+    private ContextMenu? _trayMenu;
+    private MenuItem? _petTrayMenuItem;
     private bool _isExplicitExit;
 
     public MainWindow()
@@ -53,21 +61,9 @@ public partial class MainWindow : Window
     {
         try
         {
-            var menu = new Forms.ContextMenuStrip();
-
-            var openLauncher = new Forms.ToolStripMenuItem("打开启动器");
-            openLauncher.Click += (_, _) => Restore();
-            menu.Items.Add(openLauncher);
-
-            _petTrayMenuItem = new Forms.ToolStripMenuItem("桌面宠物");
-            _petTrayMenuItem.Click += (_, _) => TogglePetWindow();
-            menu.Items.Add(_petTrayMenuItem);
-
-            menu.Items.Add(new Forms.ToolStripSeparator());
-
-            var exit = new Forms.ToolStripMenuItem("退出启动器");
-            exit.Click += (_, _) => ExitApplication();
-            menu.Items.Add(exit);
+            // 菜单是 XAML 里的 TrayMenu（主题样式），这里只把它取出来。
+            _trayMenu = (ContextMenu)FindResource("TrayMenu");
+            _petTrayMenuItem = _trayMenu.Items.OfType<MenuItem>().FirstOrDefault(m => "pet".Equals(m.Tag));
 
             var icon = Environment.ProcessPath is { Length: > 0 } exe
                 ? System.Drawing.Icon.ExtractAssociatedIcon(exe)
@@ -78,7 +74,11 @@ public partial class MainWindow : Window
                 Icon = icon,
                 Text = "NegiCraft Launcher",
                 Visible = true,
-                ContextMenuStrip = menu,
+            };
+            // 不设 ContextMenuStrip —— 让 WinForms 别接管右键，自己弹 WPF 菜单。
+            _trayIcon.MouseUp += (_, e) =>
+            {
+                if (e.Button == Forms.MouseButtons.Right) ShowTrayMenu();
             };
             _trayIcon.MouseClick += (_, e) =>
             {
@@ -90,6 +90,34 @@ public partial class MainWindow : Window
             Console.WriteLine($"[TrayIcon] Init error: {ex.Message}");
         }
     }
+
+    /// <summary>
+    /// 在光标处弹出托盘菜单。
+    ///
+    /// <para>⚠️ 不能用 <see cref="PlacementMode.MousePoint"/>：WPF 用的是它自己缓存的鼠标位置，
+    /// 而那份缓存只在窗口收到鼠标消息时才更新 —— 托盘右键时窗口通常不在光标底下（甚至已隐藏），
+    /// 菜单会弹到上次鼠标经过窗口的位置去。这里直接问 Win32 要光标的<b>物理像素</b>位置，
+    /// 再按窗口 DPI 折成 DIP 喂给 <see cref="PlacementMode.AbsolutePoint"/>。</para>
+    /// </summary>
+    private void ShowTrayMenu()
+    {
+        if (_trayMenu is null) return;
+
+        var pos = Forms.Cursor.Position;                 // 物理屏幕像素
+        var dpi = VisualTreeHelper.GetDpi(this);
+
+        _trayMenu.PlacementTarget = this;                // 只为拿到主题里的隐式样式与焦点归属
+        _trayMenu.Placement = PlacementMode.AbsolutePoint;
+        _trayMenu.HorizontalOffset = pos.X / dpi.DpiScaleX;
+        _trayMenu.VerticalOffset = pos.Y / dpi.DpiScaleY;
+        _trayMenu.IsOpen = true;
+    }
+
+    private void OnTrayOpenLauncherClick(object sender, RoutedEventArgs e) => Restore();
+
+    private void OnTrayTogglePetClick(object sender, RoutedEventArgs e) => TogglePetWindow();
+
+    private void OnTrayExitClick(object sender, RoutedEventArgs e) => ExitApplication();
 
     public void ExitApplication()
     {
@@ -208,20 +236,45 @@ public partial class MainWindow : Window
     {
         if (_petTrayMenuItem != null)
         {
-            _petTrayMenuItem.Text = _petWindow is { IsVisible: true } ? "收起桌宠" : "桌面宠物";
+            _petTrayMenuItem.Header = _petWindow is { IsVisible: true } ? "收起桌宠" : "桌面宠物";
         }
     }
 
     /// <summary>
     /// 调试用：程序化弹出托盘右键菜单。Avalonia 那边得靠反射调 <c>TrayIcon._impl.OnRightClicked</c>，
-    /// WPF 的托盘就是 WinForms 的 <see cref="Forms.NotifyIcon"/>，直接 Show 即可。
+    /// WPF 侧右键本来就是自己弹 <see cref="ContextMenu"/>，直接调 <see cref="ShowTrayMenu"/> 即可。
     /// </summary>
     internal bool ShowTrayMenuForDebug()
     {
-        var menu = _trayIcon?.ContextMenuStrip;
-        if (menu is null) return false;
-        menu.Show(Forms.Cursor.Position);
+        if (_trayMenu is null) return false;
+        ShowTrayMenu();
         return true;
+    }
+
+    /// <summary>
+    /// 调试用：把已弹出的托盘菜单渲染成 PNG。菜单现在是 WPF 的可视树（不再是原生窗口），
+    /// <c>RenderTargetBitmap</c> 抓得到 —— 与 Avalonia 侧的 <c>shot-tray</c> 行为对齐。
+    /// </summary>
+    internal string ShotTrayMenuForDebug(string path)
+    {
+        if (_trayMenu is null) return "ERR no tray menu";
+        // tray-right 与 shot-tray 是两条独立消息，中间菜单可能已被别的输入事件关掉；
+        // 抓图前先确保它是开着的（Avalonia 侧的 shot-tray 也是自己去找 TrayPopupRoot）。
+        if (!_trayMenu.IsOpen) ShowTrayMenu();
+
+        _trayMenu.UpdateLayout();
+        var w = (int)Math.Ceiling(_trayMenu.ActualWidth);
+        var h = (int)Math.Ceiling(_trayMenu.ActualHeight);
+        if (w <= 0 || h <= 0) return $"ERR tray menu has no size ({w}x{h})";
+
+        var rtb = new RenderTargetBitmap(w, h, 96, 96, PixelFormats.Pbgra32);
+        rtb.Render(_trayMenu);
+
+        var encoder = new PngBitmapEncoder();
+        encoder.Frames.Add(BitmapFrame.Create(rtb));
+        using var fs = File.Create(path);
+        encoder.Save(fs);
+        return $"OK {path} w={w} h={h}";
     }
 
     private void OnOpenPetRequested() => OpenPetWindow();
