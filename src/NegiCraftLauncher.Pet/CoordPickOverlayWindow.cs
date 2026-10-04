@@ -44,14 +44,34 @@ public class CoordPickOverlayWindow : Window
         CanResize = false;
         Cursor = new Cursor(StandardCursorType.Cross);
 
+        // 盖住**整个虚拟屏**，不只是主屏 —— 副屏上点不到坐标正是"只盖主屏"造成的。
+        // WPF 侧（Pet.Wpf/CoordPickOverlayWindow.cs）用的是 SystemParameters.VirtualScreen*，
+        // 两端行为要对齐。
         var screens = Screens;
-        var primary = screens.Primary ?? (screens.All.Count > 0 ? screens.All[0] : null);
-        if (primary != null)
+        var all = screens.All;
+        if (all.Count > 0)
         {
-            var bounds = primary.Bounds;
-            Position = bounds.Position;
-            Width = bounds.Width / (primary.Scaling > 0 ? primary.Scaling : 1.0);
-            Height = bounds.Height / (primary.Scaling > 0 ? primary.Scaling : 1.0);
+            // Screen.Bounds 是**物理像素**（PixelRect），而 Window.Width/Height 是 DIP。
+            // 除以主屏缩放：遮罩窗口自己就落在主屏（虚拟屏原点是主屏左上角），
+            // Avalonia 的 Width 也是按窗口所在显示器的缩放换算的。
+            var anchor = screens.Primary ?? all[0];
+            var scale = anchor.Scaling > 0 ? anchor.Scaling : 1.0;
+
+            int left = all[0].Bounds.X;
+            int top = all[0].Bounds.Y;
+            int right = left + all[0].Bounds.Width;
+            int bottom = top + all[0].Bounds.Height;
+            foreach (var s in all)
+            {
+                left = Math.Min(left, s.Bounds.X);
+                top = Math.Min(top, s.Bounds.Y);
+                right = Math.Max(right, s.Bounds.X + s.Bounds.Width);
+                bottom = Math.Max(bottom, s.Bounds.Y + s.Bounds.Height);
+            }
+
+            Position = new PixelPoint(left, top);
+            Width = (right - left) / scale;
+            Height = (bottom - top) / scale;
         }
         else
         {
