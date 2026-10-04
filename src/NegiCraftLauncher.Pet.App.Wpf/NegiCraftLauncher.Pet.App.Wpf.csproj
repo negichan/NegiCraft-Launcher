@@ -1,0 +1,40 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <!-- Windows 端的独立桌宠。macOS / Linux 继续用 Avalonia 那份
+         （NegiCraftLauncher.Pet.App，同样是 NegiPet.exe）。 -->
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <!-- 程序集名是 NegiPet，所以 pack:// 资源 URI 的前缀也用 NegiPet，
+         不是工程名 NegiCraftLauncher.Pet.App.Wpf。写错会在启动时直接崩。 -->
+    <AssemblyName>NegiPet</AssemblyName>
+    <RootNamespace>NegiCraftLauncher.Pet.App.Wpf</RootNamespace>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <ApplicationIcon>Assets\NegiPet.ico</ApplicationIcon>
+    <EnableWindowsTargeting>true</EnableWindowsTargeting>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Material.Icons.WPF" Version="3.0.2" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- WPF SDK 的默认 Resource 通配只收 bmp/jpg/jpeg/png/tif/tiff/gif/wdp/jpc/jfif，
+         **不含 .ico**。不显式包含的话，Window.Icon 那句 pack:// 取图会在启动时抛
+         FileNotFoundException（异常信息是"找不到资源 assets/negipet.ico"），
+         进程还没上屏就死了。ApplicationIcon 走的是另一套（Win32 资源），不受影响。 -->
+    <Resource Include="Assets\NegiPet.ico" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\NegiCraftLauncher.Pet.Wpf\NegiCraftLauncher.Pet.Wpf.csproj" />
+    <!-- 与启动器同一套设计 token + 控件样式，桌宠的右键菜单与对话框在两种宿主下长得一样。 -->
+    <ProjectReference Include="..\NegiCraftLauncher.Theme.Wpf\NegiCraftLauncher.Theme.Wpf.csproj" />
+  </ItemGroup>
+
+</Project>

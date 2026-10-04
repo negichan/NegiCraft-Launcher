@@ -6,16 +6,30 @@
 
 调试桥只在 `--debug` 启动时开启，通过 `%TEMP%` 下的文件邮箱收发命令，全程不动光标、不抢焦点、不改窗口层级，被全屏应用盖着也能用。两个进程各有各的邮箱，可同时开：
 
-- 启动器 → `src/NegiCraftLauncher.App/Services/DebugBridge.cs`，邮箱 `ncl-debug`
-- 独立桌宠 → `src/NegiCraftLauncher.Pet.App/StandaloneDebugBridge.cs`，邮箱 `ncl-pet-debug`
+| 进程 | Avalonia | WPF |
+| --- | --- | --- |
+| 启动器（邮箱 `ncl-debug`） | `App/Services/DebugBridge.cs` | `App.Wpf/Services/DebugBridge.cs` |
+| 独立桌宠（邮箱 `ncl-pet-debug`） | `Pet.App/StandaloneDebugBridge.cs` | `Pet.App.Wpf/StandaloneDebugBridge.cs` |
 
-桌宠那批动词（`pet-*` / `shot-pet`）两边共用，实现在 `src/NegiCraftLauncher.Pet/Debug/PetDebugCommands.cs`；邮箱收发在 `PetDebugMailbox.cs`。启动器的桥只保留启动器专属动词（页面、账户、下载、托盘）。
+桌宠那批动词（`pet-*` / `shot-pet` / `pet-dialog`）两边共用，Avalonia 侧实现在
+`src/NegiCraftLauncher.Pet/Debug/PetDebugCommands.cs`，WPF 侧在
+`src/NegiCraftLauncher.Pet.Wpf/Debug/PetDebugCommands.cs`；邮箱收发在各自的 `Debug/PetDebugMailbox.cs`。
+**两套实现共享同一份线协议**（文件名、动词名、回复字符串逐字节一致），所以 `design/_dbg.ps1` 不用改。
+启动器的桥只保留启动器专属动词（页面、账户、下载、托盘）。
 
 用法：
 
 1. 带 `--debug` 启动（可选 `--debug-box <名字>` 换邮箱）：
-   `src\NegiCraftLauncher.App\bin\Debug\net10.0\NegiCraftLauncher.App.exe --debug`
-   `src\NegiCraftLauncher.Pet.App\bin\Debug\net10.0\NegiPet.exe --debug`
+
+   ```bash
+   src\NegiCraftLauncher.App\bin\Debug\net10.0\NegiCraftLauncher.App.exe --debug          # Avalonia 启动器
+   src\NegiCraftLauncher.App.Wpf\bin\Debug\net10.0-windows\NegiCraftLauncher.exe --debug  # WPF 启动器
+   src\NegiCraftLauncher.Pet.App\bin\Debug\net10.0\NegiPet.exe --debug                    # Avalonia 独立桌宠
+   src\NegiCraftLauncher.Pet.App.Wpf\bin\Debug\net10.0-windows\NegiPet.exe --debug        # WPF 独立桌宠
+   ```
+
+   两个平台的同名进程**不能同时开**（都叫 `NegiCraftLauncher` / `NegiPet`），
+   要并排对照就换邮箱：`--debug --debug-box ncl-pet-ava` / `--debug-box ncl-pet-wpf`。
 2. 用客户端发命令：`design/_dbg.ps1 -Cmd "<verb> [arg]" [-Box ncl-pet-debug]`
 
 命令：
@@ -36,8 +50,12 @@
 - `pet open` / `pet close` — 开/关桌宠
 - `pet-state` — 桌宠的**实时**状态：它正在渲染的名字、模式、Topmost、菜单开合、账号列表
 - `pet-hwnd` — 只读打印桌宠窗口的 Win32 `style` / `ex-style` / owner / owner 是否可见
-- `pet-skinsnap <png绝对路径>` — 抓桌宠的实时 GL 帧。**必须连发两次**：`SaveSnapshot` 交回的是上一次请求捕获的帧，所以先发一次“上膛”，等约 100ms，再发一次存盘
+- `pet-skinsnap <png绝对路径>` — 抓桌宠的实时帧。**Avalonia 侧必须连发两次**：GL 的
+  `SaveSnapshot` 交回的是上一次请求捕获的帧，先发一次“上膛”、等约 100ms、再发一次存盘。
+  **WPF 侧发一次就够** —— 软件光栅化是同步确定性的（这正是换后端的红利之一）。
 - `pet-menu` / `pet-menu close` — 开/关右键菜单（返回 `IsOpen`）
+- `pet-dialog <name|coord|close> [png绝对路径]` — 打开改名对话框 / 坐标选点遮罩 / 关掉两者；
+  带路径时顺手把该对话框内容渲染成 PNG（对话框是独立顶层窗口，`shot` 抓不到）
 - `pet-walk`、`pet-jump`、`pet-sneak`、`pet-control`、`pet-follow`、`pet-key`、`pet-name`、`pet-mode` … — 驱动动画与交互
 
 典型流程：`--debug` 起进程 → `page settings` → `tab 下载` → `shot ...\x.png` → 读那张图。
@@ -50,19 +68,28 @@ src/NegiCraftLauncher.App.Wpf     启动器（原生 WPF，net10.0-windows，程
 src/NegiCraftLauncher.Core        与 UI 无关的核心逻辑
 src/NegiCraftLauncher.ViewModels  UI 中立的 VM（零 UI 依赖，两个前端共用）
 src/NegiCraftLauncher.Raster      软件光栅化 + 平台中立像素层（PixelBuffer / PngCodec / SkinRenderSoftware）
-src/NegiCraftLauncher.Skin        皮肤解码 + OpenGL 渲染栈（App 与 Pet 共用）
-src/NegiCraftLauncher.Pet         桌宠本体 + IPetHost 宿主契约
-src/NegiCraftLauncher.Pet.App     独立桌宠（WinExe → NegiPet.exe）
+src/NegiCraftLauncher.Skin        皮肤解码 + OpenGL 渲染栈（Avalonia 侧，App 与 Pet 共用）
+src/NegiCraftLauncher.Skin.Wpf    皮肤解码 + 软件光栅预览控件（WPF 侧，App.Wpf 与 Pet.Wpf 共用）
+src/NegiCraftLauncher.Pet         桌宠本体 + IPetHost 宿主契约（Avalonia）
+src/NegiCraftLauncher.Pet.Core    框架无关的桌宠共用件（IPetHost / PetSettings / 全局键鼠钩子）
+src/NegiCraftLauncher.Pet.Wpf     桌宠本体（WPF，含自己的调试桥与对话框）
+src/NegiCraftLauncher.Pet.App     独立桌宠（Avalonia WinExe → NegiPet.exe）
+src/NegiCraftLauncher.Pet.App.Wpf 独立桌宠（WPF WinExe → NegiPet.exe）
 src/NegiCraftLauncher.Theme       设计 token + 控件主题（Avalonia；App 与 Pet.App 共用）
 src/NegiCraftLauncher.Theme.Wpf   设计 token + 控件主题（WPF；无逻辑，谁都能引）
 libs/MinecraftSkinRender          vendored 渲染库（Skia 侧）
 libs/MinecraftSkinRender.Core     vendored 渲染库的零依赖核心（位姿数学、几何表）
 ```
 
-依赖方向：`Pet.App → Pet → Skin → MinecraftSkinRender`；`App → Pet`、`App → Skin`、`App → Theme`、
-`Pet.App → Theme`。`Core` 不参与 UI。`App.Wpf` 与 `App` 平行，共用 `Core` / `ViewModels` / `Raster`。
+依赖方向：`Pet.App → Pet → {Pet.Core, Skin → MinecraftSkinRender}`；`App → {Pet, Skin, Theme, Core}`；
+`Pet.Wpf → {Pet.Core, Skin.Wpf, Theme.Wpf}`；`Pet.App.Wpf → {Pet.Wpf, Theme.Wpf}`；
+`App.Wpf → {Pet.Wpf, Skin.Wpf, Theme.Wpf, Core, ViewModels, Raster}`。`Core` 不参与 UI。
+`App.Wpf` 与 `App` 平行，共用 `Core` / `ViewModels` / `Raster`。
 `Raster` **只引用 `MinecraftSkinRender.Core`**（不引用 Skia 侧），否则 `libSkiaSharp.dll` 会被拖回 WPF 侧。
 `Theme` 与 `Theme.Wpf` 是**两份独立的 view 层资产**（XAML 无共同编译器），只保证视觉一致，不保证文本一致。
+
+**`Skin.Wpf` 为什么是独立工程**：`SkinPreviewControl` 要被启动器和桌宠共用。
+放在 `Pet.Wpf` 里会形成 `App.Wpf → Pet.Wpf → App.Wpf` 的循环引用，所以它必须自己一个程序集。
 
 **Windows 走 WPF、macOS/Linux 走 Avalonia** 是既定方向；view 层各写各的（XAML 无共同编译器），
 共享的是 `Core` / `ViewModels` / `Raster`。详见 `docs/wpf-migration-plan.md`（不入库）。
@@ -122,6 +149,25 @@ WPF 与 Avalonia 有几处**静默出错**的渲染差异（不报错、只是�
   光设 `Width="10"` 会被撑回去 —— 必须显式 `MinWidth="0"`。
 - **`ProgressBar` 默认 `BorderThickness=1`** 且边框色来自系统主题，要清成 0/Transparent。
 
+## WPF 侧的静默坑（P6 / P7 新增）
+
+都是“不报错、只是行为不对”那一类，踩一次就够了：
+
+- **`WindowInteropHelper.Handle` 不能在非 UI 线程求值。** 调试桥的 `Dispatch` 跑在轮询线程上，
+  在里面现取 HWND 会让**每个动词**都回 `ERR 调用线程无法访问此对象`。正确做法是把它提升成
+  `readonly IntPtr`，在 `StartIfNeeded`（UI 线程）里一次性取好。
+- **对话框高度不要写死。** WPF 的默认字体是 Segoe UI，行高比 Avalonia 的 Inter 大一截；
+  Avalonia 版写 `Height = 180` 刚好的四段内容，在 WPF 里量出来约 199px，最下面那排按钮会被裁掉一半。
+  改用 `SizeToContent = SizeToContent.Height`。
+- **`UIElement.IsVisible` 在 WPF 里是只读的**（Avalonia 那边可写）。恢复显示要 `Show()`，
+  不能照抄 `IsVisible = true`。
+- **`ContextMenu` 挂在 `Popup` 里是独立可视树**，`RelativeSource AncestorType=Window` 找不到，
+  要改走 `PlacementTarget.Tag`。
+- **WPF 的窗口坐标全是 DIP**（`Left/Top/Width/Height`、`SystemParameters.WorkArea`、
+  `VirtualScreen*`），而全局鼠标钩子给的是**物理像素** —— 只除一次 DPI 即可。
+  Avalonia 的 `Window.Position` 是 `PixelPoint`，所以那边到处 `* RenderScaling`，照抄会错一倍。
+- **`.ico` 不在 WPF SDK 默认的 `Resource` 通配里**（详见上面“构建 / 运行独立版桌宠”）。
+
 ## 验证 WPF 启动器主窗口（`--ui`）
 
 ```bash
@@ -177,20 +223,92 @@ design\_smoke.ps1          # 起 Avalonia 版，四个主页面各截一张图�
 ## 构建 / 运行独立版桌宠
 
 ```bash
+# Avalonia 版
 dotnet build src/NegiCraftLauncher.Pet.App/NegiCraftLauncher.Pet.App.csproj
 src/NegiCraftLauncher.Pet.App/bin/Debug/net10.0/NegiPet.exe          # 可选：NegiPet.exe <名字>
+
+# WPF 版（同一个 exe 名，别同时开）
+dotnet build src/NegiCraftLauncher.Pet.App.Wpf/NegiCraftLauncher.Pet.App.Wpf.csproj
+src/NegiCraftLauncher.Pet.App.Wpf/bin/Debug/net10.0-windows/NegiPet.exe
 ```
 
-注意两点：
+注意几点：
 
 - `AssemblyName` 是 `NegiPet`，所以**图标等 `avares://` 前缀要用程序集名 `NegiPet`**，不是工程名 `NegiCraftLauncher.Pet.App`。写错会在启动时 `FileNotFoundException` 直接崩。
 - 独立版**有自己的调试桥**（`StandaloneDebugBridge.cs`，邮箱 `ncl-pet-debug`），和启动器那套同一个协议、同一批桌宠动词。验证它也可以从进程外做：`Get-Process NegiPet`（`MainWindowHandle` 为 0 是正常的，因为窗口带 `WS_EX_TOOLWINDOW` 且有 owner）。
 - 独立版 `ShutdownMode` 是 `OnLastWindowClose`：桌宠是唯一窗口，关掉它就该退出进程。别改回 `OnExplicitShutdown`，否则关窗后进程还活着（没窗口、没托盘，只能去任务管理器杀）。
 - 注意沙箱：从 Bash 的 `run_in_background` 或 PowerShell 的 `Start-Process` 起 GUI 进程后，**一旦发起命令的 shell 会话结束，子进程会被一起收掉**（job object）。所以起进程和发调试命令必须在**同一次** PowerShell 调用里做完，不能分两次。
+- **WPF 版的 `.ico` 必须显式写进 csproj**：WPF SDK 的默认 `Resource` 通配只收
+  `bmp/jpg/jpeg/png/tif/tiff/gif/wdp/jpc/jfif`，**不含 `.ico`**。不写 `<Resource Include="Assets\NegiPet.ico" />`
+  的话，`Window.Icon` 那句 `pack://` 取图会在启动时抛 `FileNotFoundException` —— 进程还没上屏就死，
+  而且**增量构建不会重生成 `.g.resources`**，改完要 `rm -rf obj bin` 全量重建才生效。
+  （`ApplicationIcon` 走的是 Win32 资源那套，不受影响，所以 exe 图标看着是好的，更容易误判。）
+
+## 验证 WPF 桌宠
+
+桌宠窗口是独立顶层窗口，启动器的 `shot` 抓不到它；WPF 侧的对话窗（改名 / 坐标选点）又是另外两个顶层窗口。
+两端都用同一批 `pet-*` 动词驱动：
+
+```bash
+# 起 WPF 独立桌宠（换邮箱，方便与 Avalonia 版并排）
+src\NegiCraftLauncher.Pet.App.Wpf\bin\Debug\net10.0-windows\NegiPet.exe --debug --debug-box ncl-pet-wpf
+design\_dbg.ps1 -Cmd "pet-state" -Box ncl-pet-wpf
+design\_dbg.ps1 -Cmd "pet-skinsnap $env:TEMP\w.png" -Box ncl-pet-wpf   # WPF 侧发一次即可
+design\_dbg.ps1 -Cmd "pet-dialog name $env:TEMP\w-name.png" -Box ncl-pet-wpf
+design\_dbg.ps1 -Cmd "pet-dialog close" -Box ncl-pet-wpf
+```
+
+进程内托管那条路走启动器的邮箱：WPF 启动器 `--debug` 起来后 `pet open` → `pet-state`
+（`accounts=[...]` 非空即说明 `App.Wpf/Services/PetHostAdapter.cs` 接上了）→ `pet close`。
+
+验收锚点：
+
+- `pet-hwnd` 必须回 `toolwindow=True noactivate=True appwindow=False layered=True topmost=True`。
+- `pet-state` 里 `skintype=Old top=False`（64x32 老皮肤不能开第二层覆盖贴图）。
+- 关掉桌宠后 `pet-state` 回 `ERR no pet window`，且进程**没有**残留（独立版靠 `OnLastWindowClose` 退）。
+
+## 跨平台像素回归（T4 / T5）
+
+```powershell
+design\_p7regress.ps1                 # 主窗口 4 页 + 桌宠 1 帧
+design\_p7regress.ps1 -Repeat 2       # 顺带验 WPF 探针的确定性
+design\_p7regress.ps1 -Only pet       # 只跑桌宠段
+```
+
+**为什么用“跨平台对照”而不是提交一份参考图集**：Avalonia 版是**同一套逻辑的既有实现**，
+它的截图就是活基准。每次跑都把两边的图重新生成再互比 —— 参考图永远不会过期，
+也不用往仓库里塞二进制。两个平台共用 `Core` / `Raster` / `ViewModels`，任何一边改了布局或渲染这个脚本都会红。
+
+段与判据：
+
+| 段 | 做法 | 判据 |
+| --- | --- | --- |
+| 确定性 | WPF 探针连跑 N 遍，第 2..N 遍与第 1 遍比 | `>48 ≤ 0.05%` |
+| 主窗口 | `ncl-wpf-<page>.png` vs `ncl-smoke-<page>.png` | 平移对齐后 `dx=dy=0` 且 `>48 ≤ 3%` |
+| 桌宠 | `pet-skinsnap` 各抓一帧互比 | 平移对齐后 `dx=dy=0` 且 `>48 ≤ 4%` |
+
+踩过的坑（写脚本时都修了）：
+
+- **判据不能用文件哈希**。首页的 3D 预览有随时间推进的待机动画，两遍必然差 1–3 个像素。
+- **`_diff.py` 的中文输出经 PowerShell 管道回来会被控制台编码拆掉**，正则匹配不上。
+  所以 `_diff.py` 另出一行纯 ASCII 的 `SUMMARY dx=.. dy=.. gt8=.. gt24=.. gt48=.. mean=..`，
+  脚本只认这一行（加 `--no-images` 省掉热力图/并排图）。
+- **别用固定 `sleep` 等 `--ui` 探针**：睡短了会把上一轮留在 `%TEMP%` 的旧图当成本轮结果。
+  用 `$proc.WaitForExit(90000)`，超时才强杀。
+- **`Remove-Item` 在不存在的路径上会 fail-closed 抛异常**（沙箱包装器，`-ErrorAction SilentlyContinue` 也挡不住），
+  先 `Test-Path`。
+- **PowerShell 里 `"$name:"` 会被当成作用域限定符**报“变量引用无效”，要写 `"${name}:"`。
+- 桌宠段要把两边动画相位钉死再抓帧：`pet-mouse 800 100` + `pet-yaw 0` + `pet-walk off`，
+  否则差异里混进的是时间而不是代码。
+- **整段必须一次跑完**，且跑之前先确认没有别的实例占着同名 exe（`taskkill //F //IM NegiPet.exe`）。
 
 ## 桌宠窗口为什么不是“普通窗口”
 
-`ShowInTaskbar=false` 只去掉任务栏按钮（Avalonia 的做法是挂到隐藏离屏父窗口 + 清 `WS_EX_APPWINDOW`），窗口仍会进 Alt+Tab / 任务视图、点它仍抢前台。修复靠 `Services/PetShellStyle.cs`：用 `Win32Properties.AddWindowStylesCallback` 注入 `WS_EX_TOOLWINDOW(0x80) | WS_EX_NOACTIVATE(0x08000000)`。回调返回值是**整体替换** style/ex-style（不是 OR 合并），所以必须把传进来的值原样带上。详见 `docs/pet-window-shell-visibility.md`。
+`ShowInTaskbar=false` 只去掉任务栏按钮（Avalonia 的做法是挂到隐藏离屏父窗口 + 清 `WS_EX_APPWINDOW`），窗口仍会进 Alt+Tab / 任务视图、点它仍抢前台。修复靠 `Pet/Services/PetShellStyle.cs`（Avalonia）与 `Pet.Wpf/Services/PetShellStyle.cs`（WPF）：注入 `WS_EX_TOOLWINDOW(0x80) | WS_EX_NOACTIVATE(0x08000000)`。返回值是**整体替换** style/ex-style（不是 OR 合并），所以必须把传进来的值原样带上。Avalonia 侧用 `Win32Properties.AddWindowStylesCallback`，WPF 侧在 `SourceInitialized` 里直接 `SetWindowLong`。详见 `docs/pet-window-shell-visibility.md`。
+
+由此带来两个后果：桌宠宿主**永远不是活动窗口**，所以桌宠里的对话框（改名 / 坐标选点）
+**不能用 `ShowDialog`**（模态循环会等一个永远不会来的激活），只能 `Show()` + `TaskCompletionSource`；
+挂 `Owner` 也要先判断宿主是否真的可激活（`owner.ShowActivated || owner.IsActive`）。
 
 ## 皮肤格式：64x32 老皮肤必须走 `SkinType.Old`
 
@@ -204,6 +322,13 @@ src/NegiCraftLauncher.Pet.App/bin/Debug/net10.0/NegiPet.exe          # 可选：
 现在统一走 `SkinService.ResolveSkinType(bytes, isSlim)`：先看贴图尺寸，64x32 一律 `Old`，只有 64x64 才用 `isSlim` 区分 New/NewSlim。`IsSlim` 对老皮肤没有意义（`.model` 里存的值也一样），别拿它决定格式。
 
 诊断用：`state` 会打印 `skintype=` 和 `top=`（`top=False` 说明关掉了第二层，老皮肤应当如此）。
+
+**`Old` 必须同时关掉第二层覆盖贴图**。GL 侧在 `SkinRenderControl.ApplySkinType` 里写的是
+`_skin.EnableTop = type != SkinType.Old`；软件光栅后端（`SkinRenderSoftware.SetSkin`）一开始漏了这条。
+不照做的后果很隐蔽：lib 的 `GetSteveTop(Old)` 会返回一个**放大的头**（enlarge 1.125），
+而 `GetSteveTextureTop(Old)` 的头 UV 落在 (32..64, 0..16) —— 那块在老皮肤布局里根本没定义。
+那张 PNG 在那一带只要不是全透明，头顶就会多一个采错纹理的大方块；全透明时完全看不出来。
+所以 `top=` 这个诊断字段必须一起看，光看图会被骗。
 
 另外：渲染器只吃**宽度 64** 的贴图（`SetSkinTex` 对 `width != 64` 直接抛异常）。128x128 以上的高清皮肤要先经 `SkinRenderControl.NormalizeSkinBitmap` 缩到 64 宽（最近邻；2:1 的缩成 64x32 保持 `Old`），否则会被静默丢掉。
 

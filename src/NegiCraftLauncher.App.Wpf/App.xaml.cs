@@ -56,7 +56,12 @@ public partial class App : Application
 
         var vm = new ViewModels.MainWindowViewModel();
 
-        MainWindow = new MainWindow { DataContext = vm };
-        MainWindow.Show();
+        var window = new MainWindow { DataContext = vm };
+        MainWindow = window;
+        window.Show();
+
+        // 只在 --debug 启动时开本地控制通道（%TEMP%\ncl-debug）。
+        // 必须在 Show 之后：桥要拿窗口的 HWND，也要能读到已经建好的可视树。
+        Services.DebugBridge.StartIfNeeded(window);
     }
 }

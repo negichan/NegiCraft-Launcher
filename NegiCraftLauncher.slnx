@@ -5,9 +5,12 @@
     <Project Path="src/NegiCraftLauncher.Core/NegiCraftLauncher.Core.csproj" />
     <Project Path="src/NegiCraftLauncher.Pet/NegiCraftLauncher.Pet.csproj" />
     <Project Path="src/NegiCraftLauncher.Pet.App/NegiCraftLauncher.Pet.App.csproj" />
+    <Project Path="src/NegiCraftLauncher.Pet.App.Wpf/NegiCraftLauncher.Pet.App.Wpf.csproj" />
     <Project Path="src/NegiCraftLauncher.Pet.Core/NegiCraftLauncher.Pet.Core.csproj" />
+    <Project Path="src/NegiCraftLauncher.Pet.Wpf/NegiCraftLauncher.Pet.Wpf.csproj" />
     <Project Path="src/NegiCraftLauncher.Raster/NegiCraftLauncher.Raster.csproj" />
     <Project Path="src/NegiCraftLauncher.Skin/NegiCraftLauncher.Skin.csproj" />
+    <Project Path="src/NegiCraftLauncher.Skin.Wpf/NegiCraftLauncher.Skin.Wpf.csproj" />
     <Project Path="src/NegiCraftLauncher.Theme/NegiCraftLauncher.Theme.csproj" />
     <Project Path="src/NegiCraftLauncher.Theme.Wpf/NegiCraftLauncher.Theme.Wpf.csproj" />
     <Project Path="src/NegiCraftLauncher.ViewModels/NegiCraftLauncher.ViewModels.csproj" />

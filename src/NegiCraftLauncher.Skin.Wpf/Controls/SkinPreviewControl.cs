@@ -8,10 +8,10 @@ using System.Windows.Shapes;
 using NegiCraftLauncher.Raster;
 using NegiCraftLauncher.Raster.Rendering;
 
-namespace NegiCraftLauncher.App.Wpf.Controls;
+namespace NegiCraftLauncher.Skin.Wpf.Controls;
 
 /// <summary>
-/// WPF 版的主页 3D 皮肤预览。取代 Avalonia 侧的 <c>MinecraftSkinPreview</c> ——
+/// WPF 版的 3D 皮肤预览。取代 Avalonia 侧的 <c>MinecraftSkinPreview</c> ——
 /// 那边内嵌的是 <c>SkinRenderControl</c>（<c>OpenGlControlBase</c>），
 /// 而 WPF 的分层透明窗承载不了子 HWND，GL 控件在这边根本不成立。
 ///
@@ -19,6 +19,10 @@ namespace NegiCraftLauncher.App.Wpf.Controls;
 /// <see cref="WriteableBitmap"/>。姿势/动画由 <see cref="SkinPoseDriver"/> 驱动，
 /// 与 Avalonia 版逐条对齐。取景尺寸也照抄：画布 160x250，模型 110x171、顶边距 14，
 /// 阴影 56x9、顶边距 160，名牌顶边距 6。</para>
+///
+/// <para>两个宿主共用：启动器主页（160x250，头跟窗口内光标转、可拖动旋转）
+/// 与桌宠（160x320 + <see cref="StageOffsetY"/>=75，关掉头跟光标、关掉拖动旋转，
+/// 由桌宠窗口自己的物理驱动头部朝向与跳跃位移）。</para>
 ///
 /// <para>红利：这条路是确定性的 —— 同一帧渲染两次逐像素相同，所以 <see cref="SaveSnapshot"/>
 /// 不需要 Avalonia 那边"先上膛再开火"的两次往返。</para>
@@ -32,6 +36,15 @@ public sealed class SkinPreviewControl : Grid
     private const double ShadowTop = 160;
     private const double ModelTop = 14;
     private const double NametagTop = 6;
+
+    /// <summary>字体在**本程序集**里，所以要带 <c>;component</c>；写成裸 <c>/Assets/...</c>
+    /// 会去入口程序集找，找不到就静默回退成系统字体。</summary>
+    private const string FontUri =
+        "pack://application:,,,/NegiCraftLauncher.Skin.Wpf;component/Assets/Fonts/#Jersey 10";
+
+    // ==========================================================
+    // 依赖属性
+    // ==========================================================
 
     public static readonly DependencyProperty PlayerNameProperty =
         DependencyProperty.Register(
@@ -51,7 +64,7 @@ public sealed class SkinPreviewControl : Grid
             nameof(Sneaking),
             typeof(bool),
             typeof(SkinPreviewControl),
-            new PropertyMetadata(false, OnSneakingChanged));
+            new PropertyMetadata(false, OnPoseFlagChanged));
 
     public bool Sneaking
     {
@@ -59,12 +72,119 @@ public sealed class SkinPreviewControl : Grid
         set => SetValue(SneakingProperty, value);
     }
 
+    public static readonly DependencyProperty IsDanglingProperty =
+        DependencyProperty.Register(
+            nameof(IsDangling),
+            typeof(bool),
+            typeof(SkinPreviewControl),
+            new PropertyMetadata(false, OnDanglingChanged));
+
+    /// <summary>被拎起来的挣扎姿势：摇头、胳膊举过头顶、阴影缩小变淡、名牌隐藏。</summary>
+    public bool IsDangling
+    {
+        get => (bool)GetValue(IsDanglingProperty);
+        set => SetValue(IsDanglingProperty, value);
+    }
+
+    public static readonly DependencyProperty IsWalkingProperty =
+        DependencyProperty.Register(
+            nameof(IsWalking),
+            typeof(bool),
+            typeof(SkinPreviewControl),
+            new PropertyMetadata(false, OnPoseFlagChanged));
+
+    public bool IsWalking
+    {
+        get => (bool)GetValue(IsWalkingProperty);
+        set => SetValue(IsWalkingProperty, value);
+    }
+
+    public static readonly DependencyProperty IsJumpingProperty =
+        DependencyProperty.Register(
+            nameof(IsJumping),
+            typeof(bool),
+            typeof(SkinPreviewControl),
+            new PropertyMetadata(false, OnPoseFlagChanged));
+
+    public bool IsJumping
+    {
+        get => (bool)GetValue(IsJumpingProperty);
+        set => SetValue(IsJumpingProperty, value);
+    }
+
+    public static readonly DependencyProperty IsSprintingProperty =
+        DependencyProperty.Register(
+            nameof(IsSprinting),
+            typeof(bool),
+            typeof(SkinPreviewControl),
+            new PropertyMetadata(false, OnPoseFlagChanged));
+
+    public bool IsSprinting
+    {
+        get => (bool)GetValue(IsSprintingProperty);
+        set => SetValue(IsSprintingProperty, value);
+    }
+
+    public static readonly DependencyProperty StageOffsetYProperty =
+        DependencyProperty.Register(
+            nameof(StageOffsetY),
+            typeof(double),
+            typeof(SkinPreviewControl),
+            new PropertyMetadata(0.0, OnStageOffsetChanged));
+
+    /// <summary>整台"舞台"（阴影/模型/名牌）往下挪多少。桌宠用它把小人压到窗口底部。</summary>
+    public double StageOffsetY
+    {
+        get => (double)GetValue(StageOffsetYProperty);
+        set => SetValue(StageOffsetYProperty, value);
+    }
+
+    public static readonly DependencyProperty CanDragRotateProperty =
+        DependencyProperty.Register(
+            nameof(CanDragRotate),
+            typeof(bool),
+            typeof(SkinPreviewControl),
+            new PropertyMetadata(true));
+
+    /// <summary>左键拖动是否绕竖轴旋转。桌宠要 false —— 那边左键是"拎起来"。</summary>
+    public bool CanDragRotate
+    {
+        get => (bool)GetValue(CanDragRotateProperty);
+        set => SetValue(CanDragRotateProperty, value);
+    }
+
+    public static readonly DependencyProperty HeadFollowsHostMouseProperty =
+        DependencyProperty.Register(
+            nameof(HeadFollowsHostMouse),
+            typeof(bool),
+            typeof(SkinPreviewControl),
+            new PropertyMetadata(true));
+
+    /// <summary>
+    /// 头是否跟着**窗口内**的光标转。启动器主页要 true；
+    /// 桌宠要 false —— 它由 <c>PetWindow.UpdateMouseLookAndBodyTurn</c> 按**全局**光标
+    /// 每 16ms 算一次，两条路一起开会互相打架。
+    /// </summary>
+    public bool HeadFollowsHostMouse
+    {
+        get => (bool)GetValue(HeadFollowsHostMouseProperty);
+        set => SetValue(HeadFollowsHostMouseProperty, value);
+    }
+
+    // ==========================================================
+    // 可视树
+    // ==========================================================
+
     private readonly SkinRenderSoftware _renderer = new();
     private readonly SkinPoseDriver _pose;
     private readonly Image _model;
     private readonly Ellipse _shadow;
     private readonly Border _nametag;
     private readonly TextBlock _nameText;
+
+    private readonly TranslateTransform _modelShift = new();
+    private readonly TranslateTransform _nametagShift = new();
+    private readonly TranslateTransform _shadowShift = new();
 
     private WriteableBitmap? _bitmap;
     private PixelBuffer? _buffer;
@@ -74,6 +194,7 @@ public sealed class SkinPreviewControl : Grid
     private double _dpiY = 1.0;
 
     private DateTime _lastFrame;
+    private double _lastFrameMs;
     private bool _loopAttached;
     private bool _dragging;
     private Point _lastMouse;
@@ -101,6 +222,7 @@ public sealed class SkinPreviewControl : Grid
             VerticalAlignment = VerticalAlignment.Top,
             Margin = new Thickness(0, ShadowTop, 0, 0),
             IsHitTestVisible = false,
+            RenderTransform = _shadowShift,
             Fill = new RadialGradientBrush
             {
                 GradientStops =
@@ -123,6 +245,7 @@ public sealed class SkinPreviewControl : Grid
             Margin = new Thickness(0, ModelTop, 0, 0),
             IsHitTestVisible = false,
             Stretch = Stretch.Fill,
+            RenderTransform = _modelShift,
         };
 
         // 最近邻：像素画放大要硬边，不能让 WPF 插值糊掉。
@@ -133,7 +256,7 @@ public sealed class SkinPreviewControl : Grid
         {
             Text = PlayerName,
             Foreground = Brushes.White,
-            FontFamily = new FontFamily(new Uri("pack://application:,,,/"), "./Assets/Fonts/#Jersey 10"),
+            FontFamily = new FontFamily(new Uri("pack://application:,,,/"), FontUri),
             FontSize = 12.5,
             HorizontalAlignment = HorizontalAlignment.Center,
             VerticalAlignment = VerticalAlignment.Center,
@@ -149,6 +272,7 @@ public sealed class SkinPreviewControl : Grid
             VerticalAlignment = VerticalAlignment.Top,
             Margin = new Thickness(0, NametagTop, 0, 0),
             IsHitTestVisible = false,
+            RenderTransform = _nametagShift,
             Child = _nameText,
         };
 
@@ -163,6 +287,15 @@ public sealed class SkinPreviewControl : Grid
     /// <summary>当前正在渲染的玩家名（诊断用）。</summary>
     public string? CurrentLoadedUser => _loadedUser;
 
+    /// <summary>当前生效的皮肤格式（诊断用）。与 Avalonia 侧 <c>MinecraftSkinPreview.LiveSkinType</c> 同名同义。</summary>
+    public MinecraftSkinRender.SkinType LiveSkinType => _renderer.SkinType;
+
+    /// <summary>是否画了第二层覆盖贴图（诊断用）。老皮肤（64x32）应当是 false。</summary>
+    public bool LiveTopLayer => _renderer.EnableTop;
+
+    /// <summary>渲染诊断串：视口像素尺寸 + 上一帧耗时（对齐 Avalonia 侧的 <c>RenderStats</c> 字段位置）。</summary>
+    public string RenderStats => $"{_pixelWidth}x{_pixelHeight} {_lastFrameMs:F2}ms";
+
     /// <summary>模型当前朝向（度）。</summary>
     public float CurrentYawDeg => _pose.CurrentYawDeg;
 
@@ -173,6 +306,24 @@ public sealed class SkinPreviewControl : Grid
     public void SetHeadLookAt(float pitchDeg, float yawDeg) => _pose.SetHeadLookAt(pitchDeg, yawDeg);
 
     public void TriggerAttack(double? parkAt = null) => _pose.TriggerAttack(parkAt);
+
+    /// <summary>
+    /// 跳跃的垂直位移（负值向上）。只动**人物与名牌**，阴影钉死在地面上，
+    /// 并按离地高度缩小变淡 —— 与 Avalonia 版 <c>MinecraftSkinPreview.SetJumpOffset</c> 一致。
+    /// </summary>
+    public void SetJumpOffset(double jumpOffsetY)
+    {
+        // 对齐到整数像素：否则材质过滤与文字栅格化会产生亚像素微颤。
+        var snapped = Math.Round(jumpOffsetY);
+        _modelShift.Y = snapped;
+        _nametagShift.Y = snapped;
+        _shadowShift.Y = 0;
+
+        var height = Math.Max(0, -jumpOffsetY);
+        var ratio = Math.Clamp(height / 60.0, 0.0, 1.0);
+        _shadow.Width = 56.0 * (1.0 - (0.35 * ratio));
+        _shadow.Opacity = 1.0 - (0.60 * ratio);
+    }
 
     /// <summary>直接喂一张皮肤 PNG，跳过用户名查找。</summary>
     public void ApplySkin(byte[] pngBytes)
@@ -198,6 +349,10 @@ public sealed class SkinPreviewControl : Grid
         File.WriteAllBytes(filePath, PngCodec.Encode(_buffer));
     }
 
+    // ==========================================================
+    // 属性变更
+    // ==========================================================
+
     private static void OnPlayerNameChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
     {
         if (d is not SkinPreviewControl preview) return;
@@ -207,10 +362,44 @@ public sealed class SkinPreviewControl : Grid
         preview.LoadFromUsername(name);
     }
 
-    private static void OnSneakingChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
+    /// <summary>四个纯姿势开关（蹲/走/跳/跑）都是直接转发给 <see cref="SkinPoseDriver"/>。</summary>
+    private static void OnPoseFlagChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
     {
-        if (d is SkinPreviewControl preview) preview._pose.Sneaking = e.NewValue is true;
+        if (d is not SkinPreviewControl preview) return;
+
+        var on = e.NewValue is true;
+        if (e.Property == SneakingProperty) preview._pose.Sneaking = on;
+        else if (e.Property == IsWalkingProperty) preview._pose.Walking = on;
+        else if (e.Property == IsJumpingProperty) preview._pose.Jumping = on;
+        else if (e.Property == IsSprintingProperty) preview._pose.Sprinting = on;
     }
+
+    private static void OnDanglingChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
+    {
+        if (d is not SkinPreviewControl preview) return;
+
+        var dangling = e.NewValue is true;
+        preview._pose.Dangling = dangling;
+
+        // 被拎起来：影子缩到 36 宽并变淡（脚离地了），名牌淡出（腾不出位置）。
+        preview._shadow.Width = dangling ? 36 : 56;
+        preview._shadow.Opacity = dangling ? 0.32 : 1.0;
+        preview._nametag.Opacity = dangling ? 0.0 : 1.0;
+    }
+
+    private static void OnStageOffsetChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
+    {
+        if (d is not SkinPreviewControl preview) return;
+
+        var offset = e.NewValue is double v ? v : 0.0;
+        preview._shadow.Margin = new Thickness(0, ShadowTop + offset, 0, 0);
+        preview._model.Margin = new Thickness(0, ModelTop + offset, 0, 0);
+        preview._nametag.Margin = new Thickness(0, NametagTop + offset, 0, 0);
+    }
+
+    // ==========================================================
+    // 渲染循环
+    // ==========================================================
 
     private void OnLoaded(object sender, RoutedEventArgs e)
     {
@@ -290,7 +479,9 @@ public sealed class SkinPreviewControl : Grid
 
         _renderer.Width = _pixelWidth;
         _renderer.Height = _pixelHeight;
+        var started = System.Diagnostics.Stopwatch.GetTimestamp();
         _renderer.RenderTo(_buffer);
+        _lastFrameMs = System.Diagnostics.Stopwatch.GetElapsedTime(started).TotalMilliseconds;
 
         _bitmap.WritePixels(new Int32Rect(0, 0, _pixelWidth, _pixelHeight), _buffer.Pixels, _pixelWidth * 4, 0);
     }
@@ -329,9 +520,10 @@ public sealed class SkinPreviewControl : Grid
     private void OnHostMouseMove(object sender, MouseEventArgs e)
     {
         if (_dragging || _hostWindow is null) return;
+        if (!HeadFollowsHostMouse) return;
         if (_pose.Walking) return;
 
-        var headInWindow = TranslatePoint(new Point(StageWidth / 2, 52), _hostWindow);
+        var headInWindow = TranslatePoint(new Point(StageWidth / 2, 52 + StageOffsetY), _hostWindow);
         var mouse = e.GetPosition(_hostWindow);
 
         // 鼠标移出窗口时别再盯着窗口外的一个点看。
@@ -351,9 +543,15 @@ public sealed class SkinPreviewControl : Grid
         _pose.SetHeadLookAt(targetPitch, targetYaw);
     }
 
+    // ==========================================================
+    // 拖动旋转
+    // ==========================================================
+
     protected override void OnMouseLeftButtonDown(MouseButtonEventArgs e)
     {
         base.OnMouseLeftButtonDown(e);
+        if (!CanDragRotate) return;
+
         _dragging = true;
         _lastMouse = e.GetPosition(this);
         Cursor = Cursors.SizeWE;
@@ -389,6 +587,8 @@ public sealed class SkinPreviewControl : Grid
     protected override void OnLostMouseCapture(MouseEventArgs e)
     {
         base.OnLostMouseCapture(e);
+        if (!_dragging) return;
+
         _dragging = false;
         Cursor = Cursors.Hand;
     }

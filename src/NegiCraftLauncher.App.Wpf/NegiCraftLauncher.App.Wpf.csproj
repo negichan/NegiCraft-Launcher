@@ -40,8 +40,12 @@
 
   <ItemGroup>
     <ProjectReference Include="..\NegiCraftLauncher.Core\NegiCraftLauncher.Core.csproj" />
+    <!-- WPF 侧桌宠本体（进程内托管）。独立版 NegiPet.exe 也用它。 -->
+    <ProjectReference Include="..\NegiCraftLauncher.Pet.Wpf\NegiCraftLauncher.Pet.Wpf.csproj" />
     <!-- 与 Avalonia 那份完全同一套逻辑：VM 与像素层都不含任何 UI 框架类型。 -->
     <ProjectReference Include="..\NegiCraftLauncher.Raster\NegiCraftLauncher.Raster.csproj" />
+    <!-- WPF 侧的皮肤预览控件（软件光栅化）。与桌宠共用，所以单独一个工程，不能留在本工程里。 -->
+    <ProjectReference Include="..\NegiCraftLauncher.Skin.Wpf\NegiCraftLauncher.Skin.Wpf.csproj" />
     <ProjectReference Include="..\NegiCraftLauncher.ViewModels\NegiCraftLauncher.ViewModels.csproj" />
     <!-- WPF 侧的 view 层主题。与 Avalonia 的 NegiCraftLauncher.Theme 是两份独立资产。 -->
     <ProjectReference Include="..\NegiCraftLauncher.Theme.Wpf\NegiCraftLauncher.Theme.Wpf.csproj" />

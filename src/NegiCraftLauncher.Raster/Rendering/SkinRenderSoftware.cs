@@ -73,6 +73,15 @@ public sealed class SkinRenderSoftware : SkinRenderBase
         _skina.SkinType = type;
         _switchModel = true;
         HaveSkin = true;
+
+        // 老皮肤（64x32）**没有第二层覆盖贴图**。GL 后端在 SkinRenderControl.ApplySkinType
+        // 里就是这条规则（`_skin.EnableTop = type != SkinType.Old`），软件后端必须照做。
+        //
+        // 不照做的后果：lib 的 GetSteveTop(Old) 会返回一个**放大的头**（enlarge 1.125），
+        // 而 GetSteveTextureTop(Old) 的头 UV 落在 (32..64, 0..16) 那片 —— 在老皮肤布局里
+        // 那块地方根本没定义。如果那张 PNG 在那一带不是全透明，就会在头顶套一个
+        // 采错纹理的大方块；透明时看不出，所以这个 bug 是隐性的。
+        EnableTop = type != SkinType.Old;
     }
 
     /// <summary>清掉皮肤（例如账号登出）。</summary>

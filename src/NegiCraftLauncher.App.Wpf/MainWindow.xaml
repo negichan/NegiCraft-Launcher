@@ -4,6 +4,7 @@
         xmlns:vm="clr-namespace:NegiCraftLauncher.ViewModels;assembly=NegiCraftLauncher.ViewModels"
         xmlns:conv="clr-namespace:NegiCraftLauncher.App.Wpf.Converters"
         xmlns:controls="clr-namespace:NegiCraftLauncher.App.Wpf.Controls"
+        xmlns:skin="clr-namespace:NegiCraftLauncher.Skin.Wpf.Controls;assembly=NegiCraftLauncher.Skin.Wpf"
         xmlns:pop="clr-namespace:NegiCraftLauncher.App.Wpf.Controls"
         xmlns:neg="clr-namespace:NegiCraftLauncher.Theme.Wpf;assembly=NegiCraftLauncher.Theme.Wpf"
         xmlns:materialIcons="clr-namespace:Material.Icons.WPF;assembly=Material.Icons.WPF"
@@ -612,9 +613,9 @@
                     <!-- .stage：top 44 / left 92 / 160x250 -->
                     <Canvas Visibility="{Binding HasAccount, Converter={StaticResource BoolToVis}}">
                         <!-- 启动器内的 3D 皮肤模型：有账号就一直显示 -->
-                        <controls:SkinPreviewControl x:Name="SkinPreview"
-                                                     Canvas.Left="92" Canvas.Top="44"
-                                                     PlayerName="{Binding CurrentAccount.Name}" />
+                        <skin:SkinPreviewControl x:Name="SkinPreview"
+                                                 Canvas.Left="92" Canvas.Top="44"
+                                                 PlayerName="{Binding CurrentAccount.Name}" />
                     </Canvas>
 
                     <!-- .dock：right 20 / bottom 20 / 宽 380 / 内边距 10 / 圆角 18 -->
