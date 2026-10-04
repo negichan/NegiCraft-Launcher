@@ -53,6 +53,16 @@ public partial class MainWindow : Window
         Shell.Clip = new RectangleGeometry(new Rect(0, 0, e.NewSize.Width, e.NewSize.Height), 22, 22);
     }
 
+    /// <summary>
+    /// 侧栏磨砂背板同理：<c>ClipToBounds=True</c> 只裁矩形，圆角得自己给一条裁剪几何，
+    /// 否则被 <c>BlurEffect</c> 放大的背景图会从四个圆角外漏出来（看着就是矩形 + 角上一圈糊）。
+    /// 半径要和 XAML 里的 <c>CornerRadius="18"</c> 保持一致。
+    /// </summary>
+    private void OnSidebarBackdropSizeChanged(object sender, SizeChangedEventArgs e)
+    {
+        SidebarBackdrop.Clip = new RectangleGeometry(new Rect(0, 0, e.NewSize.Width, e.NewSize.Height), 18, 18);
+    }
+
     // ==========================================================
     // 托盘
     // ==========================================================

@@ -127,14 +127,22 @@
              而 Avalonia 靠 spread=-12 把阴影形状收进 12px，观感几乎不可见（实测盒外只暗 1/255）。
              更要命的是 DropShadowEffect 把阴影画在元素**背后**，侧栏是半透明（#8C0E0E12，α=0.549）
              的，自家阴影会从内部透出来把它压暗约 35%（实测 R-2 G-6 B-9，蓝通道差最大）。
-             两个参数都调不平 ⇒ 干脆不加，实测与 Avalonia 逐点吻合到 ≤2/255。 -->
+             两个参数都调不平 ⇒ 干脆不加；侧栏**内部**因此与 Avalonia 逐点吻合到 ≤2/255。
+
+             ⚠️ 但不加 Effect 会留下描边这个副作用：Avalonia 的 BoxShadow 画在描边**底下**，
+             先把 1px 描边的底色压暗约 20%，所以那边同一支 #17FFFFFF 看着是偏暗的洋红线；
+             WPF 的 Border 把描边直接压在父级（明亮的首页图）上 ⇒ 同色号看着明显更亮（实测 R+45）。
+             ⇒ 这里把描边换成**等效色**：让 a*C + (1-a)*page 等于 0x17 白 over (page×0.8)，
+               解得 a=0.2706(0x45)、C=85(0x55) —— 对任意底色都成立。
+               实测 y=300/500 与 Avalonia 差 ≤4/255（改前差 44）。 -->
         <Style x:Key="SidebarStyle" TargetType="{x:Type Border}">
             <Setter Property="Background" Value="#111114" />
             <Setter Property="BorderBrush" Value="#26262b" />
             <Style.Triggers>
                 <Trigger Property="neg:Negi.OnHome" Value="True">
                     <Setter Property="Background" Value="#8C0E0E12" />
-                    <Setter Property="BorderBrush" Value="#17FFFFFF" />
+                    <!-- ⚠️ 与 Avalonia 的 #17FFFFFF **不等价**（理由见上），别"顺手对齐"回去。 -->
+                    <Setter Property="BorderBrush" Value="#45555555" />
                 </Trigger>
             </Style.Triggers>
         </Style>
@@ -508,10 +516,16 @@
             <!-- ========================================== -->
             <!-- 3. 侧栏底下的磨砂背板                        -->
             <!-- ========================================== -->
-            <Border HorizontalAlignment="Left" VerticalAlignment="Stretch"
+            <!-- ⚠️ ClipToBounds 在 WPF 上**只裁矩形**（Avalonia 的 Border 会按圆角裁），
+                 所以这里得自己给一条圆角裁剪几何，见 OnSidebarBackdropSizeChanged。
+                 少了它，被 BlurEffect 放大的背景图会从四个圆角外漏出来，
+                 侧栏看着就是个矩形 + 角上一圈糊。 -->
+            <Border x:Name="SidebarBackdrop"
+                    HorizontalAlignment="Left" VerticalAlignment="Stretch"
                     Margin="12" Width="60"
                     CornerRadius="18"
                     ClipToBounds="True"
+                    SizeChanged="OnSidebarBackdropSizeChanged"
                     IsHitTestVisible="False"
                     Visibility="{Binding IsOnHome, Converter={StaticResource BoolToVis}}"
                     Panel.ZIndex="19">
