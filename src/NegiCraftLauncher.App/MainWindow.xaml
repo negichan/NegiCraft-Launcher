@@ -438,11 +438,14 @@
         </DataTemplate>
     </Window.Resources>
 
-    <!-- 最外层窗口壳：22px 圆角，背景 #09090b。
+    <!-- 最外层窗口壳：22px 圆角，背景 #09090b，1px 描边 #26262b（与 design/mockup.html
+         .window 一致；色值用 BorderLineBrush token）。
          注意：WPF 的 Border 即使 ClipToBounds 也只裁矩形，圆角要另外设 Clip
          （见 MainWindow.xaml.cs 的 OnShellSizeChanged）。 -->
     <Border x:Name="Shell"
             Background="#09090b"
+            BorderBrush="{DynamicResource BorderLineBrush}"
+            BorderThickness="1"
             CornerRadius="22"
             ClipToBounds="True"
             SizeChanged="OnShellSizeChanged">
