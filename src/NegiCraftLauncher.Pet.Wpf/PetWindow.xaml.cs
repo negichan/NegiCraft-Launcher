@@ -505,7 +505,8 @@ public partial class PetWindow : Window
     {
         PetPreview.IsWalking = _motion.Walking;
         PetPreview.IsSprinting = _motion.Sprinting;
-        PetPreview.IsJumping = _motion.IsJumping;
+        // 跳跃与抛出都是"在空中"，同一个姿势 —— 桌宠飞着的时候不该还在迈腿。
+        PetPreview.IsJumping = _motion.IsAirborne;
         PetPreview.Sneaking = _motion.Sneaking;
         PetPreview.SetJumpOffset(_motion.JumpOffsetY);
 

@@ -128,6 +128,29 @@ public sealed class PetMotion
     private bool _jumping;
 
     /// <summary>
+    /// 被甩出去：<b>整只桌宠</b>在空中做抛体运动（窗口跟着飞，不是只有模型往上飘）。
+    /// 与 <see cref="_jumping"/> 的区别就在这一点上 —— 见 <see cref="StepThrown"/>。
+    /// 重力在 <see cref="_jumping"/> 或它为真时跑。
+    /// </summary>
+    private bool _thrown;
+
+    /// <summary>水平速度（DIP/s，向右为正）。**只有抛出期间非零** —— WASD 是直接推位置、不存速度。</summary>
+    private double _velocityX;
+
+    /// <summary>
+    /// 拖拽采样（内核时间轴秒, 窗口 X, 窗口 Y）。拖拽期间每帧记一个，松手时用它回归出
+    /// "甩出去"的初速度（见 <see cref="EndDrag"/>）。60fps × 0.12s 的时间窗只要 8 个，
+    /// 留 12 个余量。
+    /// </summary>
+    private readonly List<(double T, double X, double Y)> _dragSamples = new(DragSampleCapacity);
+
+    /// <summary>拖拽采样缓冲上限。时间窗过滤之外还有这一道，免得极长的拖拽把列表撑大。</summary>
+    private const int DragSampleCapacity = 12;
+
+    /// <summary>上一帧是不是在拖拽 —— 用来抓"拖拽开始"那个边沿，把上一轮的采样丢掉。</summary>
+    private bool _wasDragging;
+
+    /// <summary>
     /// 上一帧**夹取之后**的脚底 Y（屏幕 DIP）。找支撑面时和当前脚底取 <c>Min</c>：
     /// 只看移动后的位置的话，脚底一旦沉过台面一丁点，那块面就不再是候选（它跑到脚底以上了），
     /// 桌宠会直接从薄平台上**穿下去**。初值 +∞ ⇒ 第一帧退化成"用当前位置"。
@@ -183,6 +206,21 @@ public sealed class PetMotion
 
     /// <summary>正在跳跃。宿主用它切跳跃姿势（也用于把移动速度换成"跳跃中"那一档）。</summary>
     public bool IsJumping => _jumping;
+
+    /// <summary>被甩出去了（拖拽松手时速度够大）。见 <see cref="StepThrown"/>。</summary>
+    public bool IsThrown => _thrown;
+
+    /// <summary>
+    /// 抛出速度（DIP/s；X 向右为正、Y 向下为正）。没在飞时是 (0,0)。
+    /// 诊断与自测读它 —— 上限由 <see cref="PetPhysicsProfile.ThrowMaxBlocksPerSecond"/> 决定。
+    /// </summary>
+    public (double X, double Y) ThrowVelocity => (_velocityX, _velocityY);
+
+    /// <summary>
+    /// 在空中（跳跃或抛出）。<b>宿主用它切姿势</b> —— 桌宠飞在半空时不该还在迈腿。
+    /// 内核内部挑移动速度时仍只看 <see cref="IsJumping"/>（抛出期间 WASD 不生效）。
+    /// </summary>
+    public bool IsAirborne => _jumping || _thrown;
 
     /// <summary>
     /// 没在跳跃、可以起跳。**桌宠是自由移动的**（不受重力、松开就停在原地），
@@ -255,7 +293,7 @@ public sealed class PetMotion
         $"mode={Mode} jump={JumpOffsetY:F2} block={DipPerBlock * LastStage.Scale:F2} " +
         $"walk={Walking} sprint={Sprinting} sneak={Sneaking} " +
         $"ground=({GroundX:F2},{GroundY:F2}) " +
-        $"air={!OnGround} vy={_velocityY:F1} h={HeightAboveSupport:F2} " +
+        $"air={!OnGround} vy={_velocityY:F1} thrown={_thrown} vx={_velocityX:F1} h={HeightAboveSupport:F2} " +
         $"support={SupportTop:F2} surf={SurfaceCount}";
 
     /// <summary>还有几个点没走到（当前目标算 1 个）。</summary>
@@ -308,7 +346,9 @@ public sealed class PetMotion
         GroundY = windowY;
         JumpOffsetY = 0;
         _velocityY = 0;
+        _velocityX = 0;
         _jumping = false;
+        _thrown = false;
         _standFeetY = double.PositiveInfinity;
         OnGround = true;
     }
@@ -322,22 +362,48 @@ public sealed class PetMotion
         Walking = false;
         Sprinting = false;
         _velocityY = 0;
+        _velocityX = 0;
         _jumping = false;
+        _thrown = false;
         _standFeetY = double.PositiveInfinity;
         OnGround = true;
     }
 
-    /// <summary>松手落地：落脚位置对齐到窗口当前落点，清掉跳跃状态（P4 会在这里把拖拽采样到的
-    /// 速度交进去，实现"甩出去"）。</summary>
+    /// <summary>
+    /// 松手：落脚位置对齐到窗口当前落点，然后用拖拽期间采到的速度决定要不要"甩出去"。
+    ///
+    /// <para><b>只有甩出去才飞</b>（见 <see cref="PetPhysicsProfile.ThrowMinBlocksPerSecond"/>）：
+    /// 速度不够就只是"轻轻放下"，停在原地 —— 桌宠是自由移动的，不主动甩就不受重力。
+    /// 甩出去了就进 <see cref="_thrown"/>，由 <see cref="StepThrown"/> 做抛体运动。</para>
+    /// </summary>
     public void EndDrag(double windowX, double windowY)
     {
         GroundX = windowX;
         GroundY = windowY;
         JumpOffsetY = 0;
-        _velocityY = 0;
         _jumping = false;
-        _standFeetY = double.PositiveInfinity;
+        _velocityX = 0;
+        _velocityY = 0;
+        _thrown = false;
         OnGround = true;
+
+        // 抛出期间找支撑面要用"上一帧停稳的位置"做防穿透（见 _standFeetY）。拖拽期间它一直没被
+        // 更新过，留着上一次的值会让第一帧的探针高得离谱 —— 所有台面都成了候选，桌宠会被往上吸。
+        // 所以按松手位置重设一次。
+        _standFeetY = LastStage.Scale > 0
+            ? windowY + ((FeetStageY + LastStage.StageOffsetY) * LastStage.Scale)
+            : double.PositiveInfinity;
+
+        var (vx, vy) = EstimateThrowVelocity();
+        _dragSamples.Clear();
+
+        if (vx == 0 && vy == 0) return;
+
+        _velocityX = vx;
+        _velocityY = vy;
+        _thrown = true;
+        OnGround = false;
+        PositionDirty = true;
     }
 
     // ---------------------------------------------------------------- 输入
@@ -493,10 +559,24 @@ public sealed class PetMotion
 
         _timeSeconds += dt;
 
-        // 被抓握或在空中拖拽时，以挣扎晃头动画为先。**竖直速度清零** ——
-        // 松手后由 StepVertical 接管（P4 会在这里塞入拖拽采样到的速度，实现"甩出去"）。
+        // 被抓住 / 在拖拽时，以挣扎晃头动画为先。**竖直速度清零** —— 松手时由 EndDrag 把
+        // 拖拽采样到的速度交进去（"甩出去"），再由 StepVertical 的抛体分支接管。
         if (IsDragging)
         {
+            // 抓起来的那一帧把上一轮的采样丢掉 —— 免得极短的两次拖拽串味（时间窗过滤之外的第二道）。
+            if (!_wasDragging)
+            {
+                _dragSamples.Clear();
+                _thrown = false;
+                _velocityX = 0;
+            }
+            _wasDragging = true;
+
+            // **采样就靠这一句**：宿主每帧把窗口挪到光标处，内核每帧从 ctx.Window 记一个点。
+            // 不用宿主额外报速度，也不用宿主提供时钟 —— 内核自己的 _timeSeconds 就够了（16ms 一个点，
+            // 对"手甩出去"这种量级绰绰有余）。
+            RecordDragSample(ctx.Window.X, ctx.Window.Y);
+
             JumpOffsetY = 0;
             _velocityY = 0;
             _jumping = false;
@@ -507,6 +587,8 @@ public sealed class PetMotion
             Sprinting = false;
             return;
         }
+
+        _wasDragging = false;
 
         // 窗口被别处挪过（首次显示、用户拖动、切模式），地面位置还没跟上的话对齐一次。
         if (GroundX == 0 && GroundY == 0 && (ctx.Window.X != 0 || ctx.Window.Y != 0))
@@ -523,26 +605,30 @@ public sealed class PetMotion
             RecomputeSneak();
         }
 
-        // 2. 模式检测与物理模拟
+        // 2. 模式检测与物理模拟。**被甩出去时不接受输入** —— 桌宠在空中飞，
+        //    操控 / 跟随 / 导航都让位给抛体运动（否则会和 StepThrown 抢着推 GroundX）。
         var yaw = ctx.CurrentYawDeg;
-        switch (Mode)
+        if (!_thrown)
         {
-            case PetInteractionMode.Control:
-                StepControl(dt, ctx, ref yaw);
-                break;
-            case PetInteractionMode.FollowMouse:
-                StepFollowMouse(dt, ctx, ref yaw);
-                break;
-            case PetInteractionMode.NavigateToCoord:
-                StepNavigation(dt, ctx, ref yaw);
-                break;
-            case PetInteractionMode.Free:
-            default:
-                break;
+            switch (Mode)
+            {
+                case PetInteractionMode.Control:
+                    StepControl(dt, ctx, ref yaw);
+                    break;
+                case PetInteractionMode.FollowMouse:
+                    StepFollowMouse(dt, ctx, ref yaw);
+                    break;
+                case PetInteractionMode.NavigateToCoord:
+                    StepNavigation(dt, ctx, ref yaw);
+                    break;
+                case PetInteractionMode.Free:
+                default:
+                    break;
+            }
         }
 
-        // 3. 竖直物理：跳跃的重力 / "不许沉到地面以下" / 支撑面重算。**所有模式都跑**，
-        //    但重力只在跳跃期间生效 —— WASD 是自由移动，松开就停在原地。
+        // 3. 竖直物理：跳跃的重力 / 抛出的抛体运动 / "不许沉到地面以下" / 支撑面重算。
+        //    **所有模式都跑**，但重力只在跳跃或抛出期间生效 —— WASD 是自由移动，松开就停在原地。
         StepVertical(dt, ctx);
 
         // 4. 鼠标视线追踪与身体自动平滑转向
@@ -817,9 +903,19 @@ public sealed class PetMotion
     /// 只有模型往上飘，阴影留在地面上才是跳跃该有的样子。模型位图向上最多只能挪
     /// <c>(NametagTopStageY + StageOffsetY) × 缩放</c>，再往上会被窗口顶边裁掉 ——
     /// 跳跃只有 1.25 格，100% 缩放时正好落在余量以内。</para>
+    ///
+    /// <para><b>被甩出去时走 <see cref="StepThrown"/></b>，不在这里 —— 那个是整只桌宠在飞。</para>
     /// </summary>
     private void StepVertical(double dt, in PetMotionContext ctx)
     {
+        // 被甩出去：整只桌宠在空中飞。**放在"飞行模式"早退之前** —— 抛出跟模式无关，
+        // 自由待机 / 操控 / 跟随 / 导航下松手都该飞出去。
+        if (_thrown)
+        {
+            StepThrown(dt, ctx);
+            return;
+        }
+
         // 飞行模式：窗口就是当前位置，没有空中偏移，也不积累竖直速度。
         if (Mode is PetInteractionMode.FollowMouse or PetInteractionMode.NavigateToCoord)
         {
@@ -899,6 +995,189 @@ public sealed class PetMotion
         SupportTop = supportTop;
         _standFeetY = standFeetY;
         OnGround = !_jumping;
+    }
+
+    /// <summary>
+    /// 被甩出去的抛体运动：<b>整只桌宠（窗口）在空中飞</b> —— 受重力、撞左右墙与天花板反弹、
+    /// 落到台面上按恢复系数弹几下，弹不动了就停住。
+    ///
+    /// <para><b>它和跳跃不是一回事</b>。跳跃只有模型往上飘（窗口不动、阴影留在地面，见
+    /// <see cref="JumpOffsetY"/>）；抛出是整只桌宠真的在屏幕里飞，所以走的是
+    /// <see cref="GroundX"/>/<see cref="GroundY"/>。两者共用同一套"找支撑面 + 不许沉下去"的判定，
+    /// 所以甩到别的窗口顶面上一样能站住。</para>
+    ///
+    /// <para>竖直用的是和跳跃同一个梯形积分（匀加速下是精确解 ⇒ 弹跳高度与帧长无关）。</para>
+    /// </summary>
+    private void StepThrown(double dt, in PetMotionContext ctx)
+    {
+        var stage = ctx.Stage;
+        var scale = stage.Scale;
+        var dipPerBlock = DipPerBlock * scale;
+
+        var feetInWindow = (FeetStageY + stage.StageOffsetY) * scale;
+        var bodyHeight = (FeetStageY - NametagTopStageY) * scale;
+        var gravity = Profile.GravityBlocksPerSecondSquared * dipPerBlock;
+        var halfWidth = CollisionWidthBlocks * DipPerBlock * scale / 2.0;
+
+        var feetX = GroundX + (stage.Width / 2.0);
+        var feetY = GroundY + feetInWindow;   // 抛出期间 JumpOffsetY 恒为 0
+
+        // 空中不迈腿：抛出期间 Walking/Sprinting 一直是关的（操控模式这一帧也被跳过了）。
+        Walking = false;
+        Sprinting = false;
+
+        // 1. 水平：飞一段，撞左右墙就反弹（不是夹住 —— 夹住会贴着墙"粘"在那）。
+        //    墙按**窗口边界**算，和 ClampHorizontally 同一套：模型在窗口里是居中的，
+        //    若按碰撞盒（0.6 格）算，窗口会有一截探到屏幕外、把桌宠半边切掉。
+        feetX += _velocityX * dt;
+        var leftWall = ctx.WorkArea.X + (stage.Width / 2.0);
+        var rightWall = ctx.WorkArea.X + ctx.WorkArea.Width - (stage.Width / 2.0);
+        if (feetX < leftWall)
+        {
+            feetX = leftWall;
+            _velocityX = -_velocityX * Profile.WallRestitution;
+        }
+        else if (feetX > rightWall)
+        {
+            feetX = rightWall;
+            _velocityX = -_velocityX * Profile.WallRestitution;
+        }
+
+        // 2. 竖直：重力（梯形积分，与跳跃同一套）。
+        feetY += (_velocityY + (0.5 * gravity * dt)) * dt;
+        _velocityY += gravity * dt;
+
+        // 3. 天花板：模型头顶不许越出工作区上沿，撞上就往下弹。
+        var minFeetY = ctx.WorkArea.Y + bodyHeight;
+        if (feetY < minFeetY)
+        {
+            feetY = minFeetY;
+            if (_velocityY < 0) _velocityY = -_velocityY * Profile.WallRestitution;
+        }
+
+        // 4. 支撑面：落到台面上按恢复系数弹，弹不动了就停。
+        //    探针取"上一帧位置与当前位置里更高的那个"，否则一帧跨过一条台面线就穿下去了
+        //    （与站立时同一个坑，见 _standFeetY）。
+        var supportTop = FindSupportTop(ctx, feetX, halfWidth, Math.Min(_standFeetY, feetY));
+
+        if (feetY >= supportTop - SupportEpsilon)
+        {
+            if (_velocityY > 0)
+            {
+                // 往下走 ⇒ 落地：先夹到台面，再决定弹还是停。
+                feetY = supportTop;
+
+                if (_velocityY >= Profile.BounceMinBlocksPerSecond * dipPerBlock)
+                {
+                    _velocityY = -_velocityY * Profile.BounceRestitution;
+                    _velocityX *= Profile.BounceHorizontalRetention;
+                }
+                else
+                {
+                    // 停稳：交回给模式逻辑（下一帧 StepVertical 就按"站在台面上"处理）。
+                    _velocityX = 0;
+                    _velocityY = 0;
+                    _thrown = false;
+                }
+            }
+            else if (feetY > supportTop)
+            {
+                // 往上走却已经在台面以下 ⇒ 只有工作区地板会这样（绝对下界），夹回来。
+                // 单向平台在这种情况下根本不是候选（探针在它下面），所以不会误夹。
+                feetY = supportTop;
+            }
+        }
+
+        var groundY = feetY - feetInWindow;
+        var groundX = feetX - (stage.Width / 2.0);
+        if (groundX != GroundX || groundY != GroundY) PositionDirty = true;
+
+        GroundX = groundX;
+        GroundY = groundY;
+        JumpOffsetY = 0;
+        SupportTop = supportTop;
+        _standFeetY = feetY;
+        OnGround = !_thrown;
+    }
+
+    // ---------------------------------------------------------------- 拖拽抛出
+
+    /// <summary>记一个拖拽采样点。缓冲只留最近 <see cref="DragSampleCapacity"/> 个（时间窗过滤见估算）。</summary>
+    private void RecordDragSample(double x, double y)
+    {
+        _dragSamples.Add((_timeSeconds, x, y));
+        while (_dragSamples.Count > DragSampleCapacity) _dragSamples.RemoveAt(0);
+    }
+
+    /// <summary>
+    /// 从拖拽采样里回归出松手速度（DIP/s）。**用最小二乘而不是首尾两点求差** ——
+    /// 鼠标移动事件是异步的，相邻采样的位移会被 dt 抖动放大（实机量速时同一个坑让 4.317 格/s
+    /// 量成了 5.03，见 <c>design/_petmotion.ps1</c>）。回归用上窗内全部采样，抖动互相抵消。
+    ///
+    /// <para>只取 <see cref="PetPhysicsProfile.ThrowSampleWindowSeconds"/> 时间窗内的采样：
+    /// 手停住 200ms 再松手，窗内位置全一样，速度自然算成 0 —— 那就是"放下"而不是"甩"。</para>
+    ///
+    /// <para>速度低于 <see cref="PetPhysicsProfile.ThrowMinBlocksPerSecond"/> 直接回 (0,0)；
+    /// 高于 <see cref="PetPhysicsProfile.ThrowMaxBlocksPerSecond"/> 按比例缩到上限（方向不变）。</para>
+    /// </summary>
+    private (double Vx, double Vy) EstimateThrowVelocity()
+    {
+        var count = _dragSamples.Count;
+        if (count < 2) return (0.0, 0.0);
+
+        // 从最新的往前收，直到超出时间窗。
+        var last = _dragSamples[count - 1].T;
+        var window = Profile.ThrowSampleWindowSeconds;
+        var n = 0;
+        var tSum = 0.0;
+        var xSum = 0.0;
+        var ySum = 0.0;
+        for (var i = count - 1; i >= 0; i--)
+        {
+            if (last - _dragSamples[i].T > window) break;
+            tSum += _dragSamples[i].T;
+            xSum += _dragSamples[i].X;
+            ySum += _dragSamples[i].Y;
+            n++;
+        }
+
+        if (n < 2) return (0.0, 0.0);
+
+        var tBar = tSum / n;
+        var xBar = xSum / n;
+        var yBar = ySum / n;
+
+        var stt = 0.0;
+        var sxt = 0.0;
+        var syt = 0.0;
+        for (var i = count - n; i < count; i++)
+        {
+            var t = _dragSamples[i].T - tBar;
+            stt += t * t;
+            sxt += t * (_dragSamples[i].X - xBar);
+            syt += t * (_dragSamples[i].Y - yBar);
+        }
+
+        if (stt <= double.Epsilon) return (0.0, 0.0);
+
+        var vx = sxt / stt;
+        var vy = syt / stt;
+
+        var scale = LastStage.Scale > 0 ? LastStage.Scale : 1.0;
+        var dipPerBlock = DipPerBlock * scale;
+
+        var speed = Math.Sqrt((vx * vx) + (vy * vy));
+        if (speed < Profile.ThrowMinBlocksPerSecond * dipPerBlock) return (0.0, 0.0);
+
+        var max = Profile.ThrowMaxBlocksPerSecond * dipPerBlock;
+        if (speed > max)
+        {
+            var k = max / speed;
+            vx *= k;
+            vy *= k;
+        }
+
+        return (vx, vy);
     }
 
     /// <summary>
