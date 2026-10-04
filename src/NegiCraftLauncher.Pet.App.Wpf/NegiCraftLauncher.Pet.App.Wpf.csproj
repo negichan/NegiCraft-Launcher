@@ -24,8 +24,8 @@
   </ItemGroup>
 
   <ItemGroup>
-    <!-- WPF SDK 的默认 Resource 通配只收 bmp/jpg/jpeg/png/tif/tiff/gif/wdp/jpc/jfif，
-         **不含 .ico**。不显式包含的话，Window.Icon 那句 pack:// 取图会在启动时抛
+    <!-- ⚠️ WPF SDK **没有默认的 Resource 通配**（只默认收 .xaml），png/ico 都不收。
+         不显式包含的话，Window.Icon 那句 pack:// 取图会在启动时抛
          FileNotFoundException（异常信息是"找不到资源 assets/negipet.ico"），
          进程还没上屏就死了。ApplicationIcon 走的是另一套（Win32 资源），不受影响。 -->
     <Resource Include="Assets\NegiPet.ico" />

@@ -109,7 +109,13 @@
             </Style.Triggers>
         </Style>
 
-        <!-- 首页时侧栏是磨砂透光的 -->
+        <!-- 首页时侧栏是磨砂透光的。
+             ⚠️ 侧栏**刻意不加 Effect**（Avalonia 那边是 BoxShadow="0 10 30 -12 #B0000000"）：
+             WPF 的 DropShadowEffect **没有 spread 参数**，阴影画出来是完整 60xH 矩形再模糊，
+             而 Avalonia 靠 spread=-12 把阴影形状收进 12px，观感几乎不可见（实测盒外只暗 1/255）。
+             更要命的是 DropShadowEffect 把阴影画在元素**背后**，侧栏是半透明（#8C0E0E12，α=0.549）
+             的，自家阴影会从内部透出来把它压暗约 35%（实测 R-2 G-6 B-9，蓝通道差最大）。
+             两个参数都调不平 ⇒ 干脆不加，实测与 Avalonia 逐点吻合到 ≤2/255。 -->
         <Style x:Key="SidebarStyle" TargetType="{x:Type Border}">
             <Setter Property="Background" Value="#111114" />
             <Setter Property="BorderBrush" Value="#26262b" />
@@ -543,7 +549,6 @@
                     Margin="12" Width="60"
                     CornerRadius="18"
                     BorderThickness="1"
-                    Effect="{StaticResource ShadowMd}"
                     Padding="0,12"
                     Panel.ZIndex="20">
                 <neg:NegiGrid Rows="Auto * Auto Auto">
@@ -1264,6 +1269,7 @@
                     Effect="{StaticResource ShadowLg}"
                     Style="{StaticResource PopoverStyle}"
                     pop:Pop.Anchor="BottomLeft"
+                    pop:Pop.Trigger="{Binding ElementName=AccountAvatar}"
                     pop:Pop.IsOpen="{Binding IsAccPopOpen}"
                     Panel.ZIndex="50">
                 <neg:NegiStackPanel Spacing="2">
@@ -1337,6 +1343,7 @@
                     Effect="{StaticResource ShadowLg}"
                     Style="{StaticResource PopoverStyle}"
                     pop:Pop.Anchor="BottomLeft"
+                    pop:Pop.Trigger="{Binding ElementName=InstSelectBtn}"
                     pop:Pop.IsOpen="{Binding IsInstPopOpen}"
                     Panel.ZIndex="50">
                 <neg:NegiStackPanel Spacing="2">
@@ -1387,6 +1394,7 @@
                     Effect="{StaticResource ShadowLg}"
                     Style="{StaticResource PopoverStyle}"
                     pop:Pop.Anchor="TopRight"
+                    pop:Pop.Trigger="{Binding ElementName=DlPopBtn}"
                     pop:Pop.IsOpen="{Binding IsDlPopOpen}"
                     Panel.ZIndex="50">
                 <neg:NegiGrid Rows="Auto *">

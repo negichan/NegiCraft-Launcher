@@ -16,8 +16,8 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <!-- WPF SDK 的默认 Resource 通配只收图片（png/jpg/ico…），**字体不收**。
-         少了这条，pack://application:,,,/NegiCraftLauncher.Skin.Wpf;component/Assets/Fonts
+    <!-- ⚠️ WPF SDK **没有默认的 Resource 通配**（只默认收 .xaml），字体、图片、图标
+         都得显式包含。少了这条，pack://application:,,,/NegiCraftLauncher.Skin.Wpf;component/Assets/Fonts
          会静默回退到系统字体 —— 不报错，只是名牌上的 Jersey 10 变成了 Segoe UI。 -->
     <Resource Include="Assets\Fonts\**" />
   </ItemGroup>

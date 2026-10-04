@@ -33,6 +33,15 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- ⚠️ WPF SDK **没有任何默认的 Resource 通配** —— 它只默认收 .xaml（Page / ApplicationDefinition）。
+         png、ico、ttf 全都得自己写进来。少了这条，XAML 里的
+         pack://application:,,,/Assets/app.png 取不到图：不报错、不崩，
+         侧栏顶部的 logo 与「关于」页的图标直接变空白（BitmapImage 走 ImageFailed 那条路）。
+         改完 csproj 记得 **全量重建**（增量构建不会重新生成 .g.resources）。 -->
+    <Resource Include="Assets\app.png" />
+  </ItemGroup>
+
+  <ItemGroup>
     <PackageReference Include="CommunityToolkit.Mvvm" Version="8.2.1" />
     <!-- 与 Avalonia 侧同项目同版本，图标名（Kind）两边一致，XAML 可以逐行对照。 -->
     <PackageReference Include="Material.Icons.WPF" Version="3.0.2" />
