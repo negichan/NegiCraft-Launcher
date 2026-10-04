@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.IO;
 using System.Text;
 using System.Windows;
@@ -144,6 +145,16 @@ public sealed class DebugBridge
                 case "threads":
                     await PetDebugMailbox.Ui(() => _vm.DownloadThreads = int.Parse(arg));
                     return "OK";
+                case "bg":
+                    // 背景亮度/模糊：`bg <brightness> [blur]`。用来验这两个值是否真的落盘 ——
+                    // 走的是和滑杆完全相同的 VM 属性，所以能复现"调了但没保存"。
+                    await PetDebugMailbox.Ui(() =>
+                    {
+                        var nums = arg.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+                        if (nums.Length > 0) _vm.BgBrightness = double.Parse(nums[0], CultureInfo.InvariantCulture);
+                        if (nums.Length > 1) _vm.BgBlur = double.Parse(nums[1], CultureInfo.InvariantCulture);
+                    });
+                    return "OK";
                 case "demo":
                     // 示例任务行，用来检查任务行模板（按钮、进度条、状态）而不必真的等下几百 MB。
                     await PetDebugMailbox.Ui(() =>
@@ -220,6 +231,7 @@ public sealed class DebugBridge
         sb.Append($"page={_vm.CurrentPage} tab={_vm.CurrentSettingsTab} petActive={_vm.IsPetActive} ");
         sb.Append($"pops=[acc={_vm.IsAccPopOpen} inst={_vm.IsInstPopOpen} dl={_vm.IsDlPopOpen} bg={_vm.IsBgPopOpen}] ");
         sb.Append($"threads={_vm.DownloadThreads} ");
+        sb.Append($"bg=[brightness={_vm.BgBrightness} blur={_vm.BgBlur}] ");
 
         var preview = (_window as MainWindow)?.SkinPreview;
         sb.Append($"player={preview?.PlayerName ?? "n/a"} user={preview?.CurrentLoadedUser ?? "n/a"} ");
