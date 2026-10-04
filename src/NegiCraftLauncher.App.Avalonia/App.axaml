@@ -2,7 +2,6 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              x:Class="NegiCraftLauncher.App.Avalonia.App"
              xmlns:local="using:NegiCraftLauncher.App.Avalonia"
-             xmlns:materialIcons="clr-namespace:Material.Icons.Avalonia;assembly=Material.Icons.Avalonia"
              RequestedThemeVariant="Dark">
 
     <Application.DataTemplates>
@@ -11,6 +10,6 @@
 
     <Application.Styles>
         <StyleInclude Source="avares://NegiCraftLauncher.Theme.Avalonia/Theme.axaml"/>
-        <materialIcons:MaterialIconStyles />
+        <!-- 图标控件不用注册样式：它在 Render 里自绘（默认前景色由控件自己给）。 -->
     </Application.Styles>
 </Application>

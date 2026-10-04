@@ -43,12 +43,14 @@
 
   <ItemGroup>
     <PackageReference Include="CommunityToolkit.Mvvm" Version="8.2.1" />
-    <!-- 与 Avalonia 侧同项目同版本，图标名（Kind）两边一致，XAML 可以逐行对照。 -->
-    <PackageReference Include="Material.Icons.WPF" Version="3.0.2" />
   </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\NegiCraftLauncher.Core\NegiCraftLauncher.Core.csproj" />
+    <!-- 图标控件（自写）。原来的 Material.Icons.WPF 包会拖进一个 5.71 MB 的 Material.Icons.dll，
+         占整个安装包 78%；这里换成构建时按用到的 Kind 生成几何，程序集只有 ~21 KB。
+         图标名（Kind）与 Avalonia 侧那份保持一致，XAML 仍然可以逐行对照。 -->
+    <ProjectReference Include="..\NegiCraftLauncher.Icons\NegiCraftLauncher.Icons.csproj" />
     <!-- WPF 侧桌宠本体（进程内托管）。独立版 NegiPet.exe 也用它。 -->
     <ProjectReference Include="..\NegiCraftLauncher.Pet\NegiCraftLauncher.Pet.csproj" />
     <!-- 与 Avalonia 那份完全同一套逻辑：VM 与像素层都不含任何 UI 框架类型。 -->

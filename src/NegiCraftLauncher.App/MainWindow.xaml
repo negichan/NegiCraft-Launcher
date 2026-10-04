@@ -7,7 +7,7 @@
         xmlns:skin="clr-namespace:NegiCraftLauncher.Skin.Controls;assembly=NegiCraftLauncher.Skin"
         xmlns:pop="clr-namespace:NegiCraftLauncher.App.Controls"
         xmlns:neg="clr-namespace:NegiCraftLauncher.Theme;assembly=NegiCraftLauncher.Theme"
-        xmlns:materialIcons="clr-namespace:Material.Icons.WPF;assembly=Material.Icons.WPF"
+        xmlns:materialIcons="clr-namespace:NegiCraftLauncher.Icons;assembly=NegiCraftLauncher.Icons"
         Title="NegiCraft Launcher"
         Width="1180" Height="720"
         MinWidth="960" MinHeight="620"
@@ -1259,7 +1259,8 @@
                                                             <TextBlock Text="选择视频" VerticalAlignment="Center" />
                                                         </neg:NegiStackPanel>
                                                     </Button>
-                                                    <!-- 一键搬 Wallpaper Engine 当前壁纸：视频原样播，其余用预览图兜底 -->
+                                                    <!-- 一键搬 Wallpaper Engine 当前壁纸：只搬视频壁纸，
+                                                         场景 / 网页 / 应用只提示类型、不动背景 -->
                                                     <Button Style="{StaticResource BtnSmOutlineStyle}" Click="OnSyncWallpaperEngineClick">
                                                         <neg:NegiStackPanel Orientation="Horizontal" Spacing="6">
                                                             <materialIcons:MaterialIcon Kind="Wallpaper" Width="14" Height="14" />
@@ -1526,6 +1527,19 @@
                                      VerticalAlignment="Center" VerticalContentAlignment="Center"
                                      Background="#1c1c21" BorderBrush="#26262b" BorderThickness="1"
                                      neg:Negi.CornerRadius="8" FontSize="13" Foreground="#fafafa" />
+                        </neg:NegiGrid>
+
+                        <!-- 声音开关：只对视频背景有意义，没有视频时整行不出现。
+                             默认关（静音）—— 背景视频是我们替用户放着的，不是他主动点开播的。 -->
+                        <neg:NegiGrid Columns="* Auto"
+                                      Visibility="{Binding IsVideoBackground, Converter={StaticResource BoolToVis}}">
+                            <neg:NegiStackPanel VerticalAlignment="Center" Spacing="1">
+                                <TextBlock Text="播放声音" Foreground="#a1a1aa" FontSize="13" />
+                                <TextBlock Text="默认静音；打开后视频壁纸的声音会外放。"
+                                           FontSize="11" Foreground="#71717a" />
+                            </neg:NegiStackPanel>
+                            <CheckBox Grid.Column="1" VerticalAlignment="Center"
+                                      IsChecked="{Binding VideoBackgroundSound}" />
                         </neg:NegiGrid>
 
                         <neg:NegiGrid Columns="* Auto" Margin="0,4,0,0">

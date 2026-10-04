@@ -7,7 +7,7 @@ using System.Windows.Input;
 using System.Windows.Interop;
 using System.Windows.Media;
 using System.Windows.Threading;
-using Material.Icons.WPF;
+using NegiCraftLauncher.Icons;
 using NegiCraftLauncher.Pet.Services;
 using NegiCraftLauncher.Skin.Controls;
 

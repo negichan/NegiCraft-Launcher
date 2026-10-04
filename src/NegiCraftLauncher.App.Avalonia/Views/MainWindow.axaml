@@ -5,7 +5,7 @@
         xmlns:conv="using:NegiCraftLauncher.App.Avalonia.Converters"
         xmlns:controls="using:NegiCraftLauncher.Skin.Avalonia.Controls"
         xmlns:pop="using:NegiCraftLauncher.App.Avalonia.Views"
-        xmlns:materialIcons="clr-namespace:Material.Icons.Avalonia;assembly=Material.Icons.Avalonia"
+        xmlns:materialIcons="clr-namespace:NegiCraftLauncher.Icons.Avalonia;assembly=NegiCraftLauncher.Icons.Avalonia"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         mc:Ignorable="d" d:DesignWidth="1180" d:DesignHeight="720"

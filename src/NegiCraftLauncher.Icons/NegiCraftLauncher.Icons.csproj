@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <!-- WPF 侧的图标控件（替代 Material.Icons.WPF 包）。
+         几何**数据**在 NegiCraftLauncher.Icons.Core（平台无关、两端共用一份，构建时按 XAML 里
+         用到的 Kind 生成）；本工程只负责把 path 字符串解析成 WPF 的 Geometry 并按 24x24 视口画出来。 -->
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+    <RootNamespace>NegiCraftLauncher.Icons</RootNamespace>
+    <AssemblyName>NegiCraftLauncher.Icons</AssemblyName>
+    <EnableWindowsTargeting>true</EnableWindowsTargeting>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\NegiCraftLauncher.Icons.Core\NegiCraftLauncher.Icons.Core.csproj" />
+  </ItemGroup>
+
+</Project>
