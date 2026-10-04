@@ -122,6 +122,48 @@ WPF 与 Avalonia 有几处**静默出错**的渲染差异（不报错、只是�
   光设 `Width="10"` 会被撑回去 —— 必须显式 `MinWidth="0"`。
 - **`ProgressBar` 默认 `BorderThickness=1`** 且边框色来自系统主题，要清成 0/Transparent。
 
+## 验证 WPF 启动器主窗口（`--ui`）
+
+```bash
+src/NegiCraftLauncher.App.Wpf/bin/Debug/net10.0-windows/NegiCraftLauncher.exe --ui
+```
+
+把**真正的主窗口**摆在屏幕外（`Left/Top=-32000`、`ShowActivated=false`，不抢焦点）逐页出图，截完自退。产物：
+
+- `%TEMP%\ncl-wpf-{home,instances,download,settings}.png` —— 四个主页面，**1180×720**
+- `%TEMP%\ncl-wpf-settings-<游戏|Java|下载|外观|关于>.png` —— 五个设置子页
+- `%TEMP%\ncl-wpf-pop-{acc,inst,dl}.png` —— 三个弹层
+- `%TEMP%\ncl-wpf-ui.txt` —— 页面容器审计 + 带名字元素清单 + **绑定错误**
+
+要点：
+
+- **画布和窗口是解耦的**。屏幕比 1180 窄时窗口管理器会把窗口夹小（1024×768 的会话里被夹到 1044，
+  且改 `Window.Width` 压不住），所以截图前对内容根强制 `Measure`/`Arrange` 到 1180×720，
+  并在截图前 `await Dispatcher.Yield(DispatcherPriority.Render)` 让渲染管线跑一轮 ——
+  **少了这一步第一次截图右边会缺一条**。详见计划 §16.4。
+- **默认走直接渲染**（`RenderTargetBitmap.Render(content)`），与 Avalonia 的 `shot` 同一条路，
+  出图可直接逐像素叠。传 `--visualbrush` 切回归零重画的老路径。
+- 报告里必须看两处：`绑定/渲染警告 0 条`（转换器返回类型不匹配时 WPF 不报错、只静默退回默认值），
+  以及四个页面容器审计全是 `OK`（同一时刻只该有一个 `Visible`）。
+
+### 和 Avalonia 版做像素级对照
+
+基准是 `design\_smoke.ps1` 出的 `%TEMP%\ncl-smoke-<page>.png`。对照工具：
+
+```bash
+python design/_diff.py "$TEMP/ncl-wpf-home.png" "$TEMP/ncl-smoke-home.png" --shift 1
+```
+
+会做 ±N 平移搜索、打印 >8/>24/>48 的差异占比与平均绝对差，并写出 `<prefix>-heat.png`（热力图）
+和 `<prefix>-side.png`（左 WPF / 右 Avalonia）。
+
+**期望值**：四页都对齐在 `dx=0 dy=0`，>48 占比在 0.5%–2% 之间（download 页最高，因为字最多）。
+残余差异**只应出现在文字字形、图标、皮肤模型**这三类上；背景、面板、卡片描边、行分隔线、
+滚动条、窗口圆角应当逐像素相同。要是热力图上出现了**成片的色块**，那是布局问题，不是抗锯齿。
+
+顺带：`--ui` 连跑两次出图应当**几乎 byte-identical**（实测 0–2 个像素差），
+所以它可以直接当 P7 的像素回归基线。
+
 ## 跑一次 Avalonia 回归（T0-3）
 
 ```powershell

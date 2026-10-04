@@ -3,6 +3,9 @@ obj/
 .vs/
 *.user
 
+# 崩溃日志（App / Pet.App 的 Program.cs 在未捕获异常时写到工作目录）
+crash.log
+
 # 设计稿、mockup 与截图验证产物
 design/
 # 内部分析文档
