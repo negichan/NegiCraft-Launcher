@@ -1405,6 +1405,14 @@ public partial class MainWindowViewModel : ViewModelBase
 
     private void ApplySettingsToUi(Core.Settings.LauncherSettings settings)
     {
+        // ⚠️ 这里每一个 VM 属性赋值都会触发它自己的 PersistSettings。**必须全部落在
+        // _applyingSettings 守卫内**，否则 PersistSettings 会拿"还没读回来的默认值"把
+        // settings 里的真值覆盖掉。
+        //
+        // 曾经的排布是把 CustomBackgroundPath / BgBlur / BgBrightness 放在 finally 之后：
+        // 一有自定义背景图，CustomBackgroundPath 的 setter 就先跑一次 PersistSettings，
+        // 那一刻 BgBlur/BgBrightness 还是默认 0 ⇒ 把 settings 的亮度/模糊清零，
+        // 紧接着的两行"读回"读到的自然也是 0。症状 = 调好的亮度/模糊每次启动被重置。
         _applyingSettings = true;
         try
         {
@@ -1419,6 +1427,15 @@ public partial class MainWindowViewModel : ViewModelBase
                 _ => "自动",
             };
             IsDark = settings.IsDark;
+
+            if (!string.IsNullOrEmpty(settings.CustomBackgroundPath) &&
+                File.Exists(settings.CustomBackgroundPath))
+            {
+                CustomBackgroundPath = settings.CustomBackgroundPath;
+            }
+
+            BgBlur = settings.BackgroundBlur;
+            BgBrightness = settings.BackgroundBrightness;
         }
         finally
         {
@@ -1428,15 +1445,6 @@ public partial class MainWindowViewModel : ViewModelBase
         ApplyTheme();
         OnPropertyChanged(nameof(SourceHint));
         JavaLabel = settings.JavaPath is null ? "自动" : Path.GetFileName(settings.JavaPath);
-
-        if (!string.IsNullOrEmpty(settings.CustomBackgroundPath) &&
-            File.Exists(settings.CustomBackgroundPath))
-        {
-            CustomBackgroundPath = settings.CustomBackgroundPath;
-        }
-
-        BgBlur = settings.BackgroundBlur;
-        BgBrightness = settings.BackgroundBrightness;
     }
 
     private static SourceKind ParseSource(string label) => label switch
