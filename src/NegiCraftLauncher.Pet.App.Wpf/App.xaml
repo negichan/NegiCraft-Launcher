@@ -1,0 +1,17 @@
+<Application x:Class="NegiCraftLauncher.Pet.App.Wpf.App"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             ShutdownMode="OnLastWindowClose">
+    <!-- ShutdownMode=OnLastWindowClose 是**刻意的**：桌宠是这个进程里唯一的窗口，
+         从菜单点「关闭桌宠」就该结束进程。曾经在 Avalonia 侧用过 OnExplicitShutdown，
+         结果是关窗后进程还挂着 —— 没窗口、没托盘，只能去任务管理器杀。
+         本工程没有托盘，所以这里更不能改。 -->
+    <Application.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <!-- 与启动器同一套设计 token + 控件样式，桌宠的右键菜单与对话框在两种宿主下长得一样。 -->
+                <ResourceDictionary Source="pack://application:,,,/NegiCraftLauncher.Theme.Wpf;component/Theme.xaml" />
+            </ResourceDictionary.MergedDictionaries>
+        </ResourceDictionary>
+    </Application.Resources>
+</Application>

@@ -1,7 +1,9 @@
 using System.ComponentModel;
 using System.Windows;
 using System.Windows.Input;
+using System.Windows.Interop;
 using System.Windows.Media;
+using NegiCraftLauncher.Pet.Wpf;
 using NegiCraftLauncher.ViewModels;
 using Forms = System.Windows.Forms;
 
@@ -19,6 +21,7 @@ namespace NegiCraftLauncher.App.Wpf;
 public partial class MainWindow : Window
 {
     private MainWindowViewModel? _vm;
+    private PetWindow? _petWindow;
     private Forms.NotifyIcon? _trayIcon;
     private Forms.ToolStripMenuItem? _petTrayMenuItem;
     private bool _isExplicitExit;
@@ -29,6 +32,9 @@ public partial class MainWindow : Window
         SetupTrayIcon();
         DataContextChanged += OnDataContextChangedHandler;
     }
+
+    /// <summary>调试桥通过它拿桌宠窗口（可以关着，所以可空）。</summary>
+    public PetWindow? PetWindowInstance => _petWindow;
 
     /// <summary>
     /// WPF 的 <c>Border</c> 即使 <c>ClipToBounds=True</c> 也只裁矩形，圆角得自己给一条裁剪几何，
@@ -89,6 +95,9 @@ public partial class MainWindow : Window
     {
         _isExplicitExit = true;
 
+        _petWindow?.Close();
+        _petWindow = null;
+
         if (_trayIcon is not null)
         {
             _trayIcon.Visible = false;
@@ -147,15 +156,72 @@ public partial class MainWindow : Window
 
     public void TogglePetWindow()
     {
-        // TODO(P6)：WPF 版桌宠窗口（PetWindow / PetShellStyle 移植）接进来。
-        Console.WriteLine("[Pet] WPF 桌宠尚未实现（计划 P6）。");
+        if (_petWindow is { IsVisible: true })
+        {
+            ClosePetWindow();
+        }
+        else
+        {
+            OpenPetWindow();
+        }
     }
 
-    private void OpenPetWindow() => TogglePetWindow();
-
-    private void ClosePetWindow()
+    public void OpenPetWindow()
     {
-        if (_vm is not null) _vm.IsPetActive = false;
+        if (_petWindow is { IsVisible: true })
+        {
+            _petWindow.Activate();
+            UpdateTrayMenu();
+            return;
+        }
+
+        var currentName = _vm?.EffectivePetName ?? "pingplus";
+        _petWindow = new PetWindow(currentName, _vm is null ? null : new Services.PetHostAdapter(_vm, this));
+        _petWindow.PlaceAtDefaultCorner();
+
+        _petWindow.Closed += (_, _) =>
+        {
+            _petWindow = null;
+            if (_vm != null) _vm.IsPetActive = false;
+            UpdateTrayMenu();
+        };
+        _petWindow.Show();
+        if (_vm != null)
+        {
+            _vm.IsPetActive = true;
+        }
+        UpdateTrayMenu();
+    }
+
+    public void ClosePetWindow()
+    {
+        _petWindow?.Close();
+        _petWindow = null;
+        if (_vm != null)
+        {
+            _vm.IsPetActive = false;
+        }
+        UpdateTrayMenu();
+    }
+
+    private void UpdateTrayMenu()
+    {
+        if (_petTrayMenuItem != null)
+        {
+            _petTrayMenuItem.Text = _petWindow is { IsVisible: true } ? "收起桌宠" : "桌面宠物";
+        }
+    }
+
+    /// <summary>
+    /// 调试用：程序化弹出托盘右键菜单。Avalonia 那边得靠反射调 <c>TrayIcon._impl.OnRightClicked</c>，
+    /// WPF 的托盘就是 WinForms 的 <see cref="Forms.NotifyIcon"/>，直接 Show 即可。
+    /// </summary>
+    internal bool ShowTrayMenuForDebug()
+    {
+        var menu = _trayIcon?.ContextMenuStrip;
+        if (menu is null) return false;
+        menu.Show(Forms.Cursor.Position);
+        return true;
     }
 
     private void OnOpenPetRequested() => OpenPetWindow();

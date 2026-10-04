@@ -7,6 +7,7 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Interactivity;
+using Avalonia.Media.Imaging;
 using Avalonia.Platform.Storage;
 using Avalonia.Threading;
 using Material.Icons.Avalonia;
@@ -1209,14 +1210,17 @@ public partial class PetWindow : Window
         InteractSwallowClicks = !InteractSwallowClicks;
     }
 
-    private void OnPickCoordClick(object? sender, RoutedEventArgs e)
+    private CoordPickOverlayWindow ShowCoordPickOverlay()
     {
         var overlay = new CoordPickOverlayWindow((targetPoint, isContinuous) =>
         {
             AddNavigationTarget(targetPoint.X, targetPoint.Y);
         });
         overlay.Show();
+        return overlay;
     }
+
+    private void OnPickCoordClick(object? sender, RoutedEventArgs e) => ShowCoordPickOverlay();
 
     private void OnResetRotationClick(object? sender, RoutedEventArgs e)
     {
@@ -1295,6 +1299,70 @@ public partial class PetWindow : Window
     private void OnClosePetClick(object? sender, RoutedEventArgs e)
     {
         Close();
+    }
+
+    #endregion
+
+    #region 调试动词专用（pet-dialog）
+
+    /// <summary>调试用：程序化打开「前往指定坐标」的全屏选点遮罩。<paramref name="shotPath"/> 给了就顺手出图。</summary>
+    public CoordPickOverlayWindow OpenCoordPickForDebug(string? shotPath = null)
+    {
+        var overlay = ShowCoordPickOverlay();
+        if (shotPath is not null) SaveWindowContent(overlay, shotPath);
+        return overlay;
+    }
+
+    /// <summary>
+    /// 调试用：程序化打开「修改桌宠名字」对话框。<paramref name="shotPath"/> 给了就顺手出图。
+    ///
+    /// <para>刻意**直接构造**而不是复用 <c>OnChangeNameClick</c>：后者是 <c>async void</c>，
+    /// 构造函数里抛的异常会被当成未处理的调度器异常，调试桥就只能回 OK 而看不见错误。</para>
+    /// </summary>
+    public PromptPetNameDialog OpenNameDialogForDebug(string? shotPath = null)
+    {
+        string current = _host?.CustomName ?? PetPreview.PlayerName ?? "";
+        var dialog = new PromptPetNameDialog(current);
+        dialog.Show();
+        if (shotPath is not null) SaveWindowContent(dialog, shotPath);
+        return dialog;
+    }
+
+    /// <summary>
+    /// 调试用：关掉上面两个动词打开的窗口。
+    /// 先收集再关 —— 关窗会把窗口从集合里摘掉，边遍历边关会踩到集合变更。
+    /// </summary>
+    public void CloseDebugDialogs()
+    {
+        if (Application.Current?.ApplicationLifetime is not
+            Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime desktop) return;
+
+        var targets = new List<Window>();
+        foreach (var window in desktop.Windows)
+        {
+            if (window is PromptPetNameDialog or CoordPickOverlayWindow) targets.Add(window);
+        }
+
+        foreach (var window in targets) window.Close();
+    }
+
+    /// <summary>
+    /// 把某个窗口的内容离屏渲染成 PNG。用来看"只有点菜单才出得来"的那两个窗口长什么样。
+    /// 窗口刚 Show 出来，<c>Bounds</c> 可能还是 0，所以退回用 <c>Width</c>/<c>Height</c> 估。
+    /// </summary>
+    private static void SaveWindowContent(Window window, string path)
+    {
+        if (window.Content is not Control content) return;
+
+        var size = content.Bounds.Size;
+        if (size.Width <= 0 || size.Height <= 0) size = new Size(window.Width, window.Height);
+        if (size.Width <= 0 || size.Height <= 0) return;
+
+        using var rtb = new RenderTargetBitmap(
+            new PixelSize((int)Math.Ceiling(size.Width), (int)Math.Ceiling(size.Height)),
+            new Vector(96, 96));
+        rtb.Render(content);
+        rtb.Save(path, new PngBitmapEncoderOptions());
     }
 
     #endregion

@@ -170,6 +170,32 @@ public static class PetDebugCommands
                     else pet.OpenPetContextMenu();
                     return "OK IsOpen=" + pet.IsPetContextMenuOpen;
                 });
+            case "pet-dialog":
+                // 两个"只能靠点菜单才出得来"的窗口：改名对话框与全屏选点遮罩。
+                // 不加这个动词就只能靠人手动点，回归时覆盖不到。
+                // 用法：pet-dialog <name|coord|close> [png 绝对路径]
+                // 给了路径就把那个窗口的内容离屏渲染成 PNG（窗口本身照旧留在屏幕上）。
+                return PetDebugMailbox.Ui(() =>
+                {
+                    var parts = arg.Split(' ', 2, StringSplitOptions.RemoveEmptyEntries);
+                    var which = parts.Length > 0 ? parts[0] : "";
+                    var shot = parts.Length > 1 ? parts[1].Trim() : null;
+
+                    switch (which)
+                    {
+                        case "name":
+                            pet.OpenNameDialogForDebug(shot);
+                            return "OK dialog=name";
+                        case "coord":
+                            pet.OpenCoordPickForDebug(shot);
+                            return "OK dialog=coord";
+                        case "close":
+                            pet.CloseDebugDialogs();
+                            return "OK dialog=closed";
+                        default:
+                            return "ERR unknown dialog " + which;
+                    }
+                });
             case "pet-walk":
                 return PetDebugMailbox.Ui(() =>
                 {
