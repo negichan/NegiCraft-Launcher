@@ -26,8 +26,9 @@ namespace NegiCraftLauncher.Pet;
 /// </summary>
 public sealed class PetMotion
 {
-    // ---------------------------------------------------------------- 常量
-    // 这些数值与 Avalonia 版逐字相同。改动任何一条都会让两个平台的手感对不上。
+    // ---------------------------------------------------------------- 几何常量
+    // 这里是**单位换算与舞台锚点**，不是手感参数 —— 手感参数全在 PetPhysicsProfile 里。
+    // 数值与 Avalonia 版逐字相同。改动任何一条都会让两个平台的手感对不上。
 
     /// <summary>
     /// 1 个 Minecraft 方块等于多少 DIP（桌宠缩放 100% 时）。
@@ -40,46 +41,35 @@ public sealed class PetMotion
     /// </summary>
     public const double DipPerBlock = 64.0;
 
-    // 速度一律按 Minecraft 原版的「格/s」给，用时乘 DipPerBlock（以及桌宠缩放）换成 DIP。
-    // 桌宠被放大到 150% 时，"一格"也跟着变大，所以它相对自己身高的速度仍然是 4.317 格/s ——
-    // 若只按固定 DIP/s 走，放大后会看起来慢了 1/3。
-
-    /// <summary>潜行速度（格/s）。Minecraft 原版 1.295，= 行走 × 0.3。</summary>
-    public const double SneakBlocksPerSecond = 1.295;
-
-    /// <summary>行走速度（格/s）。Minecraft 原版 4.317。</summary>
-    public const double WalkBlocksPerSecond = 4.317;
-
-    /// <summary>疾跑速度（格/s）。Minecraft 原版 5.612。</summary>
-    public const double SprintBlocksPerSecond = 5.612;
-
-    /// <summary>跳跃中行走（格/s）—— 沿用原来的 200/180 比例。</summary>
-    public const double JumpWalkBlocksPerSecond = WalkBlocksPerSecond * 10.0 / 9.0;
-
-    /// <summary>跳跃中疾跑（格/s）—— 沿用原来的 290/270 比例。</summary>
-    public const double JumpSprintBlocksPerSecond = SprintBlocksPerSecond * 29.0 / 27.0;
+    /// <summary>头部中心在舞台里的 Y（舞台单位）。</summary>
+    public const double HeadStageY = 52.0;
 
     /// <summary>
-    /// 重力（格/s²）。沿用迁移前的 2400 DIP/s² ÷ 64 = 37.5 —— 比 Minecraft 的 32 略重，
-    /// 落得干脆些。<see cref="JumpVelocityBlocksPerSecond"/> 是按它反解的，改它会连带改跳跃高度。
+    /// 脚底在舞台里的 Y（舞台单位）。**碰撞用的地面锚点就是它** ——
+    /// 加 <c>Stage.StageOffsetY</c> 再乘缩放，就是脚底在窗口内的 Y（scale 1 时 = 235）。
+    ///
+    /// <para>这个数实测过：<c>pet-skinsnap</c> 抓一帧、按 alpha 找外接框，
+    /// 视觉脚底与它只差约 1 DIP，可以直接拿来当碰撞锚点。</para>
     /// </summary>
-    public const double GravityBlocksPerSecondSquared = 2400.0 / DipPerBlock;
+    public const double FeetStageY = 160.0;
 
     /// <summary>
-    /// 目标跳跃高度（格）。Minecraft 原版起跳约 1.25 格 —— 角色两格高，这一跳刚好够跨上一格台阶。
+    /// 名牌在舞台里的顶边距（舞台单位）。镜像 <c>SkinPreviewControl.NametagTop</c> ——
+    /// 和 <see cref="HeadStageY"/> / <see cref="FeetStageY"/> 是同一类舞台锚点。
+    ///
+    /// <para>用途：它是**模型位图向上偏移的余量**。舞台里最靠上的元素就是名牌，
+    /// 所以 <c>(NametagTopStageY + StageOffsetY) × 缩放</c> 就是"再往上多少会被窗口顶边裁掉"。
+    /// 超过它的位移必须改由**窗口**承担，见 <see cref="StepVertical"/>。</para>
     /// </summary>
-    public const double JumpHeightBlocks = 1.25;
+    public const double NametagTopStageY = 6.0;
 
-    /// <summary>
-    /// 起跳初速度（格/s，向上为负）。由 h = v²/(2g) 反解 ⇒ √(2 × 37.5 × 1.25) ≈ 9.68 格/s
-    /// （≈ 620 DIP/s，滞空约 0.52s）。<b>用的时候要乘 DipPerBlock × Stage.Scale。</b>
-    /// </summary>
-    public static readonly double JumpVelocityBlocksPerSecond =
-        -Math.Sqrt(2 * GravityBlocksPerSecondSquared * JumpHeightBlocks);
+    /// <summary>碰撞半宽对应的格数。MC 玩家碰撞盒宽 0.6 格，桌宠实测视觉宽约 0.56 格。</summary>
+    public const double CollisionWidthBlocks = 0.6;
 
-    /// <summary>朝行进方向转身的最大角速度（deg/s）。</summary>
-    public const double MoveTurnSpeed = 720.0;
+    /// <summary>找支撑面时判"正好踩着"的浮点余量（DIP）。</summary>
+    private const double SupportEpsilon = 1e-6;
 
+    /// <summary>朝行进方向转身的增益（不是最大角速度，那个在 profile 里）。</summary>
     private const double MoveTurnGain = 14.0;
 
     /// <summary>身体自动转向光标的最大角速度（deg/s）。</summary>
@@ -92,33 +82,20 @@ public sealed class PetMotion
 
     private const double LookTurnRelax = 15.0;
 
-    /// <summary>跟随鼠标的停靠半径（DIP）：光标在身旁这么近就停下。</summary>
-    public const double FollowDockRadius = 85.0;
-
-    /// <summary>跟随鼠标时超过这个距离就疾跑（DIP）。</summary>
-    public const double FollowSprintDistance = 360.0;
-
-    /// <summary>导航时超过这个距离就疾跑（DIP）。</summary>
-    public const double NavSprintDistance = 350.0;
-
-    /// <summary>导航到达判定半径（DIP）。</summary>
-    public const double NavArriveDistance = 8.0;
-
-    /// <summary>头部中心在舞台里的 Y（舞台单位）。</summary>
-    public const double HeadStageY = 52.0;
-
-    /// <summary>脚底在舞台里的 Y（舞台单位）。</summary>
-    public const double FeetStageY = 160.0;
-
     private const double LookYawFalloff = 420.0;
     private const double LookPitchFalloff = 380.0;
     private const double LookPitchLimit = 24.0;
 
-    /// <summary>双击 W 触发疾跑锁定的时间窗（毫秒）。</summary>
-    public const double DoubleTapWindowMs = 350.0;
-
     private const double MinStepSeconds = 0.002;
     private const double MaxStepSeconds = 0.04;
+
+    // ---------------------------------------------------------------- 物理参数
+
+    /// <summary>
+    /// 手感参数：速度 / 重力 / 跳跃 / 各档阈值。默认 <see cref="PetPhysicsProfile.Default"/>。
+    /// 想试另一套手感直接换一个 —— 逻辑侧不用改。暂不给 UI（见 profile 的注释）。
+    /// </summary>
+    public PetPhysicsProfile Profile { get; set; } = PetPhysicsProfile.Default;
 
     // ---------------------------------------------------------------- 状态
 
@@ -139,7 +116,21 @@ public sealed class PetMotion
     /// <summary>上一帧 W 是不是按着 —— 双击疾跑靠它做边沿检测（见 <see cref="StepControl"/>）。</summary>
     private bool _wasWDown;
 
-    private double _jumpVelocityY;
+    /// <summary>跳跃的竖直速度（DIP/s，**向下为正**）。**只在 <see cref="_jumping"/> 期间被重力累加。**</summary>
+    private double _velocityY;
+
+    /// <summary>
+    /// 正在跳跃（模型往上飘、还没落回地面）。**重力只在它为真时跑** ——
+    /// WASD 是自由移动，松开就停在原地，不受重力；地面只是"不许沉下去"的下界。
+    /// </summary>
+    private bool _jumping;
+
+    /// <summary>
+    /// 上一帧**夹取之后**的脚底 Y（屏幕 DIP）。找支撑面时和当前脚底取 <c>Min</c>：
+    /// 只看移动后的位置的话，脚底一旦沉过台面一丁点，那块面就不再是候选（它跑到脚底以上了），
+    /// 桌宠会直接从薄平台上**穿下去**。初值 +∞ ⇒ 第一帧退化成"用当前位置"。
+    /// </summary>
+    private double _standFeetY = double.PositiveInfinity;
 
     /// <summary>
     /// 内核自己的时间轴（秒），每帧 <c>+= dt</c>。<b>不用 <c>DateTime.UtcNow</c></b> ——
@@ -149,7 +140,7 @@ public sealed class PetMotion
     /// </summary>
     private double _timeSeconds;
 
-    /// <summary>上一次「W 刚按下」的内核时刻（秒），见 <see cref="DoubleTapWindowMs"/>。</summary>
+    /// <summary>上一次「W 刚按下」的内核时刻（秒），见 <see cref="PetPhysicsProfile.DoubleTapWindowMs"/>。</summary>
     private double _lastWPressTimeSeconds = double.NegativeInfinity;
 
     /// <summary>模式变了。宿主拿它更新菜单图标、切焦点、或在回自由待机时把窗口摆回去。</summary>
@@ -158,17 +149,49 @@ public sealed class PetMotion
     /// <summary>当前交互模式。改它请走 <see cref="SetMode"/>。</summary>
     public PetInteractionMode Mode { get; private set; } = PetInteractionMode.Free;
 
-    /// <summary>窗口左上角的地面位置（DIP）。物理直接推进它，宿主负责落到窗口上。</summary>
+    /// <summary>
+    /// 窗口左上角（DIP）。物理直接推进它，宿主负责把它落到窗口上。
+    ///
+    /// <para><b>它和 <see cref="JumpOffsetY"/> 一起才构成"视觉位置"</b>：
+    /// 模型在屏幕上的 Y = <c>GroundY + (FeetStageY + StageOffsetY) × 缩放 + JumpOffsetY</c>。
+    /// <c>GroundY</c> 就是"脚踩在台面上"的那个位置 —— WASD 自由移动直接推它；
+    /// <see cref="JumpOffsetY"/> 只在跳跃期间非零（模型往上飘、窗口不动）。</para>
+    /// </summary>
     public double GroundX { get; set; }
 
     /// <inheritdoc cref="GroundX"/>
     public double GroundY { get; set; }
 
-    /// <summary>起跳造成的竖直偏移（DIP，向上为负）。</summary>
+    /// <summary>
+    /// 模型相对落脚位置的竖直偏移（DIP，向上为负，**永远不会为正**）。
+    ///
+    /// <para>为什么不直接挪窗口：桌宠的阴影是钉在地面上的（<c>SkinPreviewControl.SetJumpOffset</c>
+    /// 只平移模型与名牌，阴影不动、还会随高度缩小变淡）。跳一下时窗口不动、只有模型往上飘，
+    /// 那个"影子留在地上"的效果才成立。</para>
+    ///
+    /// <para>但模型位图向上最多只能挪 <c>(NametagTopStageY + StageOffsetY) × 缩放</c>，
+    /// 再往上就被窗口顶边裁掉 —— 所以偏移到了这个余量就夹住（跳跃只有 1.25 格，正常够不到）。</para>
+    /// </summary>
     public double JumpOffsetY { get; private set; }
 
-    /// <summary>是否在空中。</summary>
-    public bool IsJumping { get; private set; }
+    /// <summary>正在跳跃。宿主用它切跳跃姿势（也用于把移动速度换成"跳跃中"那一档）。</summary>
+    public bool IsJumping => _jumping;
+
+    /// <summary>
+    /// 没在跳跃、可以起跳。**桌宠是自由移动的**（不受重力、松开就停在原地），
+    /// 所以它不代表"脚底正踩着某个面"。
+    /// </summary>
+    public bool OnGround { get; private set; } = true;
+
+    /// <summary>当前支撑面的台面高度（屏幕 DIP）。空中时是"将来会落到的那块"。</summary>
+    public double SupportTop { get; private set; }
+
+    /// <summary>脚底离当前支撑面多高（DIP，站在台面上时为 0）。跳跃高度就看它。</summary>
+    public double HeightAboveSupport =>
+        SupportTop - (GroundY + ((FeetStageY + LastStage.StageOffsetY) * LastStage.Scale) + JumpOffsetY);
+
+    /// <summary>当前支撑面有几块候选（含地板）。诊断用 —— 验"站在窗口顶面"时看它有没有变多。</summary>
+    public int SurfaceCount { get; private set; }
 
     /// <summary>正被抓握 / 拖拽：物理让位给挣扎晃头动画。</summary>
     public bool IsDragging { get; set; }
@@ -218,13 +241,15 @@ public sealed class PetMotion
 
     /// <summary>
     /// 诊断串，<c>pet-motion</c> 动词直接回它 —— 跳跃偏移（DIP）、这一帧「1 格 = 多少 DIP」、
-    /// 三个移动标志、地面位置。调速度 / 跳跃高度时靠它直接量，不用凭肉眼。
+    /// 三个移动标志、落脚位置、竖直速度、支撑面。调速度 / 跳跃高度 / 碰撞时靠它直接量。
     /// 按需拼，不每帧算。
     /// </summary>
     public string MotionDebugInfo =>
         $"mode={Mode} jump={JumpOffsetY:F2} block={DipPerBlock * LastStage.Scale:F2} " +
         $"walk={Walking} sprint={Sprinting} sneak={Sneaking} " +
-        $"ground=({GroundX:F2},{GroundY:F2})";
+        $"ground=({GroundX:F2},{GroundY:F2}) " +
+        $"air={!OnGround} vy={_velocityY:F1} h={HeightAboveSupport:F2} " +
+        $"support={SupportTop:F2} surf={SurfaceCount}";
 
     /// <summary>还有几个点没走到（当前目标算 1 个）。</summary>
     public int RemainingWaypointCount => (_hasNavTarget ? 1 : 0) + _navQueue.Count;
@@ -266,34 +291,46 @@ public sealed class PetMotion
         ModeChanged?.Invoke(mode);
     }
 
-    /// <summary>切到操控模式时调用：把地面位置对齐到窗口当前位置，并清掉跳跃状态。</summary>
+    /// <summary>
+    /// 切到操控模式时调用：把落脚位置对齐到窗口当前位置，清掉竖直速度与跳跃状态。
+    /// 之后由 WASD **自由移动**；<see cref="StepVertical"/> 只负责"不许沉到地面以下"与跳跃。
+    /// </summary>
     public void BeginControlMode(double windowX, double windowY)
     {
         GroundX = windowX;
         GroundY = windowY;
         JumpOffsetY = 0;
-        _jumpVelocityY = 0;
-        IsJumping = false;
+        _velocityY = 0;
+        _jumping = false;
+        _standFeetY = double.PositiveInfinity;
+        OnGround = true;
     }
 
-    /// <summary>回到自由待机时调用：停掉全部运动动画，并把窗口摆回地面位置。</summary>
+    /// <summary>
+    /// 回到自由待机时调用：停掉全部运动动画。<b>位置原样保留</b> —— 桌宠是自由移动的，
+    /// 悬在半空就悬在半空，自由待机不是"把它拽下来"。
+    /// </summary>
     public void EnterFreeIdle()
     {
         Walking = false;
         Sprinting = false;
-        IsJumping = false;
-        JumpOffsetY = 0;
-        _jumpVelocityY = 0;
+        _velocityY = 0;
+        _jumping = false;
+        _standFeetY = double.PositiveInfinity;
+        OnGround = true;
     }
 
-    /// <summary>松手落地：地面位置对齐到窗口当前落点，清掉跳跃。</summary>
+    /// <summary>松手落地：落脚位置对齐到窗口当前落点，清掉跳跃状态（P4 会在这里把拖拽采样到的
+    /// 速度交进去，实现"甩出去"）。</summary>
     public void EndDrag(double windowX, double windowY)
     {
         GroundX = windowX;
         GroundY = windowY;
-        IsJumping = false;
         JumpOffsetY = 0;
-        _jumpVelocityY = 0;
+        _velocityY = 0;
+        _jumping = false;
+        _standFeetY = double.PositiveInfinity;
+        OnGround = true;
     }
 
     // ---------------------------------------------------------------- 输入
@@ -450,12 +487,14 @@ public sealed class PetMotion
 
         _timeSeconds += dt;
 
-        // 被抓握或在空中拖拽时，以挣扎晃头动画为先
+        // 被抓握或在空中拖拽时，以挣扎晃头动画为先。**竖直速度清零** ——
+        // 松手后由 StepVertical 接管（P4 会在这里塞入拖拽采样到的速度，实现"甩出去"）。
         if (IsDragging)
         {
-            IsJumping = false;
             JumpOffsetY = 0;
-            _jumpVelocityY = 0;
+            _velocityY = 0;
+            _jumping = false;
+            OnGround = true;
             GroundX = ctx.Window.X;
             GroundY = ctx.Window.Y;
             Walking = false;
@@ -496,7 +535,11 @@ public sealed class PetMotion
                 break;
         }
 
-        // 3. 鼠标视线追踪与身体自动平滑转向
+        // 3. 竖直物理：跳跃的重力 / "不许沉到地面以下" / 支撑面重算。**所有模式都跑**，
+        //    但重力只在跳跃期间生效 —— WASD 是自由移动，松开就停在原地。
+        StepVertical(dt, ctx);
+
+        // 4. 鼠标视线追踪与身体自动平滑转向
         StepMouseLook(dt, ctx, ref yaw);
 
         YawDelta = Normalize(yaw - ctx.CurrentYawDeg);
@@ -528,7 +571,7 @@ public sealed class PetMotion
         // 桌宠窗口带 WS_EX_NOACTIVATE、基本拿不到焦点，窗口的 KeyDown 收不到。
         if (wDown && !_wasWDown)
         {
-            if (_timeSeconds - _lastWPressTimeSeconds < DoubleTapWindowMs / 1000.0) _sprintLocked = true;
+            if (_timeSeconds - _lastWPressTimeSeconds < Profile.DoubleTapWindowMs / 1000.0) _sprintLocked = true;
             _lastWPressTimeSeconds = _timeSeconds;
         }
         else if (!wDown && _wasWDown)
@@ -551,50 +594,27 @@ public sealed class PetMotion
 
             // 速度按「格/s」给，乘 dipPerBlock 换成 DIP（dipPerBlock 里含桌宠缩放）。
             double blocksPerSecond;
-            if (Sneaking) blocksPerSecond = SneakBlocksPerSecond;
-            else if (isSprinting) blocksPerSecond = IsJumping ? JumpSprintBlocksPerSecond : SprintBlocksPerSecond;
-            else blocksPerSecond = IsJumping ? JumpWalkBlocksPerSecond : WalkBlocksPerSecond;
+            if (Sneaking) blocksPerSecond = Profile.SneakBlocksPerSecond;
+            else if (isSprinting) blocksPerSecond = IsJumping ? Profile.JumpSprintBlocksPerSecond : Profile.SprintBlocksPerSecond;
+            else blocksPerSecond = IsJumping ? Profile.JumpWalkBlocksPerSecond : Profile.WalkBlocksPerSecond;
 
             var speed = blocksPerSecond * DipPerBlock * ctx.Stage.Scale;
 
+            // **自由移动**：两个方向都直接推位置，竖直方向不跑重力 —— 松开就停在原地。
+            // 地面只是"不许沉下去"的下界（见 StepVertical），所以按 S 会停在地板 / 窗口顶面上。
             GroundX += dirX * speed * dt;
             GroundY += dirY * speed * dt;
-            ClampToWorkArea(ctx);
+            ClampHorizontally(ctx);
 
             yaw += TurnToward(dirX, dirY, yaw, dt);
         }
 
-        // Minecraft 风格起跳模拟
-        if (spaceDown && !IsJumping)
+        // 起跳：站在地面上按空格（连跳 = 按住不放，落地即再起跳）。
+        // 重力与落地判定都在 StepVertical 里，且**只在跳跃期间**生效。
+        if (spaceDown && OnGround)
         {
-            IsJumping = true;
-            _jumpVelocityY = JumpVelocityBlocksPerSecond * DipPerBlock * ctx.Stage.Scale;
-        }
-
-        if (IsJumping)
-        {
-            var gravity = GravityBlocksPerSecondSquared * DipPerBlock * ctx.Stage.Scale;
-
-            // **梯形积分**（velocity-Verlet）：位置按「本步平均速度」推进，而不是按本步起始速度。
-            // 匀加速下它是精确解，所以跳跃高度与帧长无关 —— 恒等于 JumpHeightBlocks。
-            // 用显式欧拉（先推位置再加速度）会过冲，且过冲量正比于 dt：60fps 下跳 85 DIP、
-            // 40ms 帧下跳 93 DIP（实测 1.39 格，目标 1.25）。反过来用半隐式欧拉则欠冲。
-            JumpOffsetY += (_jumpVelocityY + (0.5 * gravity * dt)) * dt;
-            _jumpVelocityY += gravity * dt;
-
-            if (JumpOffsetY >= 0)
-            {
-                JumpOffsetY = 0;
-                _jumpVelocityY = 0;
-                IsJumping = false;
-
-                // 连跳检测（按住空格落地继续跳）
-                if (spaceDown)
-                {
-                    IsJumping = true;
-                    _jumpVelocityY = JumpVelocityBlocksPerSecond * DipPerBlock * ctx.Stage.Scale;
-                }
-            }
+            _jumping = true;
+            _velocityY = Profile.JumpVelocityBlocksPerSecond * DipPerBlock * ctx.Stage.Scale;
         }
 
         PositionDirty = true;
@@ -606,7 +626,7 @@ public sealed class PetMotion
         if (ctx.Cursor is not { } cursor) return;
 
         var (dx, dy, dist) = OffsetToFeet(ctx, cursor);
-        if (dist <= FollowDockRadius)
+        if (dist <= Profile.FollowDockRadius)
         {
             Walking = false;
             Sprinting = false;
@@ -614,15 +634,16 @@ public sealed class PetMotion
         }
 
         Walking = true;
-        var isSprint = dist > FollowSprintDistance;
+        var isSprint = dist > Profile.FollowSprintDistance;
         Sprinting = isSprint;
 
         var dirX = dx / dist;
         var dirY = dy / dist;
         yaw += TurnToward(dirX, dirY, yaw, dt);
 
-        var speed = (isSprint ? SprintBlocksPerSecond : WalkBlocksPerSecond) * DipPerBlock * ctx.Stage.Scale;
-        var moveDist = Math.Min(speed * dt, dist - FollowDockRadius + 2.0);
+        var speed = (isSprint ? Profile.SprintBlocksPerSecond : Profile.WalkBlocksPerSecond)
+                    * DipPerBlock * ctx.Stage.Scale;
+        var moveDist = Math.Min(speed * dt, dist - Profile.FollowDockRadius + 2.0);
         GroundX += dirX * moveDist;
         GroundY += dirY * moveDist;
 
@@ -643,7 +664,7 @@ public sealed class PetMotion
 
         var (dx, dy, dist) = OffsetToFeet(ctx, _navTarget);
 
-        if (dist <= NavArriveDistance)
+        if (dist <= Profile.NavArriveDistance)
         {
             if (_navQueue.Count > 0)
             {
@@ -664,14 +685,15 @@ public sealed class PetMotion
         }
 
         Walking = true;
-        var isSprint = dist > NavSprintDistance;
+        var isSprint = dist > Profile.NavSprintDistance;
         Sprinting = isSprint;
 
         var dirX = dx / dist;
         var dirY = dy / dist;
         yaw += TurnToward(dirX, dirY, yaw, dt);
 
-        var speed = (isSprint ? SprintBlocksPerSecond : WalkBlocksPerSecond) * DipPerBlock * ctx.Stage.Scale;
+        var speed = (isSprint ? Profile.SprintBlocksPerSecond : Profile.WalkBlocksPerSecond)
+                    * DipPerBlock * ctx.Stage.Scale;
         var moveDist = Math.Min(speed * dt, dist);
         GroundX += dirX * moveDist;
         GroundY += dirY * moveDist;
@@ -734,11 +756,11 @@ public sealed class PetMotion
     }
 
     /// <summary>朝 (dirX, dirY) 平滑转身一步，返回本步的朝向增量（度）。</summary>
-    private static float TurnToward(double dirX, double dirY, float yaw, double dt)
+    private float TurnToward(double dirX, double dirY, float yaw, double dt)
     {
         var targetYaw = (float)(Math.Atan2(dirX, dirY) * (180.0 / Math.PI));
         var diff = Normalize(targetYaw - yaw);
-        var maxTurn = (float)(MoveTurnSpeed * dt);
+        var maxTurn = (float)(Profile.MoveTurnSpeed * dt);
         return Math.Clamp(diff * (float)MoveTurnGain * (float)dt, -maxTurn, maxTurn);
     }
 
@@ -748,18 +770,158 @@ public sealed class PetMotion
     private (double Dx, double Dy, double Dist) OffsetToFeet(in PetMotionContext ctx, PetPoint target)
     {
         var feetX = GroundX + (ctx.Stage.Width / 2.0);
-        var feetY = GroundY + ((FeetStageY + ctx.Stage.StageOffsetY) * ctx.Stage.Scale);
+        var feetY = GroundY + ((FeetStageY + ctx.Stage.StageOffsetY) * ctx.Stage.Scale) + JumpOffsetY;
         var dx = target.X - feetX;
         var dy = target.Y - feetY;
         return (dx, dy, Math.Sqrt((dx * dx) + (dy * dy)));
     }
 
-    /// <summary>把地面位置夹在屏幕工作区内，别让桌宠走出屏幕。</summary>
+    // ---------------------------------------------------------------- 竖直物理
+
+    /// <summary>
+    /// 竖直物理：跳跃的重力、落回地面、以及"不许沉到地面以下"。
+    ///
+    /// <para><b>桌宠是自由移动的</b>：WASD 直接推 <see cref="GroundX"/>/<see cref="GroundY"/>，
+    /// 竖直方向不跑重力 —— 松开就停在原地。重力<b>只在跳跃期间</b>生效，所以这里的主线是
+    /// "起跳时把模型往上飘，再落回地面"。</para>
+    ///
+    /// <para><b>地面是"跟着走"的</b>：每帧在脚底正下方重新找一次最高的台面（工作区地板，
+    /// 将来还会有别的窗口顶面）。它只当<b>下界</b>用 —— 脚底不许沉到它下面，于是按住 S 会
+    /// 停在地板上 / 窗口顶面上。桌宠<b>不会</b>因为走出平台边缘而掉下去：那是自由移动，
+    /// 不是平台跳跃。</para>
+    ///
+    /// <para><b>位置是"脚底 Y"这一个量</b>，最后再拆成"窗口位置 + 模型偏移"：跳跃时窗口不动、
+    /// 只有模型往上飘，阴影留在地面上才是跳跃该有的样子。模型位图向上最多只能挪
+    /// <c>(NametagTopStageY + StageOffsetY) × 缩放</c>，再往上会被窗口顶边裁掉 ——
+    /// 跳跃只有 1.25 格，100% 缩放时正好落在余量以内。</para>
+    /// </summary>
+    private void StepVertical(double dt, in PetMotionContext ctx)
+    {
+        // 飞行模式：窗口就是当前位置，没有空中偏移，也不积累竖直速度。
+        if (Mode is PetInteractionMode.FollowMouse or PetInteractionMode.NavigateToCoord)
+        {
+            if (JumpOffsetY != 0)
+            {
+                JumpOffsetY = 0;
+                PositionDirty = true;
+            }
+
+            _velocityY = 0;
+            _jumping = false;
+            _standFeetY = double.PositiveInfinity;
+            OnGround = true;
+            return;
+        }
+
+        var stage = ctx.Stage;
+        var scale = stage.Scale;
+        var feetInWindow = (FeetStageY + stage.StageOffsetY) * scale;
+        var headroom = (NametagTopStageY + stage.StageOffsetY) * scale;
+
+        // 头顶离脚底多远 —— 把"模型不许出屏幕上沿"换算成脚底的下限。
+        var bodyHeight = (FeetStageY - NametagTopStageY) * scale;
+
+        var feetX = GroundX + (stage.Width / 2.0);
+        var halfWidth = CollisionWidthBlocks * DipPerBlock * scale / 2.0;
+
+        // 站立时的脚底（屏幕 DIP）。跳跃时模型往上飘，但**窗口不跟着动** —— 见下面第 4 步。
+        var standFeetY = GroundY + feetInWindow;
+
+        // 1. 脚下最高的台面（含工作区地板）。地面每帧重算一次 —— "随时跟着走"。
+        //    用**上一帧停稳的位置**和当前位置里更低的那一个去找（见 _standFeetY）。
+        var supportTop = FindSupportTop(ctx, feetX, halfWidth, Math.Min(_standFeetY, standFeetY));
+
+        // 2. 下界：脚底不许沉到地面以下 ⇒ 按住 S 会停在地板上 / 窗口顶面上。
+        if (standFeetY > supportTop) standFeetY = supportTop;
+
+        // 3. 撞屏幕顶：模型头顶不许越出工作区上沿，否则窗口顶边会把头切掉。
+        var minStandFeetY = ctx.WorkArea.Y + bodyHeight;
+        if (standFeetY < minStandFeetY) standFeetY = minStandFeetY;
+
+        // 4. 跳跃：**只有跳跃期间才跑重力**。梯形积分（velocity-Verlet）—— 位置按「本步平均速度」
+        //    推进，匀加速下是精确解，所以跳跃高度与帧长无关，恒等于 Profile.JumpHeightBlocks。
+        //    （显式欧拉会过冲、且过冲量正比于 dt；半隐式欧拉欠冲。）
+        var offset = 0.0;
+        if (_jumping)
+        {
+            var gravity = Profile.GravityBlocksPerSecondSquared * DipPerBlock * scale;
+            offset = JumpOffsetY + ((_velocityY + (0.5 * gravity * dt)) * dt);
+            _velocityY += gravity * dt;
+
+            if (offset >= 0)
+            {
+                // 落回地面
+                offset = 0;
+                _velocityY = 0;
+                _jumping = false;
+            }
+            else if (offset < -headroom)
+            {
+                // 模型位图向上最多飘这么多，再高就被窗口顶边裁掉（1.25 格通常够不到）
+                offset = -headroom;
+                if (_velocityY < 0) _velocityY = 0;
+            }
+        }
+        else
+        {
+            _velocityY = 0;
+        }
+
+        var groundY = standFeetY - feetInWindow;
+
+        if (groundY != GroundY || offset != JumpOffsetY) PositionDirty = true;
+
+        GroundY = groundY;
+        JumpOffsetY = offset;
+        SupportTop = supportTop;
+        _standFeetY = standFeetY;
+        OnGround = !_jumping;
+    }
+
+    /// <summary>
+    /// 脚下最高的那块台面（含工作区地板）。只认"在脚底以下、且水平方向与脚有交叠"的。
+    /// 返回台面高度（屏幕 DIP）。顺带把候选数记进 <see cref="SurfaceCount"/> 供诊断。
+    /// </summary>
+    private double FindSupportTop(in PetMotionContext ctx, double feetX, double halfWidth, double feetY)
+    {
+        var area = ctx.WorkArea;
+        var best = area.Y + area.Height;   // 地板永远存在，所以桌宠不会掉出屏幕
+        var count = 1;
+
+        if (ctx.Surfaces is { Count: > 0 } surfaces)
+        {
+            var left = feetX - halfWidth;
+            var right = feetX + halfWidth;
+
+            foreach (var s in surfaces)
+            {
+                count++;
+                if (s.Top < feetY - SupportEpsilon) continue;          // 在脚底以上 —— 那是天花板，不是台面
+                if (!s.OverlapsHorizontally(left, right)) continue;
+                if (s.Top < best) best = s.Top;
+            }
+        }
+
+        SurfaceCount = count;
+        return best;
+    }
+
+    /// <summary>把窗口夹在屏幕工作区内，别让桌宠走出屏幕。<b>跟随 / 导航这两个飞行模式用。</b></summary>
     private void ClampToWorkArea(in PetMotionContext ctx)
     {
         var area = ctx.WorkArea;
         GroundX = Math.Clamp(GroundX, area.X, area.X + area.Width - ctx.Stage.Width);
         GroundY = Math.Clamp(GroundY, area.Y, area.Y + area.Height - ctx.Stage.Height);
+    }
+
+    /// <summary>
+    /// 只夹左右。<b>操控模式用</b> —— 竖直方向交给 <see cref="StepVertical"/> 的支撑面，
+    /// 在这里夹 <see cref="GroundY"/> 会把"掉到台面以下再被推回来"的落地判定挡住。
+    /// </summary>
+    private void ClampHorizontally(in PetMotionContext ctx)
+    {
+        var area = ctx.WorkArea;
+        GroundX = Math.Clamp(GroundX, area.X, area.X + area.Width - ctx.Stage.Width);
     }
 
     /// <summary>把角度归一化到 (-180, 180]。</summary>
