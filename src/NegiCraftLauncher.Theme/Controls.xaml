@@ -567,18 +567,20 @@
     </Style>
 
     <!-- ============ 弹出菜单容器（ContextMenu / Menu 共用的样子） ============ -->
+    <!--  ⚠️ 刻意**不加投影**（Avalonia 那边是 BoxShadow="0 12 32 -6 #E6000000"）。
+         两个原因，和侧栏 SidebarStyle 是同一套：
+         ① WPF 的 DropShadowEffect **没有 spread 参数**，Avalonia 靠 spread=-6 把阴影收进圆角内侧
+            12px，实测盒外只暗 1/255；WPF 只能整块模糊，压不平。
+         ② 更要命的是**弹出窗口的大小正好等于菜单本身**（实测 140x126 DIP），
+            阴影溢出的部分会被窗口硬切 —— 结果是圆角外那圈被阴影填满、还留下一条硬边，
+            整个菜单看着就是个矩形。Avalonia 同样被切，但因为它本来就收在圆角内，所以看不见。
+         ⇒ 不加反而与 Avalonia 逐点吻合（圆角外就是桌面色，无跳变）。 -->
     <Style x:Key="NegiMenuPopupBorderStyle" TargetType="{x:Type Border}">
         <Setter Property="Background" Value="{DynamicResource CardBackgroundBrush}" />
         <Setter Property="BorderBrush" Value="{DynamicResource BorderLineBrush}" />
         <Setter Property="BorderThickness" Value="1" />
         <Setter Property="CornerRadius" Value="12" />
         <Setter Property="Padding" Value="4" />
-        <Setter Property="Effect">
-            <Setter.Value>
-                <!-- Avalonia 的 BoxShadow="0 12 32 -6 #E6000000" 近似成这个 -->
-                <DropShadowEffect BlurRadius="32" ShadowDepth="6" Direction="270" Color="#000000" Opacity="0.9" />
-            </Setter.Value>
-        </Setter>
     </Style>
 
     <!-- ============ ContextMenu ============ -->
@@ -593,14 +595,12 @@
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="{x:Type ContextMenu}">
+                    <!-- 不挂 DropShadowEffect —— 理由见上面 NegiMenuPopupBorderStyle 那段注释。 -->
                     <Border Background="{TemplateBinding Background}"
                             BorderBrush="{TemplateBinding BorderBrush}"
                             BorderThickness="{TemplateBinding BorderThickness}"
                             Padding="{TemplateBinding Padding}"
                             CornerRadius="{Binding Path=(neg:Negi.CornerRadius), RelativeSource={RelativeSource TemplatedParent}}">
-                        <Border.Effect>
-                            <DropShadowEffect BlurRadius="32" ShadowDepth="6" Direction="270" Color="#000000" Opacity="0.9" />
-                        </Border.Effect>
                         <ScrollViewer Focusable="False"
                                       HorizontalScrollBarVisibility="Disabled"
                                       VerticalScrollBarVisibility="Auto">
