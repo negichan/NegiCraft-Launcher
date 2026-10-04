@@ -1,0 +1,15 @@
+<Styles xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <!--
+        NegiCraftLauncher application theme: design tokens + in-house control themes.
+        Replaces the vendored ShadUI ShadTheme as the runtime theme.
+    -->
+    <Styles.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceInclude Source="avares://NegiCraftLauncher.Theme.Avalonia/Tokens.axaml" />
+                <ResourceInclude Source="avares://NegiCraftLauncher.Theme.Avalonia/Controls.axaml" />
+            </ResourceDictionary.MergedDictionaries>
+        </ResourceDictionary>
+    </Styles.Resources>
+</Styles>

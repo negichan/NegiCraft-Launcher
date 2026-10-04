@@ -1,5 +1,5 @@
 <div align="center">
-    <img src="src/NegiCraftLauncher.App/Assets/app.png" alt="NegiCraft Launcher" width="80" height="80"/>
+    <img src="src/NegiCraftLauncher.App.Avalonia/Assets/app.png" alt="NegiCraft Launcher" width="80" height="80"/>
 
 # NegiCraft Launcher
 

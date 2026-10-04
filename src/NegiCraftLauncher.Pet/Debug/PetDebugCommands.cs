@@ -1,37 +1,44 @@
-using System;
 using System.IO;
-using System.Linq;
 using System.Runtime.InteropServices;
 using System.Text;
-using System.Threading.Tasks;
-using Avalonia;
-using Avalonia.Media.Imaging;
-using Avalonia.VisualTree;
+using System.Windows;
+using System.Windows.Interop;
+using System.Windows.Media;
+using System.Windows.Media.Imaging;
 using NegiCraftLauncher.Skin.Controls;
 
 namespace NegiCraftLauncher.Pet.Debug;
 
 /// <summary>
-/// The pet verbs, shared by the launcher's debug bridge and the standalone pet's.
+/// 桌宠动词，启动器的调试桥与独立桌宠的桥共用。
 ///
-/// Every handler here needs nothing but a <see cref="PetWindow"/> (and, for the name/state verbs,
-/// whatever <see cref="IPetHost"/> it was built with). Anything that also needs launcher state —
-/// pages, accounts, downloads, the tray — stays in the launcher's own bridge and is not reachable
-/// from the standalone build.
+/// <para><b>本文件是 <c>Pet/Debug/PetDebugCommands.cs</c> 的 WPF 移植版。</b>
+/// 动词名、参数解析、回复字符串**逐字节一致** —— 两套实现共享同一份线协议，
+/// 客户端（<c>design/_dbg.ps1</c>，本地私有脚本）与两边通用。
+/// 改动词或回复格式必须同时改 Avalonia 那份。</para>
+///
+/// <para>这里的每个处理分支只需要一个 <see cref="PetWindow"/>（名字/状态类动词再要一个
+/// <see cref="IPetHost"/>）。需要启动器状态的东西（页面、账户、下载、托盘）留在启动器自己的桥里，
+/// 独立版够不着。</para>
+///
+/// <para>平台替换：<c>GetVisualDescendants().OfType&lt;MinecraftSkinPreview&gt;()</c>
+/// → <see cref="PetWindow.Preview"/>（WPF 桌宠直接暴露控件字段，比遍历可视树稳）；
+/// <c>TryGetPlatformHandle().Handle</c> → <see cref="WindowInteropHelper"/>；
+/// <c>RenderTargetBitmap</c> + <c>PngBitmapEncoderOptions</c> → WPF 的
+/// <see cref="PngBitmapEncoder"/>。</para>
 /// </summary>
 public static class PetDebugCommands
 {
     /// <summary>
-    /// Handles a verb that only needs the pet window. Returns <c>null</c> when the verb is not a pet
-    /// verb, so the caller can fall through to its own (launcher-only) verbs.
+    /// 处理只需要桌宠窗口的动词。动词不属于桌宠时返回 <c>null</c>，让调用方落到自己的
+    /// （启动器专属）动词上。
     ///
-    /// <paramref name="pet"/> may be null: the launcher can have the pet window closed. In that case
-    /// pet verbs answer <c>ERR no pet window</c>, the same reply they always gave.
+    /// <para><paramref name="pet"/> 可以是 null：启动器允许桌宠窗口关着。那种情况下桌宠动词
+    /// 回 <c>ERR no pet window</c>，与一直以来的行为一致。</para>
     ///
-    /// <paramref name="referenceHwnd"/> is the hosting top-level window's handle, when there is one.
-    /// Only <c>pet-hwnd</c> uses it, to report whether the pet's owner is the host window; the
-    /// standalone pet has no host window, so it passes <see cref="IntPtr.Zero"/> and the field is
-    /// left out of the reply.
+    /// <para><paramref name="referenceHwnd"/> 是宿主顶层窗口的句柄（如果有）。只有
+    /// <c>pet-hwnd</c> 用它来判断桌宠的 owner 是不是宿主窗口；独立桌宠没有宿主窗口，
+    /// 传 <see cref="IntPtr.Zero"/>，该字段就不出现在回复里。</para>
     /// </summary>
     public static Task<string>? TryHandle(
         PetWindow? pet, bool isActive, string verb, string arg, IntPtr referenceHwnd = default)
@@ -117,7 +124,7 @@ public static class PetDebugCommands
                 return PetDebugMailbox.Ui(() =>
                 {
                     if (Preview(pet) is not { } preview) return "ERR no pet preview";
-                    // A progress argument parks the swing there for photographing; bare plays it.
+                    // 带进度参数就把挥拳停在那一刻，方便拍照；不带就正常播一遍。
                     if (double.TryParse(arg, out double t))
                     {
                         preview.TriggerAttack(Math.Clamp(t, 0.0, 1.0));
@@ -238,19 +245,19 @@ public static class PetDebugCommands
             case "pet-motion":
                 // 只读探测物理状态：跳跃偏移（DIP）、这一帧「1 格 = 多少 DIP」、三个移动标志、
                 // 地面位置。调移动速度 / 跳跃高度时靠它直接量（跳跃时窗口不动，只有模型偏移，
-                // 所以 pet-area 的 window= 看不出来）。与 WPF 侧逐字节一致。
+                // 所以 pet-area 的 window= 看不出来）。与 Avalonia 侧逐字节一致。
                 return PetDebugMailbox.Ui(() => "OK " + pet.MotionDebugInfo);
             case "pet-physics":
                 // 物理内核的无头自测：不开窗、不依赖真实时间，按固定 dt 喂合成按键序列，
                 // 直接断言三档速度 / 双击窗口边界 / 跳跃高度与帧率无关。
                 // **双击疾跑只能靠它验** —— 调试桥一条命令往返约 250ms，down→up→down 要 500ms，
                 // 早就超出 350ms 的双击窗口了。不需要桌宠在跑，纯计算。
-                // 与 WPF 侧逐字节一致。
+                // 与 Avalonia 侧逐字节一致。
                 return PetDebugMailbox.Ui(() => "OK " + PetPhysicsSelfTest.Run());
             case "pet-area":
                 // 只读探测内核**真正用来夹取**的工作区（DIP）。多屏下这里能直接看出桌宠被夹在
                 // 哪块屏 —— WPF 侧过去只报主屏（SystemParameters.WorkArea），是条真 bug。
-                // 与 WPF 侧逐字节一致。
+                // 与 Avalonia 侧逐字节一致。
                 return PetDebugMailbox.Ui(() =>
                 {
                     var area = pet.CurrentWorkArea;
@@ -297,8 +304,9 @@ public static class PetDebugCommands
             case "shot-pet":
                 return PetDebugMailbox.Ui(() => PetShot(pet, arg));
             case "pet-state":
-                // Read-only view of the live pet: the name it is actually rendering (which the
-                // host adapter is responsible for keeping in sync), plus mode/topmost/menu.
+                // 桌宠实时状态只读视图：它真正在渲染的名字（由宿主适配器负责保持同步），
+                // 外加模式 / 置顶 / 菜单开合。
+                // `render=` 里的 `frames=` 是**静止时停渲染**的验收锚点：桌宠不动时它应当停止增长。
                 return PetDebugMailbox.Ui(() =>
                 {
                     var preview = Preview(pet);
@@ -307,12 +315,12 @@ public static class PetDebugCommands
                     return $"petActive={isActive} petPlayerName={preview?.PlayerName ?? "n/a"} " +
                            $"effectiveName={host?.EffectiveName ?? "<null>"} customName={host?.CustomName ?? "<null>"} " +
                            $"mode={pet.CurrentMode} topmost={pet.Topmost} " +
-                           $"menuOpen={pet.IsPetContextMenuOpen} accounts=[{accounts}]";
+                           $"menuOpen={pet.IsPetContextMenuOpen} accounts=[{accounts}] " +
+                           $"render={preview?.RenderStats ?? "n/a"}";
                 });
             case "pet-hwnd":
-                // Read-only probe of the pet window's real Win32 styles. This is what decides
-                // whether Alt+Tab / Task view / foreground-stealing can be fixed by injecting
-                // WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE (route A) or needs another approach.
+                // 只读探测桌宠窗口真实的 Win32 样式。这决定了 Alt+Tab / 任务视图 / 抢前台
+                // 能不能靠注入 WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE 修好。
                 return PetDebugMailbox.Ui(() => PetHwnd(pet, referenceHwnd));
             default:
                 return null;
@@ -324,46 +332,58 @@ public static class PetDebugCommands
 
     private static bool Truthy(string arg) => arg == "on" || arg == "true" || arg == "1";
 
-    private static MinecraftSkinPreview? Preview(PetWindow pet) =>
-        pet.GetVisualDescendants().OfType<MinecraftSkinPreview>().FirstOrDefault();
+    /// <summary>
+    /// WPF 桌宠把预览控件暴露成属性（<see cref="PetWindow.Preview"/>），
+    /// 不用像 Avalonia 那样遍历可视树去找。
+    /// </summary>
+    private static SkinPreviewControl? Preview(PetWindow pet) => pet.Preview;
 
-    /// <summary>Renders the pet window's content offscreen; no window visibility or focus required.</summary>
+    /// <summary>离屏渲染桌宠窗口的内容；不需要窗口可见、也不需要焦点。</summary>
     private static string PetShot(PetWindow pet, string path)
     {
-        if (pet.Content is not Visual content) return "ERR no pet window";
+        if (pet.Content is not FrameworkElement content) return "ERR no pet window";
 
-        var size = content.Bounds.Size;
+        var size = content.RenderSize;
         if (size.Width <= 0 || size.Height <= 0) size = new Size(pet.Width, pet.Height);
-        using var rtb = new RenderTargetBitmap(
-            new PixelSize((int)Math.Ceiling(size.Width), (int)Math.Ceiling(size.Height)),
-            new Vector(96, 96));
+
+        var rtb = new RenderTargetBitmap(
+            (int)Math.Ceiling(size.Width), (int)Math.Ceiling(size.Height),
+            96, 96, PixelFormats.Pbgra32);
         rtb.Render(content);
-        rtb.Save(path, new PngBitmapEncoderOptions());
+
+        var encoder = new PngBitmapEncoder();
+        encoder.Frames.Add(BitmapFrame.Create(rtb));
+        using (var stream = File.Create(path))
+        {
+            encoder.Save(stream);
+        }
+
         return $"OK {path}";
     }
 
-    // shot-pet cannot see the pet: its offscreen render only ever draws the startup snapshot, so
-    // every frame comes out identical. This reads the live GL frame instead. SaveSnapshot hands
-    // back the frame captured by the *previous* request, hence arm once, wait, then save.
-    private static async Task<string> PetSnapshot(PetWindow pet, string path)
+    /// <summary>
+    /// 抓桌宠的实时皮肤帧。
+    ///
+    /// <para><b>与 Avalonia 版的差别</b>：那边 GL 的 <c>SaveSnapshot</c> 交回的是**上一次**请求
+    /// 捕获的帧，所以必须"先上膛、等 90ms、再开火"；WPF 这边是软件光栅化、同步且确定性，
+    /// 一次调用就是当前帧。回复格式保持一致，客户端不用改。</para>
+    /// </summary>
+    private static Task<string> PetSnapshot(PetWindow pet, string path)
     {
-        if (string.IsNullOrWhiteSpace(path)) return "ERR no path";
+        if (string.IsNullOrWhiteSpace(path)) return Task.FromResult("ERR no path");
 
-        var preview = await PetDebugMailbox.Ui(() => Preview(pet));
-        if (preview == null) return "ERR no pet preview";
-
-        var scratch = Path.Combine(Path.GetTempPath(), "ncl-pet-snap-arm.png");
-        await PetDebugMailbox.Ui(() => preview.SaveSnapshot(scratch));
-        await Task.Delay(90);
-        await PetDebugMailbox.Ui(() => preview.SaveSnapshot(path));
-        try { File.Delete(scratch); } catch (IOException) { }
-
-        return "OK " + path;
+        return PetDebugMailbox.Ui(() =>
+        {
+            var preview = Preview(pet);
+            if (preview == null) return "ERR no pet preview";
+            preview.SaveSnapshot(path);
+            return "OK " + path;
+        });
     }
 
-    // --- Win32 style probe (pet-hwnd) ---------------------------------------------------------
-    // Style/ex-style are 32-bit DWORDs, so GetWindowLongW (not ...Ptr) is the correct call here
-    // and works on both x86 and x64 without a platform guard.
+    // --- Win32 样式探测 (pet-hwnd) -------------------------------------------------------------
+    // style / ex-style 是 32 位 DWORD，所以这里该用 GetWindowLongW（不是 ...Ptr），
+    // x86 / x64 都对，不需要平台分支。
     private const int GWL_STYLE = -16;
     private const int GWL_EXSTYLE = -20;
     private const uint GW_OWNER = 4;
@@ -396,10 +416,9 @@ public static class PetDebugCommands
 
     private static string PetHwnd(PetWindow pet, IntPtr referenceHwnd)
     {
-        var handle = pet.TryGetPlatformHandle();
-        if (handle == null || handle.Handle == IntPtr.Zero) return "ERR no hwnd";
+        var hwnd = new WindowInteropHelper(pet).Handle;
+        if (hwnd == IntPtr.Zero) return "ERR no hwnd";
 
-        var hwnd = handle.Handle;
         int style = GetWindowLongW(hwnd, GWL_STYLE);
         int exStyle = GetWindowLongW(hwnd, GWL_EXSTYLE);
         var owner = GetWindow(hwnd, GW_OWNER);

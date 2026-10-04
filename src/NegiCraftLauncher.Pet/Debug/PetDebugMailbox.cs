@@ -1,23 +1,28 @@
-using System;
 using System.IO;
-using System.Threading;
-using System.Threading.Tasks;
-using Avalonia.Threading;
+using System.Windows;
+using System.Windows.Threading;
 
 namespace NegiCraftLauncher.Pet.Debug;
 
 /// <summary>
-/// The file-mailbox transport both debug bridges talk over.
+/// 两个调试桥共用的**文件邮箱**传输层。
 ///
-/// A file mailbox instead of a named pipe: no persistent handles to leak or lose, and it keeps
-/// working no matter what else on the machine intercepts or covers the UI. The client writes
-/// <c>cmd.txt</c>, this loop reads-and-deletes it, runs the verb, and drops the answer in
-/// <c>reply.txt</c>.
+/// <para><b>本文件是 <c>Pet/Debug/PetDebugMailbox.cs</c> 的 WPF 移植版。</b>
+/// 邮箱协议（<c>cmd.txt</c> / <c>reply.txt</c>、<c>--debug</c> / <c>--debug-box</c> 开关、
+/// 回复写完再执行 <c>ExitAfterReply</c>）两边**逐字节一致** ——
+/// 改这里必须同时改 Avalonia 那份，否则 <c>design/_dbg.ps1</c> 会在两个进程上表现不一致。</para>
 ///
-/// Every process gets its own mailbox directory under <c>%TEMP%</c> (the launcher uses
-/// <c>ncl-debug</c>, the standalone pet <c>ncl-pet-debug</c>), so both can be debugged at the same
-/// time without racing over one command file. A caller that wants a third box passes
-/// <c>--debug-box &lt;name&gt;</c>.
+/// <para>用文件邮箱而不是命名管道：没有常驻句柄要管，也不怕别的东西抢焦点或盖住界面。
+/// 客户端写 <c>cmd.txt</c>，这个循环读到就删掉、执行动词、把结果落到 <c>reply.txt</c>。</para>
+///
+/// <para>每个进程在 <c>%TEMP%</c> 下有自己的邮箱目录（启动器 <c>ncl-debug</c>、
+/// 独立桌宠 <c>ncl-pet-debug</c>），所以两边可以同时调试。要第三个盒子就传
+/// <c>--debug-box &lt;名字&gt;</c>。</para>
+///
+/// <para><b>与 Avalonia 版的唯一差别</b>：<c>Avalonia.Threading.Dispatcher.UIThread</c>
+/// → <see cref="System.Windows.Threading.Dispatcher"/>。WPF 没有全局静态的 UI 调度器，
+/// 所以从 <see cref="Application.Current"/> 取；桥总是在 UI 线程上构造的，
+/// 退路 <see cref="Dispatcher.CurrentDispatcher"/> 也落在同一个线程上。</para>
 /// </summary>
 public sealed class PetDebugMailbox
 {
@@ -31,9 +36,9 @@ public sealed class PetDebugMailbox
 
     private Action? _afterReply;
 
-    /// <param name="boxName">Directory name under <c>%TEMP%</c> holding this process's mailbox.</param>
-    /// <param name="threadName">Name for the background poll thread (shows up in a debugger).</param>
-    /// <param name="dispatch">Turns one command line into one reply line.</param>
+    /// <param name="boxName"><c>%TEMP%</c> 下承载本进程邮箱的目录名。</param>
+    /// <param name="threadName">后台轮询线程的名字（调试器里能看到）。</param>
+    /// <param name="dispatch">把一行命令变成一行回复。</param>
     public PetDebugMailbox(string boxName, string threadName, Func<string, Task<string>> dispatch)
     {
         var dir = Path.Combine(Path.GetTempPath(), boxName);
@@ -45,12 +50,12 @@ public sealed class PetDebugMailbox
         _dispatch = dispatch;
     }
 
-    /// <summary>True when this process was launched with <c>--debug</c>. Nothing is exposed otherwise.</summary>
+    /// <summary>本进程是否带 <c>--debug</c> 启动。否则什么都不暴露。</summary>
     public static bool IsEnabled => Array.IndexOf(Environment.GetCommandLineArgs(), DebugFlag) >= 0;
 
     /// <summary>
-    /// Reads <c>--debug-box &lt;name&gt;</c> so two debuggable processes on one machine can each own a
-    /// mailbox, falling back to <paramref name="fallback"/> when the switch is absent or malformed.
+    /// 读 <c>--debug-box &lt;name&gt;</c>，让同一台机器上两个可调试进程各占一个邮箱；
+    /// 开关缺失或格式不对时回退到 <paramref name="fallback"/>。
     /// </summary>
     public static string ResolveBoxName(string fallback)
     {
@@ -61,7 +66,7 @@ public sealed class PetDebugMailbox
             : fallback;
     }
 
-    /// <summary>Starts the background poll loop and returns its thread.</summary>
+    /// <summary>启动后台轮询循环并返回它的线程。</summary>
     public Thread Start()
     {
         var loop = new Thread(Run) { IsBackground = true, Name = _threadName };
@@ -70,11 +75,11 @@ public sealed class PetDebugMailbox
     }
 
     /// <summary>
-    /// Asks the mailbox to run <paramref name="action"/> on the UI thread right after the current
-    /// reply has been written to disk. Verbs that tear the process down use this: shutting down
-    /// first would kill the process mid-reply and leave the client waiting until it times out.
+    /// 让邮箱在当前这条回复落盘之后、马上在 UI 线程上跑 <paramref name="action"/>。
+    /// 要拆掉进程的动词走这条路：先关掉的话进程会在回复写到一半时被杀掉，
+    /// 客户端只能一直等到超时。
     /// </summary>
-    public void ExitAfterReply(Action action) => _afterReply = () => Dispatcher.UIThread.Post(action);
+    public void ExitAfterReply(Action action) => _afterReply = () => UiDispatcher().BeginInvoke(action);
 
     private void Run()
     {
@@ -96,21 +101,25 @@ public sealed class PetDebugMailbox
                 File.WriteAllText(tmp, reply);
                 File.Move(tmp, _replyPath, overwrite: true);
 
-                // Only now is the answer safely on disk, so a shutdown requested by the verb can run.
+                // 到这一步回复才算安全落盘，动词要求的关闭动作现在可以跑了。
                 var afterReply = _afterReply;
                 _afterReply = null;
                 afterReply?.Invoke();
             }
             catch (Exception)
             {
-                Thread.Sleep(80);   // e.g. client still mid-write; retry next tick
+                Thread.Sleep(80);   // 例如客户端还在写文件；下一拍重试
             }
         }
     }
 
-    /// <summary>Runs <paramref name="action"/> on the UI thread and awaits completion.</summary>
-    public static Task Ui(Action action) => Dispatcher.UIThread.InvokeAsync(action).GetTask();
+    /// <summary>UI 线程的调度器。桥是在 UI 线程上建的，所以这两个来源都指向它。</summary>
+    private static Dispatcher UiDispatcher() =>
+        Application.Current?.Dispatcher ?? Dispatcher.CurrentDispatcher;
 
-    /// <summary>Runs <paramref name="func"/> on the UI thread and awaits its result.</summary>
-    public static Task<T> Ui<T>(Func<T> func) => Dispatcher.UIThread.InvokeAsync(func).GetTask();
+    /// <summary>在 UI 线程上跑 <paramref name="action"/> 并等它完成。</summary>
+    public static Task Ui(Action action) => UiDispatcher().InvokeAsync(action).Task;
+
+    /// <summary>在 UI 线程上跑 <paramref name="func"/> 并等它的返回值。</summary>
+    public static Task<T> Ui<T>(Func<T> func) => UiDispatcher().InvokeAsync(func).Task;
 }

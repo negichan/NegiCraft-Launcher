@@ -1,0 +1,56 @@
+using System;
+using Avalonia;
+using Avalonia.Controls;
+using Avalonia.Controls.ApplicationLifetimes;
+using Avalonia.Markup.Xaml;
+using Avalonia.Platform;
+using NegiCraftLauncher.Pet;
+using NegiCraftLauncher.Pet.Avalonia;
+
+namespace NegiCraftLauncher.Pet.App.Avalonia;
+
+public partial class App : Application
+{
+    /// <summary>Name used when the user has not chosen one and none was passed on the command line.</summary>
+    private const string FallbackName = "pingplus";
+
+    public override void Initialize()
+    {
+        AvaloniaXamlLoader.Load(this);
+    }
+
+    public override void OnFrameworkInitializationCompleted()
+    {
+        if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
+        {
+            // NegiPet.exe [名字]
+            var args = Environment.GetCommandLineArgs();
+            var cliName = args.Length > 1 && !args[1].StartsWith('-') ? args[1] : FallbackName;
+
+            var host = new StandalonePetHost(cliName);
+            var petWindow = new PetWindow(host.EffectiveName, host)
+            {
+                // Only the standalone build gets the pet icon; the shared PetWindow.axaml stays icon-less
+                // so the embedded pet keeps the launcher's identity.
+                // Note the authority is the *assembly* name (NegiPet), not the project name.
+                Icon = new WindowIcon(AssetLoader.Open(
+                    new Uri("avares://NegiPet.Avalonia/Assets/NegiPet.ico")))
+            };
+
+            // Without a launcher to position it, the pet would otherwise land at the top-left corner.
+            petWindow.PlaceAtDefaultCorner();
+
+            // The pet is the only window here, so closing it (menu → 关闭桌宠) must end the process.
+            // OnExplicitShutdown left it running with no window and no tray icon, i.e. a process the
+            // user could only get rid of through Task Manager.
+            desktop.ShutdownMode = ShutdownMode.OnLastWindowClose;
+            desktop.MainWindow = petWindow;
+
+            // Same file-mailbox bridge as the launcher, minus everything launcher-specific.
+            // Opened only with --debug; the mailbox lives in %TEMP%\ncl-pet-debug.
+            StandaloneDebugBridge.StartIfNeeded(petWindow);
+        }
+
+        base.OnFrameworkInitializationCompleted();
+    }
+}

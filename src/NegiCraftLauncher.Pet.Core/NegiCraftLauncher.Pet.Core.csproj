@@ -5,8 +5,9 @@
         <Nullable>enable</Nullable>
         <IsPackable>false</IsPackable>
         <GenerateDocumentationFile>false</GenerateDocumentationFile>
-        <!-- 命名空间仍为 NegiCraftLauncher.Pet / .Pet.Services，与 Avalonia 侧那个程序集一致，
-             调用方不用改 using。 -->
+        <!-- 命名空间**刻意固定**为 NegiCraftLauncher.Pet / .Pet.Services：
+             它是两端共用的契约命名空间，WPF 侧那个 NegiCraftLauncher.Pet 程序集也用同一个，
+             合流后调用方不用改 using。工程名带 .Core 只为在目录里区分，与命名空间无关。 -->
         <RootNamespace>NegiCraftLauncher.Pet</RootNamespace>
     </PropertyGroup>
 
@@ -18,6 +19,6 @@
            IPetHost / PetSettings          宿主契约与名字存储
            GlobalKeyboardHook / GlobalMouseHook   全局钩子（纯 P/Invoke）
 
-         Avalonia 侧 `NegiCraftLauncher.Pet` 与 WPF 侧 `NegiCraftLauncher.Pet.Wpf`
+         Avalonia 侧 `NegiCraftLauncher.Pet.Avalonia` 与 WPF 侧 `NegiCraftLauncher.Pet`
          都引用本工程。窗口本体、ShellStyle、调试动词各写各的（view 层不共享）。 -->
 </Project>

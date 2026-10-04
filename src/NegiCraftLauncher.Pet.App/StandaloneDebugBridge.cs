@@ -1,29 +1,27 @@
-using System;
-using System.Threading.Tasks;
-using Avalonia;
-using Avalonia.Controls.ApplicationLifetimes;
+using System.Windows;
 using NegiCraftLauncher.Pet;
 using NegiCraftLauncher.Pet.Debug;
 
 namespace NegiCraftLauncher.Pet.App;
 
 /// <summary>
-/// The standalone pet's debug bridge.
+/// 独立桌宠的调试桥。
 ///
-/// Same file-mailbox protocol as the launcher's, but with only the pet verbs plus <c>quit</c> —
-/// there are no pages, accounts, downloads or tray to drive here. It lives in its own mailbox
-/// (<c>%TEMP%\ncl-pet-debug</c>) so the launcher and the standalone pet can be debugged at the same
-/// time without stealing each other's commands.
+/// <para>与启动器那套同一份文件邮箱协议，但只有桌宠动词加一个 <c>quit</c> ——
+/// 这里没有页面、账号、下载、托盘可驱动。它住在自己的邮箱
+/// （<c>%TEMP%\ncl-pet-debug</c>）里，所以启动器和独立桌宠可以同时调试、互不抢命令。</para>
+///
+/// <para>与 Avalonia 版 <c>Pet.App/StandaloneDebugBridge.cs</c> 行为一致。</para>
 /// </summary>
 internal static class StandaloneDebugBridge
 {
-    /// <summary>Mailbox directory under <c>%TEMP%</c>. Override with <c>--debug-box &lt;name&gt;</c>.</summary>
+    /// <summary><c>%TEMP%</c> 下的邮箱目录名。可用 <c>--debug-box &lt;name&gt;</c> 改。</summary>
     public const string DefaultBoxName = "ncl-pet-debug";
 
-    // Exactly one bridge per process, so the dispatch closure can reach the mailbox it answers on.
+    // 每个进程恰好一个桥，所以分派闭包能拿到自己应答的那个邮箱。
     private static PetDebugMailbox? _mailbox;
 
-    /// <summary>Starts the bridge when the process was launched with <c>--debug</c>; otherwise does nothing.</summary>
+    /// <summary>进程带 <c>--debug</c> 启动时才开桥；否则什么都不做。</summary>
     public static void StartIfNeeded(PetWindow pet)
     {
         if (!PetDebugMailbox.IsEnabled) return;
@@ -41,8 +39,8 @@ internal static class StandaloneDebugBridge
 
         try
         {
-            // The pet is the only window here, so it is "active" whenever it exists; it has no host
-            // top-level window to compare owners against, hence the zero handle.
+            // 桌宠是这里唯一的窗口，所以只要它在就算"激活"；它也没有宿主顶层窗口可以比对
+            // owner，因此传零句柄。
             if (PetDebugCommands.TryHandle(pet, isActive: true, verb, arg) is { } shared)
             {
                 return await shared;
@@ -50,18 +48,16 @@ internal static class StandaloneDebugBridge
 
             switch (verb)
             {
-                // Closes the pet window exactly as the "关闭桌宠" menu item does. Kept separate from
-                // `quit` on purpose: `quit` tears the process down directly, `pet-close` goes through
-                // the window, so the two exit paths can be told apart when testing shutdown behaviour.
-                // With ShutdownMode.OnLastWindowClose this also ends the process — hence ExitAfterReply,
-                // otherwise the reply never reaches disk and the client just times out.
+                // 完全按「关闭桌宠」菜单项的方式关窗。与 `quit` 分开是有意的：`quit` 直接拆进程，
+                // `pet-close` 走窗口，这样测退出行为时两条路可以分辨。
+                // 配合 ShutdownMode.OnLastWindowClose，这条也会结束进程 —— 所以要用
+                // ExitAfterReply，否则回复还没落盘进程就没了，客户端只能等到超时。
                 case "pet-close":
                     _mailbox?.ExitAfterReply(pet.Close);
                     return "OK";
                 case "quit":
-                    // Exit only once the reply is on disk, so the client sees OK rather than timing out.
-                    _mailbox?.ExitAfterReply(() =>
-                        (Application.Current?.ApplicationLifetime as IClassicDesktopStyleApplicationLifetime)?.Shutdown());
+                    // 回复落盘之后再退出，客户端才能看到 OK 而不是超时。
+                    _mailbox?.ExitAfterReply(() => Application.Current?.Shutdown());
                     return "OK";
                 default:
                     return $"ERR unknown verb {verb}";

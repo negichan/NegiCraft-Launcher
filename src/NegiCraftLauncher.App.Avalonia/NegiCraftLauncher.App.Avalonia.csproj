@@ -1,0 +1,43 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <ApplicationIcon>Assets\app.ico</ApplicationIcon>
+    <!-- 工程名带 .App.Avalonia，但产物名只带 .Avalonia：
+         Windows 侧是 NegiCraftLauncher.exe，跨端侧是 NegiCraftLauncher.Avalonia.exe。
+         ⚠️ 改了这里，XAML 里的 `avares://NegiCraftLauncher.Avalonia/...` 前缀必须同步
+         （avares 的主机名就是**程序集名**，不是工程名）。 -->
+    <AssemblyName>NegiCraftLauncher.Avalonia</AssemblyName>
+    <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Folder Include="Models\" />
+    <AvaloniaResource Include="Assets\**" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Avalonia" Version="12.1.3" />
+    <PackageReference Include="Avalonia.Desktop" Version="12.1.3" />
+    <PackageReference Include="Avalonia.Fonts.Inter" Version="12.1.3" />
+    <PackageReference Include="CommunityToolkit.Mvvm" Version="8.2.1" />
+    <PackageReference Include="Material.Icons.Avalonia" Version="3.0.2" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\NegiCraftLauncher.Core\NegiCraftLauncher.Core.csproj" />
+    <!-- Shared, UI-framework-neutral view models. Raster (the platform-neutral pixel layer)
+         comes in transitively through it. -->
+    <ProjectReference Include="..\NegiCraftLauncher.ViewModels\NegiCraftLauncher.ViewModels.csproj" />
+    <!-- The desktop pet; the launcher hosts it in-process. -->
+    <ProjectReference Include="..\NegiCraftLauncher.Pet.Avalonia\NegiCraftLauncher.Pet.Avalonia.csproj" />
+    <!-- Skin decoding + the OpenGL skin renderer; also brings SkiaSharp and the vendored
+         MinecraftSkinRender transitively. -->
+    <ProjectReference Include="..\NegiCraftLauncher.Skin.Avalonia\NegiCraftLauncher.Skin.Avalonia.csproj" />
+    <!-- Shared design tokens + control themes, also used by the standalone pet. -->
+    <ProjectReference Include="..\NegiCraftLauncher.Theme.Avalonia\NegiCraftLauncher.Theme.Avalonia.csproj" />
+  </ItemGroup>
+</Project>

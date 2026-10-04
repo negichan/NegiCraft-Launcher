@@ -1,0 +1,30 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <AssemblyName>NegiPet.Avalonia</AssemblyName>
+    <RootNamespace>NegiCraftLauncher.Pet.App.Avalonia</RootNamespace>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <ApplicationIcon>Assets\NegiPet.ico</ApplicationIcon>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <AvaloniaResource Include="Assets\**" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Avalonia" Version="12.1.3" />
+    <PackageReference Include="Avalonia.Desktop" Version="12.1.3" />
+    <PackageReference Include="Avalonia.Fonts.Inter" Version="12.1.3" />
+    <PackageReference Include="Material.Icons.Avalonia" Version="3.0.2" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\NegiCraftLauncher.Pet.Avalonia\NegiCraftLauncher.Pet.Avalonia.csproj" />
+    <!-- Same design tokens + control themes as the launcher, so the pet's context menu and dialogs
+         look identical in both hosts. -->
+    <ProjectReference Include="..\NegiCraftLauncher.Theme.Avalonia\NegiCraftLauncher.Theme.Avalonia.csproj" />
+  </ItemGroup>
+</Project>
