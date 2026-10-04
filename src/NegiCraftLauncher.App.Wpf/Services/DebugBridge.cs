@@ -13,7 +13,8 @@ namespace NegiCraftLauncher.App.Wpf.Services;
 ///
 /// <para><b>本文件是 <c>App/Services/DebugBridge.cs</c>（267 行）的 WPF 移植版。</b>
 /// 邮箱名（<c>ncl-debug</c>）、动词名、回复格式逐条对齐，
-/// <c>design/_dbg.ps1</c> 与 <c>design/_smoke.ps1</c> 两个平台通用。</para>
+/// 客户端 <c>design/_dbg.ps1</c> 与 <c>design/_smoke.ps1</c> 两个平台通用
+/// （它们是本地私有脚本，不随源码分发）。</para>
 ///
 /// <para>桌宠动词不在这里 —— 它们与独立桌宠的桥共用，实现在
 /// <see cref="PetDebugCommands"/>。本类只管启动器专属动词（页面、账户、下载、托盘）与传输层。</para>

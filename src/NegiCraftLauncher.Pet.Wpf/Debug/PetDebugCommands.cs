@@ -13,8 +13,9 @@ namespace NegiCraftLauncher.Pet.Wpf.Debug;
 /// 桌宠动词，启动器的调试桥与独立桌宠的桥共用。
 ///
 /// <para><b>本文件是 <c>Pet/Debug/PetDebugCommands.cs</c> 的 WPF 移植版。</b>
-/// 动词名、参数解析、回复字符串**逐字节一致** —— <c>design/_dbg.ps1</c> 与
-/// <c>AGENTS.md</c> 里的用法两边通用。改动词或回复格式必须同时改 Avalonia 那份。</para>
+/// 动词名、参数解析、回复字符串**逐字节一致** —— 两套实现共享同一份线协议，
+/// 客户端（<c>design/_dbg.ps1</c>，本地私有脚本）与两边通用。
+/// 改动词或回复格式必须同时改 Avalonia 那份。</para>
 ///
 /// <para>这里的每个处理分支只需要一个 <see cref="PetWindow"/>（名字/状态类动词再要一个
 /// <see cref="IPetHost"/>）。需要启动器状态的东西（页面、账户、下载、托盘）留在启动器自己的桥里，

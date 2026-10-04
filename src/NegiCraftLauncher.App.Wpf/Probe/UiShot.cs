@@ -73,6 +73,7 @@ internal static class UiShot
         log.AppendLine($"渲染路径: {(UseDirectRender ? "直接渲染 RenderTargetBitmap.Render(content)" : "VisualBrush 归零重画")}");
         log.AppendLine("对照基准: Avalonia 版 design/_smoke.ps1 出的 %TEMP%\\ncl-smoke-<page>.png（1180x720，同为直接渲染）");
         log.AppendLine("像素对照: python design/_diff.py <wpf.png> <smoke.png> --shift 6");
+        log.AppendLine("（design/ 下的脚本是本地私有工具，不随源码分发 —— 见 design/README.md）");
 
         MainWindowViewModel vm;
         try
