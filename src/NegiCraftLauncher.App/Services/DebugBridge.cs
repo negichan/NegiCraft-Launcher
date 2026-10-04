@@ -185,7 +185,7 @@ public sealed class DebugBridge
                         if (current is null) return $"install={install ?? "n/a"} current=none";
 
                         return $"install={install ?? "n/a"} kind={current.Kind} title={current.Title ?? "n/a"} " +
-                               $"video={current.VideoPath ?? "n/a"} preview={current.PreviewPath ?? "n/a"}";
+                               $"video={current.VideoPath ?? "n/a"} source={current.SourcePath}";
                     });
                 case "wallpaper-sync":
                     // 跑一遍「同步 Wallpaper Engine」，把结果横幅原文回出来 ——
