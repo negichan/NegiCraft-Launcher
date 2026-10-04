@@ -12,7 +12,8 @@ namespace NegiCraftLauncher.Pet;
 ///
 /// <para><b>坐标一律 DIP</b>。Avalonia 的 <c>Window.Position</c> 是 <c>PixelPoint</c>（物理像素），
 /// WPF 的 <c>Left/Top/Width/Height</c> 是 DIP —— 两边在边界处换算，内核里只认 DIP。
-/// 所以速度常量（180 DIP/s 等）在两种 DPI 下的<b>物理速度</b>一致。</para>
+/// 速度 / 重力 / 跳跃高度按 Minecraft 原版的<b>「格」</b>给，用时乘
+/// <see cref="DipPerBlock"/>（以及桌宠缩放）换成 DIP，所以两种 DPI 下的物理速度一致。</para>
 ///
 /// <para><b>它不碰任何 UI 对象</b>。每帧由宿主喂一个 <see cref="PetMotionContext"/>，内核吐出：
 /// 地面位置（<see cref="GroundX"/>/<see cref="GroundY"/>）、跳跃偏移、朝向增量
@@ -28,26 +29,53 @@ public sealed class PetMotion
     // ---------------------------------------------------------------- 常量
     // 这些数值与 Avalonia 版逐字相同。改动任何一条都会让两个平台的手感对不上。
 
-    /// <summary>潜行速度（DIP/s）。</summary>
-    public const double SneakSpeed = 80.0;
+    /// <summary>
+    /// 1 个 Minecraft 方块等于多少 DIP（桌宠缩放 100% 时）。
+    ///
+    /// <para>设计稿就是"64x128 的模型"（见 <c>SkinPreviewControl</c> 的注释：模型 128 DIP 高、
+    /// 占 160x250 舞台的 51%，头顶在 Y≈36.6、脚在 Y≈164），角色两格高 ⇒ 1 格 = 64 DIP。
+    /// 拿内核自己的锚点验算：脚底在舞台 Y=<see cref="FeetStageY"/>=160、头心在
+    /// Y=<see cref="HeadStageY"/>=52，头心在脚底上方 28/32 个身位 ⇒ 身高 = 108 ÷ 0.875 ≈ 123.4
+    /// ⇒ 1 格 ≈ 61.7。两个算法差 4%，取设计稿的整数。</para>
+    /// </summary>
+    public const double DipPerBlock = 64.0;
 
-    /// <summary>行走速度（DIP/s）。</summary>
-    public const double WalkSpeed = 180.0;
+    // 速度一律按 Minecraft 原版的「格/s」给，用时乘 DipPerBlock（以及桌宠缩放）换成 DIP。
+    // 桌宠被放大到 150% 时，"一格"也跟着变大，所以它相对自己身高的速度仍然是 4.317 格/s ——
+    // 若只按固定 DIP/s 走，放大后会看起来慢了 1/3。
 
-    /// <summary>疾跑速度（DIP/s）。</summary>
-    public const double SprintSpeed = 270.0;
+    /// <summary>潜行速度（格/s）。Minecraft 原版 1.295，= 行走 × 0.3。</summary>
+    public const double SneakBlocksPerSecond = 1.295;
 
-    /// <summary>跳跃中行走（DIP/s）。</summary>
-    public const double JumpWalkSpeed = 200.0;
+    /// <summary>行走速度（格/s）。Minecraft 原版 4.317。</summary>
+    public const double WalkBlocksPerSecond = 4.317;
 
-    /// <summary>跳跃中疾跑（DIP/s）。</summary>
-    public const double JumpSprintSpeed = 290.0;
+    /// <summary>疾跑速度（格/s）。Minecraft 原版 5.612。</summary>
+    public const double SprintBlocksPerSecond = 5.612;
 
-    /// <summary>起跳初速度（DIP/s，向上为负）。滞空约 0.38s、高度约 44 DIP。</summary>
-    public const double JumpVelocity = -460.0;
+    /// <summary>跳跃中行走（格/s）—— 沿用原来的 200/180 比例。</summary>
+    public const double JumpWalkBlocksPerSecond = WalkBlocksPerSecond * 10.0 / 9.0;
 
-    /// <summary>重力（DIP/s²）。</summary>
-    public const double Gravity = 2400.0;
+    /// <summary>跳跃中疾跑（格/s）—— 沿用原来的 290/270 比例。</summary>
+    public const double JumpSprintBlocksPerSecond = SprintBlocksPerSecond * 29.0 / 27.0;
+
+    /// <summary>
+    /// 重力（格/s²）。沿用迁移前的 2400 DIP/s² ÷ 64 = 37.5 —— 比 Minecraft 的 32 略重，
+    /// 落得干脆些。<see cref="JumpVelocityBlocksPerSecond"/> 是按它反解的，改它会连带改跳跃高度。
+    /// </summary>
+    public const double GravityBlocksPerSecondSquared = 2400.0 / DipPerBlock;
+
+    /// <summary>
+    /// 目标跳跃高度（格）。Minecraft 原版起跳约 1.25 格 —— 角色两格高，这一跳刚好够跨上一格台阶。
+    /// </summary>
+    public const double JumpHeightBlocks = 1.25;
+
+    /// <summary>
+    /// 起跳初速度（格/s，向上为负）。由 h = v²/(2g) 反解 ⇒ √(2 × 37.5 × 1.25) ≈ 9.68 格/s
+    /// （≈ 620 DIP/s，滞空约 0.52s）。<b>用的时候要乘 DipPerBlock × Stage.Scale。</b>
+    /// </summary>
+    public static readonly double JumpVelocityBlocksPerSecond =
+        -Math.Sqrt(2 * GravityBlocksPerSecondSquared * JumpHeightBlocks);
 
     /// <summary>朝行进方向转身的最大角速度（deg/s）。</summary>
     public const double MoveTurnSpeed = 720.0;
@@ -108,8 +136,21 @@ public sealed class PetMotion
     private bool _physicalShiftDown;
     private bool _sprintLocked;
 
+    /// <summary>上一帧 W 是不是按着 —— 双击疾跑靠它做边沿检测（见 <see cref="StepControl"/>）。</summary>
+    private bool _wasWDown;
+
     private double _jumpVelocityY;
-    private DateTime _lastWPressTime = DateTime.MinValue;
+
+    /// <summary>
+    /// 内核自己的时间轴（秒），每帧 <c>+= dt</c>。<b>不用 <c>DateTime.UtcNow</c></b> ——
+    /// 物理完全由 dt 驱动，墙钟却是独立走的：进程被卡住时（拖窗口、调试桥阻塞 UI 线程）
+    /// dt 被夹到 40ms 而墙钟照走，两边一错开，靠墙钟做的判定就与模拟时间不符。
+    /// 而且无头自测里帧跑得比真实时间快几个数量级，墙钟会让所有时间窗判定失效。
+    /// </summary>
+    private double _timeSeconds;
+
+    /// <summary>上一次「W 刚按下」的内核时刻（秒），见 <see cref="DoubleTapWindowMs"/>。</summary>
+    private double _lastWPressTimeSeconds = double.NegativeInfinity;
 
     /// <summary>模式变了。宿主拿它更新菜单图标、切焦点、或在回自由待机时把窗口摆回去。</summary>
     public event Action<PetInteractionMode>? ModeChanged;
@@ -172,6 +213,19 @@ public sealed class PetMotion
     /// </summary>
     public PetPoint LastWindow { get; private set; }
 
+    /// <summary>上一帧宿主传进来的舞台几何。<c>pet-motion</c> 用它把跳跃偏移换算成格。</summary>
+    public PetStage LastStage { get; private set; }
+
+    /// <summary>
+    /// 诊断串，<c>pet-motion</c> 动词直接回它 —— 跳跃偏移（DIP）、这一帧「1 格 = 多少 DIP」、
+    /// 三个移动标志、地面位置。调速度 / 跳跃高度时靠它直接量，不用凭肉眼。
+    /// 按需拼，不每帧算。
+    /// </summary>
+    public string MotionDebugInfo =>
+        $"mode={Mode} jump={JumpOffsetY:F2} block={DipPerBlock * LastStage.Scale:F2} " +
+        $"walk={Walking} sprint={Sprinting} sneak={Sneaking} " +
+        $"ground=({GroundX:F2},{GroundY:F2})";
+
     /// <summary>还有几个点没走到（当前目标算 1 个）。</summary>
     public int RemainingWaypointCount => (_hasNavTarget ? 1 : 0) + _navQueue.Count;
 
@@ -205,6 +259,8 @@ public sealed class PetMotion
             _keySpace = false;
             _keyCtrl = false;
             _sprintLocked = false;
+            _wasWDown = false;
+            _lastWPressTimeSeconds = double.NegativeInfinity;
         }
 
         ModeChanged?.Invoke(mode);
@@ -242,7 +298,13 @@ public sealed class PetMotion
 
     // ---------------------------------------------------------------- 输入
 
-    /// <summary>窗口收到按键按下。负责双击 W 的疾跑锁定、Shift 的下蹲刷新、Esc 取消导航。</summary>
+    /// <summary>
+    /// 窗口收到按键按下。负责 Shift 的下蹲刷新与 Esc 取消导航。
+    ///
+    /// <para><b>双击 W 的疾跑锁定不在这里</b> —— 桌宠窗口带 <c>WS_EX_NOACTIVATE</c>、基本拿不到
+    /// 焦点，这个回调实际是死的。双击靠 <see cref="StepControl"/> 里对<b>每帧轮询的物理键状态</b>
+    /// 做边沿检测（顺带把模拟按键也覆盖了）。</para>
+    /// </summary>
     public void OnKeyDown(PetMotionKey key)
     {
         switch (key)
@@ -257,9 +319,6 @@ public sealed class PetMotion
                 break;
 
             case PetMotionKey.W:
-                var now = DateTime.UtcNow;
-                if ((now - _lastWPressTime).TotalMilliseconds < DoubleTapWindowMs) _sprintLocked = true;
-                _lastWPressTime = now;
                 _keyW = true;
                 break;
 
@@ -301,7 +360,7 @@ public sealed class PetMotion
 
     /// <summary>
     /// 调试桥的模拟按键，绕开"窗口拿不到焦点"这件事。名字与 <c>_dbg.ps1</c> 传的一致。
-    /// 注意它<b>不做</b>双击 W 的疾跑锁定 —— 与原实现一致。
+    /// 模拟的 W 走的是和物理键同一条路，所以 <c>pet-key w</c> 连按两次一样能触发疾跑。
     /// </summary>
     public void SetSimulatedKey(string key, bool down)
     {
@@ -384,9 +443,12 @@ public sealed class PetMotion
         // 记在 dt 早退之前：即便这一帧被跳过，诊断串报的也该是最新的平台信息。
         LastWorkArea = ctx.WorkArea;
         LastWindow = ctx.Window;
+        LastStage = ctx.Stage;
 
         if (dt < MinStepSeconds) return;
         if (dt > MaxStepSeconds) dt = MaxStepSeconds;
+
+        _timeSeconds += dt;
 
         // 被抓握或在空中拖拽时，以挣扎晃头动画为先
         if (IsDragging)
@@ -462,6 +524,21 @@ public sealed class PetMotion
         var isMoving = moveX != 0 || moveY != 0;
         Walking = isMoving;
 
+        // 双击 W 起疾跑 / 松开 W 退出疾跑。**必须在每帧从轮询到的键状态里自己做边沿检测**：
+        // 桌宠窗口带 WS_EX_NOACTIVATE、基本拿不到焦点，窗口的 KeyDown 收不到。
+        if (wDown && !_wasWDown)
+        {
+            if (_timeSeconds - _lastWPressTimeSeconds < DoubleTapWindowMs / 1000.0) _sprintLocked = true;
+            _lastWPressTimeSeconds = _timeSeconds;
+        }
+        else if (!wDown && _wasWDown)
+        {
+            // 和 Minecraft 一致：松开前进键就退出疾跑（按住 Ctrl 的疾跑不受影响）。
+            _sprintLocked = false;
+        }
+
+        _wasWDown = wDown;
+
         // 疾跑：按住 Ctrl 或双击 W，且不在下蹲
         var isSprinting = isMoving && (ctrlDown || _sprintLocked) && !Sneaking;
         Sprinting = isSprinting;
@@ -472,11 +549,13 @@ public sealed class PetMotion
             var dirX = moveX / len;
             var dirY = moveY / len;
 
-            // 潜行 ~80 / 行走 ~180 / 疾跑 ~270 / 跳跃中 200（走）290（疾跑），单位 DIP/s
-            double speed;
-            if (Sneaking) speed = SneakSpeed;
-            else if (isSprinting) speed = IsJumping ? JumpSprintSpeed : SprintSpeed;
-            else speed = IsJumping ? JumpWalkSpeed : WalkSpeed;
+            // 速度按「格/s」给，乘 dipPerBlock 换成 DIP（dipPerBlock 里含桌宠缩放）。
+            double blocksPerSecond;
+            if (Sneaking) blocksPerSecond = SneakBlocksPerSecond;
+            else if (isSprinting) blocksPerSecond = IsJumping ? JumpSprintBlocksPerSecond : SprintBlocksPerSecond;
+            else blocksPerSecond = IsJumping ? JumpWalkBlocksPerSecond : WalkBlocksPerSecond;
+
+            var speed = blocksPerSecond * DipPerBlock * ctx.Stage.Scale;
 
             GroundX += dirX * speed * dt;
             GroundY += dirY * speed * dt;
@@ -489,13 +568,19 @@ public sealed class PetMotion
         if (spaceDown && !IsJumping)
         {
             IsJumping = true;
-            _jumpVelocityY = JumpVelocity;
+            _jumpVelocityY = JumpVelocityBlocksPerSecond * DipPerBlock * ctx.Stage.Scale;
         }
 
         if (IsJumping)
         {
-            JumpOffsetY += _jumpVelocityY * dt;
-            _jumpVelocityY += Gravity * dt;
+            var gravity = GravityBlocksPerSecondSquared * DipPerBlock * ctx.Stage.Scale;
+
+            // **梯形积分**（velocity-Verlet）：位置按「本步平均速度」推进，而不是按本步起始速度。
+            // 匀加速下它是精确解，所以跳跃高度与帧长无关 —— 恒等于 JumpHeightBlocks。
+            // 用显式欧拉（先推位置再加速度）会过冲，且过冲量正比于 dt：60fps 下跳 85 DIP、
+            // 40ms 帧下跳 93 DIP（实测 1.39 格，目标 1.25）。反过来用半隐式欧拉则欠冲。
+            JumpOffsetY += (_jumpVelocityY + (0.5 * gravity * dt)) * dt;
+            _jumpVelocityY += gravity * dt;
 
             if (JumpOffsetY >= 0)
             {
@@ -507,7 +592,7 @@ public sealed class PetMotion
                 if (spaceDown)
                 {
                     IsJumping = true;
-                    _jumpVelocityY = JumpVelocity;
+                    _jumpVelocityY = JumpVelocityBlocksPerSecond * DipPerBlock * ctx.Stage.Scale;
                 }
             }
         }
@@ -536,7 +621,7 @@ public sealed class PetMotion
         var dirY = dy / dist;
         yaw += TurnToward(dirX, dirY, yaw, dt);
 
-        var speed = isSprint ? SprintSpeed : WalkSpeed;
+        var speed = (isSprint ? SprintBlocksPerSecond : WalkBlocksPerSecond) * DipPerBlock * ctx.Stage.Scale;
         var moveDist = Math.Min(speed * dt, dist - FollowDockRadius + 2.0);
         GroundX += dirX * moveDist;
         GroundY += dirY * moveDist;
@@ -586,7 +671,7 @@ public sealed class PetMotion
         var dirY = dy / dist;
         yaw += TurnToward(dirX, dirY, yaw, dt);
 
-        var speed = isSprint ? SprintSpeed : WalkSpeed;
+        var speed = (isSprint ? SprintBlocksPerSecond : WalkBlocksPerSecond) * DipPerBlock * ctx.Stage.Scale;
         var moveDist = Math.Min(speed * dt, dist);
         GroundX += dirX * moveDist;
         GroundY += dirY * moveDist;

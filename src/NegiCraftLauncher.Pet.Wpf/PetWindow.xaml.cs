@@ -61,6 +61,9 @@ public partial class PetWindow : Window
     /// <summary>内核上一帧看到的窗口左上角（DIP）。</summary>
     public PetPoint CurrentWindow => _motion.LastWindow;
 
+    /// <summary>诊断串，<c>pet-motion</c> 动词读它（跳跃偏移 / 移动标志 / 地面位置）。</summary>
+    public string MotionDebugInfo => _motion.MotionDebugInfo;
+
     public PetInteractionMode CurrentMode
     {
         get => _motion.Mode;
