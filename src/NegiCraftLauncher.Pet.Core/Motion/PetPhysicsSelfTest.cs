@@ -7,8 +7,8 @@ namespace NegiCraftLauncher.Pet;
 /// （邮箱 80ms 轮询 + UI 派发），而 <c>down→up→down</c> 要三条命令 ≈ 500ms，早就超出了
 /// <see cref="PetPhysicsProfile.DoubleTapWindowMs"/> 的 350ms 窗口 —— 这不是实现问题，是量测手段的天花板。
 /// 这里直接构造 <see cref="PetMotionContext"/>、按固定 dt 调 <see cref="PetMotion.Tick"/>，
-/// 按键序列和帧长都自己控，于是「双击窗口边界」「跳跃高度与帧率无关」「松开 W 会不会掉」</para>
-/// 这类断言才做得出来。
+/// 按键序列和帧长都自己控，于是「双击窗口边界」「跳跃高度与帧率无关」「松开 W 会不会掉」
+/// 这类断言才做得出来。</para>
 ///
 /// <para><b>断言的是「格」而不是 DIP</b>：物理参数按 Minecraft 原版的格给，乘
 /// <see cref="PetMotion.DipPerBlock"/> 和缩放才成 DIP。自测同时跑 144/60/30fps 三档，
@@ -16,7 +16,7 @@ namespace NegiCraftLauncher.Pet;
 ///
 /// <para><b>模型：自由移动 + 只用地面来跳跃</b>（见 <see cref="PetMotion.StepVertical"/>）。
 /// 所以这里断言的是"松开 W 之后停在原地"、"走出平台边缘不掉"、"按 S 会停在地面上"，
-/// 而不是"掉下去"。<b>移动速度用 A/D 在地面上量</b> —— 四条腿里只有水平那对是真在走。</para>
+/// 而不是"掉下去"。速度用 A/D 量（水平，碰不到地面下界）；双击则 <b>W/A/S/D 四个方向都要能起疾跑</b>。</para>
 ///
 /// <para>出口是调试动词 <c>pet-physics</c>（两个平台的 <c>PetDebugCommands</c> 都转发到这里），
 /// 所以 WPF 与 Avalonia 跑的是同一份断言。返回值刻意压成<b>一行</b> —— 调试桥的邮箱是单行文本。</para>
@@ -98,17 +98,23 @@ public static class PetPhysicsSelfTest
         Speed("sneak", Hold("shift", "d"), WarmupFrames, P.SneakBlocksPerSecond);
         Speed("sprint_ctrl", Hold("ctrl", "d"), WarmupFrames, P.SprintBlocksPerSecond);
 
-        // ---------------------------------------------------------- 双击 W 的窗口边界
-        // W 现在也是自由移动（往上走），所以期望的就是地面那两档速度。
+        // ---------------------------------------------------------- 双击方向键的窗口边界
+        // **W/A/S/D 四个方向都要能双击起疾跑**。四个键都是自由移动，所以期望的就是地面那两档速度。
         var windowFrames = (P.DoubleTapWindowMs / 1000.0) / FrameSeconds;
         var fastGap = (int)Math.Floor(windowFrames) - 3;   // 20 帧 = 333ms < 350 ⇒ 应当疾跑
         var slowGap = (int)Math.Ceiling(windowFrames) + 1; // 24 帧 = 400ms > 350 ⇒ 应当只是走
 
-        var fast = MeasureSpeed(DoubleTapW(fastGap), 2 + fastGap + 8);
-        Check("2tap_333ms", Math.Abs(fast.BlocksPerSecond - P.SprintBlocksPerSecond) < 0.01 && fast.Sprinting,
-            $"{fast.BlocksPerSecond:F3}/{P.SprintBlocksPerSecond:F3}");
+        foreach (var key in new[] { "w", "a", "s", "d" })
+        {
+            // S 要先把桌宠抬离地面：它起点就站在地板上，往下会被"不许沉到地面以下"夹住，
+            // 速度会量成 0，看着像"双击 S 没生效"。
+            var startY = key == "s" ? StartY - 1500.0 : double.NaN;
+            var fast = MeasureSpeed(DoubleTap(key, fastGap), 2 + fastGap + 8, startY);
+            Check($"2tap_{key}_333", Math.Abs(fast.BlocksPerSecond - P.SprintBlocksPerSecond) < 0.01 && fast.Sprinting,
+                $"{fast.BlocksPerSecond:F3}/{P.SprintBlocksPerSecond:F3}");
+        }
 
-        var slow = MeasureSpeed(DoubleTapW(slowGap), 2 + slowGap + 8);
+        var slow = MeasureSpeed(DoubleTap("w", slowGap), 2 + slowGap + 8);
         Check("2tap_400ms", Math.Abs(slow.BlocksPerSecond - P.WalkBlocksPerSecond) < 0.01 && !slow.Sprinting,
             $"{slow.BlocksPerSecond:F3}/{P.WalkBlocksPerSecond:F3}");
 
@@ -226,20 +232,24 @@ public static class PetPhysicsSelfTest
         foreach (var k in keys) m.SetSimulatedKey(k, down);
     };
 
-    /// <summary>双击 W：第 0 帧按下、第 2 帧抬起、第 <c>2+gap</c> 帧再按下并一直按住。</summary>
-    private static Action<PetMotion, int> DoubleTapW(int gap) => (m, i) =>
+    /// <summary>双击某个方向键：第 0 帧按下、第 2 帧抬起、第 <c>2+gap</c> 帧再按下并一直按住。</summary>
+    private static Action<PetMotion, int> DoubleTap(string key, int gap) => (m, i) =>
     {
-        if (i == 0) m.SetSimulatedKey("w", true);
-        else if (i == 2) m.SetSimulatedKey("w", false);
-        else if (i == 2 + gap) m.SetSimulatedKey("w", true);
+        if (i == 0) m.SetSimulatedKey(key, true);
+        else if (i == 2) m.SetSimulatedKey(key, false);
+        else if (i == 2 + gap) m.SetSimulatedKey(key, true);
     };
 
     // ---------------------------------------------------------------- 量测
 
-    /// <summary>按固定 dt 推进，量出稳态速度（格/s）。</summary>
-    private static Measure MeasureSpeed(Action<PetMotion, int> drive, int warmup)
+    /// <summary>
+    /// 按固定 dt 推进，量出稳态速度（格/s）。
+    /// <paramref name="startY"/> 给定时用它当起始窗口 Y（默认 <see cref="StartY"/>，脚踩地板）——
+    /// 量"往下"的速度时必须抬高，否则会被地面下界夹住、量成 0。
+    /// </summary>
+    private static Measure MeasureSpeed(Action<PetMotion, int> drive, int warmup, double startY = double.NaN)
     {
-        var m = NewMotion();
+        var m = NewMotion(startY);
 
         for (var i = 0; i < warmup; i++)
         {
@@ -309,11 +319,15 @@ public static class PetPhysicsSelfTest
         m.SetSimulatedKey("shift", false);
     }
 
-    private static PetMotion NewMotion()
+    /// <summary>
+    /// 新建一个处在操控模式的内核。<paramref name="startY"/> 不给就落在 <see cref="StartY"/>
+    /// （脚踩地板，桌宠的自然静止位置）。
+    /// </summary>
+    private static PetMotion NewMotion(double startY = double.NaN)
     {
         var m = new PetMotion();
         m.SetMode(PetInteractionMode.Control);
-        m.BeginControlMode(StartX, StartY);
+        m.BeginControlMode(StartX, double.IsNaN(startY) ? StartY : startY);
         return m;
     }
 

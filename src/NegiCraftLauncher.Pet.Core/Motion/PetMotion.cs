@@ -113,8 +113,10 @@ public sealed class PetMotion
     private bool _physicalShiftDown;
     private bool _sprintLocked;
 
-    /// <summary>上一帧 W 是不是按着 —— 双击疾跑靠它做边沿检测（见 <see cref="StepControl"/>）。</summary>
-    private bool _wasWDown;
+    /// <summary>
+    /// 上一帧 W/A/S/D 是不是按着（顺序 W,A,S,D）—— 双击疾跑靠它做边沿检测（见 <see cref="StepControl"/>）。
+    /// </summary>
+    private readonly bool[] _wasMoveDown = new bool[4];
 
     /// <summary>跳跃的竖直速度（DIP/s，**向下为正**）。**只在 <see cref="_jumping"/> 期间被重力累加。**</summary>
     private double _velocityY;
@@ -140,8 +142,13 @@ public sealed class PetMotion
     /// </summary>
     private double _timeSeconds;
 
-    /// <summary>上一次「W 刚按下」的内核时刻（秒），见 <see cref="PetPhysicsProfile.DoubleTapWindowMs"/>。</summary>
-    private double _lastWPressTimeSeconds = double.NegativeInfinity;
+    /// <summary>
+    /// 上一次「某个方向键刚按下」的内核时刻（秒，顺序 W,A,S,D），
+    /// 见 <see cref="PetPhysicsProfile.DoubleTapWindowMs"/>。
+    /// **四个键各记各的** —— 先点 W 再点 A 不算"双击"，那不是同一个方向。
+    /// </summary>
+    private readonly double[] _lastMovePressSeconds =
+        [double.NegativeInfinity, double.NegativeInfinity, double.NegativeInfinity, double.NegativeInfinity];
 
     /// <summary>模式变了。宿主拿它更新菜单图标、切焦点、或在回自由待机时把窗口摆回去。</summary>
     public event Action<PetInteractionMode>? ModeChanged;
@@ -284,8 +291,8 @@ public sealed class PetMotion
             _keySpace = false;
             _keyCtrl = false;
             _sprintLocked = false;
-            _wasWDown = false;
-            _lastWPressTimeSeconds = double.NegativeInfinity;
+            Array.Clear(_wasMoveDown);
+            Array.Fill(_lastMovePressSeconds, double.NegativeInfinity);
         }
 
         ModeChanged?.Invoke(mode);
@@ -338,7 +345,7 @@ public sealed class PetMotion
     /// <summary>
     /// 窗口收到按键按下。负责 Shift 的下蹲刷新与 Esc 取消导航。
     ///
-    /// <para><b>双击 W 的疾跑锁定不在这里</b> —— 桌宠窗口带 <c>WS_EX_NOACTIVATE</c>、基本拿不到
+    /// <para><b>双击方向键的疾跑锁定不在这里</b> —— 桌宠窗口带 <c>WS_EX_NOACTIVATE</c>、基本拿不到
     /// 焦点，这个回调实际是死的。双击靠 <see cref="StepControl"/> 里对<b>每帧轮询的物理键状态</b>
     /// 做边沿检测（顺带把模拟按键也覆盖了）。</para>
     /// </summary>
@@ -385,7 +392,6 @@ public sealed class PetMotion
 
             case PetMotionKey.W:
                 _keyW = false;
-                _sprintLocked = false;
                 break;
 
             case PetMotionKey.A: _keyA = false; break;
@@ -547,7 +553,7 @@ public sealed class PetMotion
 
     // ---------------------------------------------------------------- 三种模式
 
-    /// <summary>操控模式：WASD 走位 + 空格起跳 + Shift 潜行 + Ctrl（或双击 W）疾跑。</summary>
+    /// <summary>操控模式：WASD 走位 + 空格起跳 + Shift 潜行 + Ctrl（或双击任意方向键）疾跑。</summary>
     private void StepControl(double dt, in PetMotionContext ctx, ref float yaw)
     {
         var wDown = PetNativeKeys.IsDown(PetNativeKeys.VkW) || _keyW;
@@ -567,22 +573,19 @@ public sealed class PetMotion
         var isMoving = moveX != 0 || moveY != 0;
         Walking = isMoving;
 
-        // 双击 W 起疾跑 / 松开 W 退出疾跑。**必须在每帧从轮询到的键状态里自己做边沿检测**：
-        // 桌宠窗口带 WS_EX_NOACTIVATE、基本拿不到焦点，窗口的 KeyDown 收不到。
-        if (wDown && !_wasWDown)
-        {
-            if (_timeSeconds - _lastWPressTimeSeconds < Profile.DoubleTapWindowMs / 1000.0) _sprintLocked = true;
-            _lastWPressTimeSeconds = _timeSeconds;
-        }
-        else if (!wDown && _wasWDown)
-        {
-            // 和 Minecraft 一致：松开前进键就退出疾跑（按住 Ctrl 的疾跑不受影响）。
-            _sprintLocked = false;
-        }
+        // 双击 **W/A/S/D 任意一个**方向键都起疾跑；松开全部方向键就退出疾跑。
+        // **必须在每帧从轮询到的键状态里自己做边沿检测**：桌宠窗口带 WS_EX_NOACTIVATE、
+        // 基本拿不到焦点，窗口的 KeyDown 收不到。
+        // 四个键各记各的"上次按下时刻" —— 先点 W 再点 A 不算双击（那不是同一个方向）。
+        TapDouble(wDown, ref _wasMoveDown[0], ref _lastMovePressSeconds[0]);
+        TapDouble(aDown, ref _wasMoveDown[1], ref _lastMovePressSeconds[1]);
+        TapDouble(sDown, ref _wasMoveDown[2], ref _lastMovePressSeconds[2]);
+        TapDouble(dDown, ref _wasMoveDown[3], ref _lastMovePressSeconds[3]);
 
-        _wasWDown = wDown;
+        // 和 Minecraft 一致：停下来就退出疾跑（按住 Ctrl 的疾跑不受影响）。
+        if (!isMoving) _sprintLocked = false;
 
-        // 疾跑：按住 Ctrl 或双击 W，且不在下蹲
+        // 疾跑：按住 Ctrl 或双击方向键，且不在下蹲
         var isSprinting = isMoving && (ctrlDown || _sprintLocked) && !Sneaking;
         Sprinting = isSprinting;
 
@@ -618,6 +621,26 @@ public sealed class PetMotion
         }
 
         PositionDirty = true;
+    }
+
+    /// <summary>
+    /// 一个方向键的边沿检测：这一帧刚按下、且距它**上次**按下还在双击窗口内 ⇒ 解锁疾跑。
+    ///
+    /// <para>为什么要自己做：桌宠窗口带 <c>WS_EX_NOACTIVATE</c>、基本拿不到键盘焦点，
+    /// 窗口的 <c>KeyDown</c> 是死的 —— 只能每帧轮询物理键状态、自己找上升沿
+    /// （顺带把调试桥的模拟按键也覆盖了）。</para>
+    ///
+    /// <para>四个键各传自己那份 <paramref name="wasDown"/> / <paramref name="lastPressSeconds"/>，
+    /// 所以"先点 W 再点 A"不会被算成一次双击。</para>
+    /// </summary>
+    private void TapDouble(bool down, ref bool wasDown, ref double lastPressSeconds)
+    {
+        var rising = down && !wasDown;
+        wasDown = down;
+        if (!rising) return;
+
+        if (_timeSeconds - lastPressSeconds < Profile.DoubleTapWindowMs / 1000.0) _sprintLocked = true;
+        lastPressSeconds = _timeSeconds;
     }
 
     /// <summary>跟随鼠标：朝光标走，进了停靠半径就停。</summary>
