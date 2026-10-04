@@ -34,11 +34,20 @@ public partial class MainWindow : Window
     private MenuItem? _petTrayMenuItem;
     private bool _isExplicitExit;
 
+    /// <summary>
+    /// 视频背景。一份 <c>MediaPlayer</c> 供主背景层和侧栏背板两处复用，
+    /// 见 <see cref="Media.VideoBackgroundController"/>。
+    /// </summary>
+    private readonly Media.VideoBackgroundController _videoBackground = new();
+
     public MainWindow()
     {
         InitializeComponent();
         SetupTrayIcon();
         DataContextChanged += OnDataContextChangedHandler;
+
+        _videoBackground.Failed += OnVideoBackgroundFailed;
+        IsVisibleChanged += (_, _) => UpdateVideoPlayback();
     }
 
     /// <summary>调试桥通过它拿桌宠窗口（可以关着，所以可空）。</summary>
@@ -157,8 +166,41 @@ public partial class MainWindow : Window
             return;
         }
 
+        // 真正退出才释放：收进托盘那条路只是 Hide，窗口还要复用。
+        // 不 Close 掉 MediaPlayer 会留一个解码线程不放。
+        _videoBackground.Dispose();
+
         base.OnClosing(e);
     }
+
+    // ==========================================================
+    // 视频背景
+    // ==========================================================
+
+    /// <summary>
+    /// 把 VM 里的视频路径落到画面上。VM 只存路径（它不能持有 WPF 的播放器），
+    /// 播放器和画刷都在这里建，然后同一个画刷挂给两处元素。
+    /// </summary>
+    private void ApplyVideoBackground()
+    {
+        _videoBackground.Load(_vm?.VideoBackgroundPath);
+
+        var brush = _videoBackground.HasVideo ? _videoBackground.Brush : null;
+        BgVideo.Fill = brush;
+        SidebarVideo.Fill = brush;
+
+        UpdateVideoPlayback();
+    }
+
+    /// <summary>
+    /// 背景只在首页可见，所以离开首页或窗口收进托盘时就暂停 ——
+    /// 否则切到设置页还在后台解码 4K，白烧 CPU。
+    /// </summary>
+    private void UpdateVideoPlayback() =>
+        _videoBackground.SetActive(IsVisible && (_vm?.IsOnHome ?? false));
+
+    private void OnVideoBackgroundFailed(string message) =>
+        _vm?.ReportVideoBackgroundFailure(message);
 
     /// <summary>
     /// 换 DataContext 时把上一份 VM 的事件全摘掉再挂新的。
@@ -185,6 +227,9 @@ public partial class MainWindow : Window
             _vm.RecallPetRequested += ClosePetWindow;
             _vm.PropertyChanged += OnViewModelPropertyChanged;
             _vm.ThemeChanged += OnThemeChanged;
+
+            // 设置里存着视频壁纸的话，DataContext 一到就该把它挂上。
+            ApplyVideoBackground();
         }
     }
 
@@ -312,6 +357,20 @@ public partial class MainWindow : Window
 
     private void OnViewModelPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
+        // 换片 / 清空视频：重建画刷并挂到两个元素上。
+        if (e.PropertyName == nameof(MainWindowViewModel.VideoBackgroundPath))
+        {
+            ApplyVideoBackground();
+            return;
+        }
+
+        // 首页才有背景，离开首页就把视频暂停。
+        if (e.PropertyName == nameof(MainWindowViewModel.IsOnHome))
+        {
+            UpdateVideoPlayback();
+            return;
+        }
+
         if (e.PropertyName != nameof(MainWindowViewModel.IsDialogOpen) || _vm is null || !_vm.IsDialogOpen) return;
 
         // 输入框才是这个对话框存在的理由，所以它拿焦点并全选。
