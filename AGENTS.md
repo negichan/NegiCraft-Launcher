@@ -71,7 +71,7 @@ src/NegiCraftLauncher.Raster      软件光栅化 + 平台中立像素层（Pixe
 src/NegiCraftLauncher.Skin        皮肤解码 + OpenGL 渲染栈（Avalonia 侧，App 与 Pet 共用）
 src/NegiCraftLauncher.Skin.Wpf    皮肤解码 + 软件光栅预览控件（WPF 侧，App.Wpf 与 Pet.Wpf 共用）
 src/NegiCraftLauncher.Pet         桌宠本体 + IPetHost 宿主契约（Avalonia）
-src/NegiCraftLauncher.Pet.Core    框架无关的桌宠共用件（IPetHost / PetSettings / 全局键鼠钩子）
+src/NegiCraftLauncher.Pet.Core    框架无关的桌宠共用件（IPetHost / PetSettings / 全局键鼠钩子 / Motion 物理内核）
 src/NegiCraftLauncher.Pet.Wpf     桌宠本体（WPF，含自己的调试桥与对话框）
 src/NegiCraftLauncher.Pet.App     独立桌宠（Avalonia WinExe → NegiPet.exe）
 src/NegiCraftLauncher.Pet.App.Wpf 独立桌宠（WPF WinExe → NegiPet.exe）
@@ -90,6 +90,26 @@ libs/MinecraftSkinRender.Core     vendored 渲染库的零依赖核心（位姿�
 
 **`Skin.Wpf` 为什么是独立工程**：`SkinPreviewControl` 要被启动器和桌宠共用。
 放在 `Pet.Wpf` 里会形成 `App.Wpf → Pet.Wpf → App.Wpf` 的循环引用，所以它必须自己一个程序集。
+
+**`Pet.Core` 装什么**：`IPetHost` / `PetSettings` / 全局键鼠钩子（`Services/`），
+以及**桌宠的操控 / 跟随 / 导航物理内核**（`Motion/PetMotion.cs`，671 行 —— 434 行代码 + 113 行注释）。
+零 `PackageReference`、不引用任何 UI 类型 —— 命名空间仍是 `NegiCraftLauncher.Pet`。
+两端的 `PetWindow` 各留一份 view 装配，物理只有这一份：
+
+- **输入**：`PetMotionContext` 值类型（`Stage` / `WorkArea` / `Window` / `Cursor?` / `CurrentYawDeg`），**全是 DIP**。
+  Avalonia 的 `Position` 与 `WorkingArea` 是物理像素，宿主负责除一次 `RenderScaling`（见 `PetWindow.Scaling`）；
+  WPF 的 `Left/Top` 与 `SystemParameters.WorkArea` 本来就是 DIP，直接喂。
+- **输出**：`GroundX/GroundY`、`JumpOffsetY`、`YawDelta`、`HeadPitch/HeadYaw`、四个动画标志、`HasHeadLook`。
+- **朝向只吐增量**（`YawDelta`）而不是绝对值：右键拖拽旋转 / `ResetRotation` / `pet-yaw` 都直接改预览控件的 yaw，
+  内核每帧从 context 读当前值、只回增量，两边各记一份一定会漂开。
+- **每帧应用顺序定死**（`ApplyMotionToView`）：walking/sprinting/jumping/sneaking → `SetJumpOffset`
+  → 应用 `YawDelta` → `SetHeadLookAt` → `MoveWindowTo`。顺序错了会看到抖动。
+- 切模式走 `SetMode()`，内部清队列 / 松按键后触发 `ModeChanged` 事件，
+  UI 侧的菜单勾选与 `BeginControlMode` / `EnterFreeIdle` 都挂在这个事件上（对应原来的 `UpdateModeUi`）。
+- 下蹲是三个来源的并集：`Sneaking = ManualSneakToggle || _keyShiftHeld || _physicalShiftDown`
+  （`RecomputeSneak()`）。物理 Shift 走 `PetNativeKeys.IsDown(VK_SHIFT)`，**每帧在 `Tick` 里轮询一次**；
+  合成 Shift（`pet-key` / `OnKeyDown`）走 `_keyShiftHeld`，**事件驱动**、立刻重算。
+  两条路都要触发重算，少一条就会看到"下蹲要么慢一帧、要么根本不动"。
 
 **Windows 走 WPF、macOS/Linux 走 Avalonia** 是既定方向；view 层各写各的（XAML 无共同编译器），
 共享的是 `Core` / `ViewModels` / `Raster`。详见 `docs/wpf-migration-plan.md`（不入库）。
@@ -297,6 +317,10 @@ design\_p7regress.ps1 -Only pet       # 只跑桌宠段
   用 `$proc.WaitForExit(90000)`，超时才强杀。
 - **`Remove-Item` 在不存在的路径上会 fail-closed 抛异常**（沙箱包装器，`-ErrorAction SilentlyContinue` 也挡不住），
   先 `Test-Path`。
+- **沙箱的 `Remove-Item` 包装器不接受管道输入**。`$files | Remove-Item -Force` 会抛
+  `ParameterBindingException`「输入对象无法绑定到该命令的任何参数」——
+  看着像语法错，其实是包装器签名问题。一律
+  `foreach ($f in $files) { Remove-Item -LiteralPath $f.FullName -Force }`。
 - **PowerShell 里 `"$name:"` 会被当成作用域限定符**报“变量引用无效”，要写 `"${name}:"`。
 - 桌宠段要把两边动画相位钉死再抓帧：`pet-mouse 800 100` + `pet-yaw 0` + `pet-walk off`，
   否则差异里混进的是时间而不是代码。
