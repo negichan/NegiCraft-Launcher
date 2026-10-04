@@ -73,6 +73,6 @@ public sealed record PetPhysicsProfile
 
     // ---------------------------------------------------------------- 输入
 
-    /// <summary>双击 W 触发疾跑锁定的时间窗（毫秒）。</summary>
+    /// <summary>双击方向键（W/A/S/D 任一）触发疾跑锁定的时间窗（毫秒）。</summary>
     public double DoubleTapWindowMs { get; init; } = 350.0;
 }
