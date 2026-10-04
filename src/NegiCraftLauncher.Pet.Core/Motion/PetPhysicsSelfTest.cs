@@ -18,11 +18,9 @@ namespace NegiCraftLauncher.Pet;
 /// 所以这里断言的是"松开 W 之后停在原地"、"走出平台边缘不掉"、"按 S 会停在地面上"，
 /// 而不是"掉下去"。速度用 A/D 量（水平，碰不到地面下界）；双击则 <b>W/A/S/D 四个方向都要能起疾跑</b>。</para>
 ///
-/// <para><b>拖拽抛出（P4）</b>也在这里验：把窗口按固定速度拖一段再 <see cref="PetMotion.EndDrag"/>
-/// 就是"甩出去"。**只有甩出去才飞** —— 速度低于
-/// <see cref="PetPhysicsProfile.ThrowMinBlocksPerSecond"/> 只是"轻轻放下"，停在原地。
-/// 甩出去之后是抛体运动：受重力、撞左右墙反弹、落到台面弹几下。
-/// 实机上这条同样只能靠无头自测 —— 调试桥一条命令往返 250ms，做不出"快速拖一下再松手"。</para>
+/// <para><b>拖拽抛出（P4）当前关着</b> —— <see cref="PetMotion.EndDrag"/> 里的注入点被注释掉了，
+/// 所以这里断言的是"甩也不飞：松手只把桌宠放回你拖到的位置"。那 5 条抛出断言（速度上限 / 会飞 /
+/// 落地弹跳 / 落在平台上 / 撞墙反弹）与它们的辅助函数一并注释在下面，打开抛出时一起恢复。</para>
 ///
 /// <para>出口是调试动词 <c>pet-physics</c>（两个平台的 <c>PetDebugCommands</c> 都转发到这里），
 /// 所以 WPF 与 Avalonia 跑的是同一份断言。返回值刻意压成<b>一行</b> —— 调试桥的邮箱是单行文本。</para>
@@ -215,73 +213,23 @@ public static class PetPhysicsSelfTest
             Check("walls", leftOk && rightOk);
         }
 
-        // ---------------------------------------------------------- 拖拽抛出 / 弹跳 / 边缘反弹（P4）
-        // **只有甩出去才飞**：松手速度过了阈值才进抛体，低于阈值只是"轻轻放下"。
-        //
-        // ⚠️ 注意"拖拽本身就把桌宠抬起来了"：松手点离支撑面的高度 = 拖拽的竖直位移。
-        // 所以量"飞了多高"要把这段减掉（下面统一叫 rise），否则拖 1200 DIP 会量出 1200+ 的假高度。
-        var narrowFloorY = StandYIn(NarrowRoom);
-
-        // 甩得再快也会被夹在上限 —— 否则手一抖就把桌宠甩到屏幕外。
+        // ---------------------------------------------------------- 拖拽松手
+        // **「甩出去」当前是关的**（`PetMotion.EndDrag` 里那个注入点被注释掉了，P4 预留 ——
+        // 见那里的注释：没有可落脚的窗口顶面时，甩出去只能在任务栏上来回弹）。
+        // 所以这里断言的是"甩也不飞"：松手只把桌宠放回你拖到的位置。
         {
             var m = NewMotion();
-            DragAndRelease(m, StartX, StartY, StartX + 4000, StartY - 4000, Room);
+            DragAndRelease(m, StartX, StartY, StartX + 800, StartY - 600, Room);
+            var stayed = !m.IsThrown;
             var (vx, vy) = m.ThrowVelocity;
-            var speed = Math.Sqrt((vx * vx) + (vy * vy)) / DipPerBlock;
-            Check("throw_cap", m.IsThrown && Math.Abs(speed - P.ThrowMaxBlocksPerSecond) < 0.01,
-                $"{speed:F3}/{P.ThrowMaxBlocksPerSecond:F3}");
+            Run(m, null, 30);
+            Check("throw_off",
+                stayed && vx == 0 && vy == 0
+                && Near(m.GroundX, StartX + 800) && Near(m.GroundY, StartY - 600),
+                $"thrown={!stayed}");
         }
 
-        // 甩出去（竖直为主的一甩）：飞起来、落地弹几下、最后停回地板。
-        {
-            const double lift = 240.0;
-            var m = NewMotion();
-            DragAndRelease(m, StartX, StartY, StartX + 60, StartY - lift, Room);
-            var thrown = m.IsThrown;
-            var f = Fly(m, Room);
-            var rise = f.PeakHeight - lift;   // 松手点之上又涨了多少
-
-            Check("throw_flies",
-                thrown && f.Settled && f.AirborneFrames > 40 && rise > 200
-                && Near(f.FinalY, StartY) && f.FinalX > StartX + 40,
-                $"{f.AirborneFrames}f rise={rise:F0} dx={f.FinalX - StartX:F0}");
-
-            // 弹跳：触地 ≥ 2 次说明落地后确实弹起来过（第一次落地 + 弹回来那一次）。
-            Check("throw_bounces", thrown && f.Contacts >= 2, $"contacts={f.Contacts}");
-        }
-
-        // 甩到平台上：从平台顶面往上一甩，必须落回**平台**，不能穿到下面的地板。
-        {
-            const double lift = 240.0;
-            var ledgeTop = FloorTop - 1000;
-            var startY = ledgeTop - FeetInWindow;
-            var m = NewMotion(startY);
-            DragAndRelease(m, StartX, startY, StartX, startY - lift, Room);
-            var thrown = m.IsThrown;
-            var f = Fly(m, Room, ledge);
-
-            Check("throw_lands_on_ledge",
-                thrown && f.Settled && f.AirborneFrames > 30 && f.PeakHeight - lift > 200
-                && Near(m.GroundY + FeetInWindow, ledgeTop),
-                $"{m.GroundY + FeetInWindow:F0}/{ledgeTop:F0} {f.AirborneFrames}f");
-        }
-
-        // 边缘反弹：往右甩，必须被右墙挡回来（既不粘在墙上，也不飞出屏幕）。
-        {
-            var m = NewMotionIn(NarrowRoom, 100, narrowFloorY);
-            var rightEdgeX = NarrowRoom.X + NarrowRoom.Width - StageWidth;
-            DragAndRelease(m, 100, narrowFloorY, 700, narrowFloorY - 200, NarrowRoom);
-            var thrown = m.IsThrown;
-            var f = Fly(m, NarrowRoom);
-
-            Check("throw_wall_bounce",
-                thrown && f.Settled && f.MaxX <= rightEdgeX + Eps && f.MaxX >= rightEdgeX - Eps
-                && f.MinX >= NarrowRoom.X - Eps && f.FinalX < f.MaxX - 100
-                && Near(f.FinalY, narrowFloorY),
-                $"max={f.MaxX:F0} final={f.FinalX:F0}");
-        }
-
-        // 轻轻放下（地面上）：速度不够 ⇒ 不飞，停在原地。
+        // 轻轻放下（地面上）：停在原地。
         {
             var m = NewMotion();
             DragAndRelease(m, StartX, StartY, StartX + 10, StartY, Room, frames: 12);
@@ -291,7 +239,7 @@ public static class PetPhysicsSelfTest
                 gentle && Near(m.GroundX, StartX + 10) && Near(m.GroundY, StartY), $"gentle={gentle}");
         }
 
-        // 轻轻放在半空：同样不飞 ⇒ **就停在半空**。
+        // 轻轻放在半空：**就停在半空**。
         // 这条是"自由移动"语义的哨兵：不主动甩就不受重力，悬着就悬着。
         {
             var m = NewMotion();
@@ -301,6 +249,70 @@ public static class PetPhysicsSelfTest
             Run(m, null, 60);
             Check("gentle_drop_air", gentle && Near(m.GroundY, airY), $"gentle={gentle}");
         }
+
+        // ═══════════════════════════════════════════════════════════════════════════
+        //  下面 5 条是「抛出打开后」用的，连同 Run() 外面的 NarrowRoom / StandYIn /
+        //  NewMotionIn / Flight / Fly 一起注释着。恢复时把这几段与 PetMotion.EndDrag 里
+        //  那个注入点一并放开即可（那时 `throw_off` 那条要删掉）。
+        // ═══════════════════════════════════════════════════════════════════════════
+        // // 甩得再快也会被夹在上限 —— 否则手一抖就把桌宠甩到屏幕外。
+        // {
+        //     var m = NewMotion();
+        //     DragAndRelease(m, StartX, StartY, StartX + 4000, StartY - 4000, Room);
+        //     var (vx, vy) = m.ThrowVelocity;
+        //     var speed = Math.Sqrt((vx * vx) + (vy * vy)) / DipPerBlock;
+        //     Check("throw_cap", m.IsThrown && Math.Abs(speed - P.ThrowMaxBlocksPerSecond) < 0.01,
+        //         $"{speed:F3}/{P.ThrowMaxBlocksPerSecond:F3}");
+        // }
+        //
+        // // 甩出去（竖直为主的一甩）：飞起来、落地弹几下、最后停回地板。
+        // {
+        //     const double lift = 240.0;
+        //     var m = NewMotion();
+        //     DragAndRelease(m, StartX, StartY, StartX + 60, StartY - lift, Room);
+        //     var thrown = m.IsThrown;
+        //     var f = Fly(m, Room);
+        //     var rise = f.PeakHeight - lift;   // 松手点之上又涨了多少
+        //
+        //     Check("throw_flies",
+        //         thrown && f.Settled && f.AirborneFrames > 40 && rise > 200
+        //         && Near(f.FinalY, StartY) && f.FinalX > StartX + 40,
+        //         $"{f.AirborneFrames}f rise={rise:F0} dx={f.FinalX - StartX:F0}");
+        //
+        //     // 弹跳：触地 ≥ 2 次说明落地后确实弹起来过（第一次落地 + 弹回来那一次）。
+        //     Check("throw_bounces", thrown && f.Contacts >= 2, $"contacts={f.Contacts}");
+        // }
+        //
+        // // 甩到平台上：从平台顶面往上一甩，必须落回**平台**，不能穿到下面的地板。
+        // {
+        //     const double lift = 240.0;
+        //     var ledgeTop = FloorTop - 1000;
+        //     var startY = ledgeTop - FeetInWindow;
+        //     var m = NewMotion(startY);
+        //     DragAndRelease(m, StartX, startY, StartX, startY - lift, Room);
+        //     var thrown = m.IsThrown;
+        //     var f = Fly(m, Room, ledge);
+        //
+        //     Check("throw_lands_on_ledge",
+        //         thrown && f.Settled && f.AirborneFrames > 30 && f.PeakHeight - lift > 200
+        //         && Near(m.GroundY + FeetInWindow, ledgeTop),
+        //         $"{m.GroundY + FeetInWindow:F0}/{ledgeTop:F0} {f.AirborneFrames}f");
+        // }
+        //
+        // // 边缘反弹：往右甩，必须被右墙挡回来（既不粘在墙上，也不飞出屏幕）。
+        // {
+        //     var m = NewMotionIn(NarrowRoom, 100, narrowFloorY);
+        //     var rightEdgeX = NarrowRoom.X + NarrowRoom.Width - StageWidth;
+        //     DragAndRelease(m, 100, narrowFloorY, 700, narrowFloorY - 200, NarrowRoom);
+        //     var thrown = m.IsThrown;
+        //     var f = Fly(m, NarrowRoom);
+        //
+        //     Check("throw_wall_bounce",
+        //         thrown && f.Settled && f.MaxX <= rightEdgeX + Eps && f.MaxX >= rightEdgeX - Eps
+        //         && f.MinX >= NarrowRoom.X - Eps && f.FinalX < f.MaxX - 100
+        //         && Near(f.FinalY, narrowFloorY),
+        //         $"max={f.MaxX:F0} final={f.FinalX:F0}");
+        // }
 
         parts.Add($"RESULT={passed}/{total}{(passed == total ? " OK" : " FAIL")}");
         return string.Join("; ", parts);
@@ -412,44 +424,17 @@ public static class PetPhysicsSelfTest
         m.SetSimulatedKey("shift", false);
     }
 
-    // ---------------------------------------------------------------- 拖拽抛出（P4）
-
-    /// <summary>
-    /// 抛出一组断言专用的**窄房间**。墙近一点，几十帧就能撞到右墙 —— 用 4000 宽的房间
-    /// 得跑三秒多，而且中间会先落地，测不出"空中撞墙反弹"。
-    /// </summary>
-    private static readonly PetWorkArea NarrowRoom = new(0, 0, 900, 800);
-
-    /// <summary>一次抛体飞行的观测结果。</summary>
-    private readonly record struct Flight(
-        int AirborneFrames,
-        int Contacts,
-        double PeakHeight,
-        double MaxX,
-        double MinX,
-        double FinalX,
-        double FinalY,
-        bool Settled);
-
-    /// <summary>某个工作区里"站在地板上"时窗口的 Y。</summary>
-    private static double StandYIn(PetWorkArea room) => room.Y + room.Height - FeetInWindow;
-
-    /// <summary>在指定房间里、指定位置新建一个操控模式的内核。</summary>
-    private static PetMotion NewMotionIn(PetWorkArea room, double x, double y)
-    {
-        var m = new PetMotion();
-        m.SetMode(PetInteractionMode.Control);
-        m.BeginControlMode(x, y);
-        return m;
-    }
+    // ---------------------------------------------------------------- 拖拽
 
     /// <summary>
     /// 模拟一次拖拽：把窗口从 (x0,y0) 匀速拖到 (x1,y1)，然后松手。
-    /// <b>速度由 <paramref name="frames"/> 决定</b> —— 同样的位移、帧数越多速度越慢，
-    /// 于是"甩出去"与"轻轻放下"就能用同一段代码造出来。
+    /// <b>速度由 <paramref name="frames"/> 决定</b> —— 同样的位移、帧数越多速度越慢。
     ///
     /// <para>采样是在 <see cref="PetMotion.Tick"/> 的拖拽分支里做的（内核从 <c>ctx.Window</c> 自己记），
     /// 所以这里只要老老实实每帧把窗口位置喂进去即可 —— 不需要任何"报速度"的接口。</para>
+    ///
+    /// <para>⚠️ <paramref name="room"/> 与那两个坐标是**必须**的：窗口位置得真的动起来，
+    /// 否则"窗口位置 = 地面位置"、采出来全是同一个点。</para>
     /// </summary>
     private static void DragAndRelease(PetMotion m, double x0, double y0, double x1, double y1,
                                        PetWorkArea room, int frames = 6)
@@ -464,49 +449,88 @@ public static class PetPhysicsSelfTest
         m.EndDrag(x1, y1);
     }
 
-    /// <summary>
-    /// 一直推进到桌宠停稳（或到帧数上限），同时记录飞行过程的极值与触地次数。
-    ///
-    /// <para><paramref name="contacts"/> 数的是"触地"：高度从 &gt;1 DIP 落到 ≤0.5 DIP 算一次，
-    /// <b>起始时按已触地计</b>（松手那一帧脚底本来就贴着台面，不该算一次落地）。
-    /// 于是"落地 → 弹起 → 再落地"会数到 2 —— 这就是"弹跳"的哨兵。</para>
-    /// </summary>
-    private static Flight Fly(PetMotion m, PetWorkArea room, IReadOnlyList<PetSurface>? surfaces = null,
-                              int maxFrames = 900)
-    {
-        var airborne = 0;
-        var contacts = 0;
-        var touched = true;
-        var peak = 0.0;
-        var minX = double.MaxValue;
-        var maxX = double.MinValue;
-
-        for (var i = 0; i < maxFrames && (i == 0 || m.IsThrown); i++)
-        {
-            m.Tick(FrameSeconds, Context(m, surfaces, room));
-
-            minX = Math.Min(minX, m.GroundX);
-            maxX = Math.Max(maxX, m.GroundX);
-
-            if (!m.IsThrown) break;
-
-            airborne++;
-            var height = m.HeightAboveSupport;
-            peak = Math.Max(peak, height);
-
-            if (height <= 0.5)
-            {
-                if (!touched) contacts++;
-                touched = true;
-            }
-            else if (height > 1.0)
-            {
-                touched = false;
-            }
-        }
-
-        return new Flight(airborne, contacts, peak, maxX, minX, m.GroundX, m.GroundY, !m.IsThrown);
-    }
+    // ═══════════════════════════════════════════════════════════════════════════════
+    //  下面这几个是「抛出打开后」才用得上的辅助，现在和那 5 条断言一起注释着。
+    //  恢复时把它们与 PetMotion.EndDrag 里的注入点一并放开。
+    //
+    //  · NarrowRoom   抛出一组断言专用的窄房间（墙近，几十帧就能撞到右墙）
+    //  · Flight/Fly   推进到停稳，记录飞行极值与触地次数（"弹跳"的哨兵）
+    //  · StandYIn     某个工作区里"站在地板上"时窗口的 Y
+    //  · NewMotionIn  在指定房间里、指定位置新建一个操控模式的内核
+    // ═══════════════════════════════════════════════════════════════════════════════
+    //
+    // /// <summary>
+    // /// 抛出一组断言专用的**窄房间**。墙近一点，几十帧就能撞到右墙 —— 用 4000 宽的房间
+    // /// 得跑三秒多，而且中间会先落地，测不出"空中撞墙反弹"。
+    // /// </summary>
+    // private static readonly PetWorkArea NarrowRoom = new(0, 0, 900, 800);
+    //
+    // /// <summary>一次抛体飞行的观测结果。</summary>
+    // private readonly record struct Flight(
+    //     int AirborneFrames,
+    //     int Contacts,
+    //     double PeakHeight,
+    //     double MaxX,
+    //     double MinX,
+    //     double FinalX,
+    //     double FinalY,
+    //     bool Settled);
+    //
+    // /// <summary>某个工作区里"站在地板上"时窗口的 Y。</summary>
+    // private static double StandYIn(PetWorkArea room) => room.Y + room.Height - FeetInWindow;
+    //
+    // /// <summary>在指定房间里、指定位置新建一个操控模式的内核。</summary>
+    // private static PetMotion NewMotionIn(PetWorkArea room, double x, double y)
+    // {
+    //     var m = new PetMotion();
+    //     m.SetMode(PetInteractionMode.Control);
+    //     m.BeginControlMode(x, y);
+    //     return m;
+    // }
+    //
+    // /// <summary>
+    // /// 一直推进到桌宠停稳（或到帧数上限），同时记录飞行过程的极值与触地次数。
+    // ///
+    // /// <para><c>Contacts</c> 数的是"触地"：高度从 &gt;1 DIP 落到 ≤0.5 DIP 算一次，
+    // /// <b>起始时按已触地计</b>（松手那一帧脚底本来就贴着台面，不该算一次落地）。
+    // /// 于是"落地 → 弹起 → 再落地"会数到 2 —— 这就是"弹跳"的哨兵。</para>
+    // /// </summary>
+    // private static Flight Fly(PetMotion m, PetWorkArea room, IReadOnlyList<PetSurface>? surfaces = null,
+    //                           int maxFrames = 900)
+    // {
+    //     var airborne = 0;
+    //     var contacts = 0;
+    //     var touched = true;
+    //     var peak = 0.0;
+    //     var minX = double.MaxValue;
+    //     var maxX = double.MinValue;
+    //
+    //     for (var i = 0; i < maxFrames && (i == 0 || m.IsThrown); i++)
+    //     {
+    //         m.Tick(FrameSeconds, Context(m, surfaces, room));
+    //
+    //         minX = Math.Min(minX, m.GroundX);
+    //         maxX = Math.Max(maxX, m.GroundX);
+    //
+    //         if (!m.IsThrown) break;
+    //
+    //         airborne++;
+    //         var height = m.HeightAboveSupport;
+    //         peak = Math.Max(peak, height);
+    //
+    //         if (height <= 0.5)
+    //         {
+    //             if (!touched) contacts++;
+    //             touched = true;
+    //         }
+    //         else if (height > 1.0)
+    //         {
+    //             touched = false;
+    //         }
+    //     }
+    //
+    //     return new Flight(airborne, contacts, peak, maxX, minX, m.GroundX, m.GroundY, !m.IsThrown);
+    // }
 
     /// <summary>
     /// 新建一个处在操控模式的内核。<paramref name="startY"/> 不给就落在 <see cref="StartY"/>
