@@ -3,6 +3,7 @@ using System.IO;
 using System.Text;
 using System.Windows;
 using System.Windows.Interop;
+using NegiCraftLauncher.Core.WallpaperEngine;
 using NegiCraftLauncher.Pet.Debug;
 using NegiCraftLauncher.ViewModels;
 
@@ -25,6 +26,10 @@ namespace NegiCraftLauncher.App.Services;
 /// 才会出现；WPF 侧托盘菜单是自己弹的 WPF <c>ContextMenu</c>（不是 WinForms
 /// <c>ContextMenuStrip</c>，那个画的是系统原生外观、跟深色主题对不上），
 /// 直接 <c>ShowTrayMenu()</c> 即可，两边都能用 <c>RenderTargetBitmap</c> 抓图。</para>
+///
+/// <para><b>只有 WPF 侧有的动词</b>：<c>bgvideo</c>、<c>wallpaper-info</c> —— 视频背景是
+/// Windows 专属功能（Avalonia 侧没有视频面），Avalonia 的桥里刻意不加，
+/// 免得留一个永远用不上的分支。</para>
 /// </summary>
 public sealed class DebugBridge
 {
@@ -155,6 +160,42 @@ public sealed class DebugBridge
                         if (nums.Length > 1) _vm.BgBlur = double.Parse(nums[1], CultureInfo.InvariantCulture);
                     });
                     return "OK";
+                case "bgvideo":
+                    // 视频背景：`bgvideo <绝对路径>` 挂上，`bgvideo none` 卸掉。
+                    // 走的是和「选择视频」按钮完全相同的 VM 命令 —— 所以能验到真实那条路，
+                    // 又不必去点文件选择框（那个会弹模态窗口、抢焦点）。
+                    await PetDebugMailbox.Ui(() =>
+                    {
+                        if (arg.Length == 0 || arg.Equals("none", StringComparison.OrdinalIgnoreCase))
+                        {
+                            _vm.VideoBackgroundPath = null;
+                        }
+                        else
+                        {
+                            _vm.SetVideoBackgroundCommand.Execute(arg);
+                        }
+                    });
+                    return "OK";
+                case "wallpaper-info":
+                    // Wallpaper Engine 探测结果。纯静态调用、不碰 VM，所以不用回 UI 线程。
+                    return await Task.Run(() =>
+                    {
+                        var install = WallpaperEngineLocator.FindInstallDirectory(refresh: true);
+                        var current = WallpaperEngineLocator.GetCurrent(refresh: true);
+                        if (current is null) return $"install={install ?? "n/a"} current=none";
+
+                        return $"install={install ?? "n/a"} kind={current.Kind} title={current.Title ?? "n/a"} " +
+                               $"video={current.VideoPath ?? "n/a"} preview={current.PreviewPath ?? "n/a"}";
+                    });
+                case "wallpaper-sync":
+                    // 跑一遍「同步 Wallpaper Engine」，把结果横幅原文回出来 ——
+                    // 这条路上真正会变的就两样：背景换成了什么、提示说了什么。
+                    return await PetDebugMailbox.Ui(() =>
+                    {
+                        _vm.SyncWallpaperEngineCommand.Execute(null);
+                        return $"banner={_vm.BannerText} bgimage={_vm.CustomBackgroundPath ?? "n/a"} " +
+                               $"bgvideo={_vm.VideoBackgroundPath ?? "n/a"}";
+                    });
                 case "demo":
                     // 示例任务行，用来检查任务行模板（按钮、进度条、状态）而不必真的等下几百 MB。
                     await PetDebugMailbox.Ui(() =>
@@ -232,6 +273,8 @@ public sealed class DebugBridge
         sb.Append($"pops=[acc={_vm.IsAccPopOpen} inst={_vm.IsInstPopOpen} dl={_vm.IsDlPopOpen} bg={_vm.IsBgPopOpen}] ");
         sb.Append($"threads={_vm.DownloadThreads} ");
         sb.Append($"bg=[brightness={_vm.BgBrightness} blur={_vm.BgBlur}] ");
+        sb.Append($"bgimage={_vm.CustomBackgroundPath ?? "n/a"} ");
+        sb.Append($"bgvideo={_vm.VideoBackgroundPath ?? "n/a"} ");
 
         var preview = (_window as MainWindow)?.SkinPreview;
         sb.Append($"player={preview?.PlayerName ?? "n/a"} user={preview?.CurrentLoadedUser ?? "n/a"} ");
