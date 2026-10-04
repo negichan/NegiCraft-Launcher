@@ -26,6 +26,15 @@ public partial class App : Application
             return;
         }
 
+        // --gpu3d：WPF 3D 探针（材质 / 相机 / 分层透明窗）。它自己开窗、自己抓屏、自己 Shutdown，
+        // 所以这里**不能**跟着 Shutdown —— 窗口得活着等合成器把帧推出去。
+        // 加 --opaque 跑"不透明窗"那一组，用来隔离 AllowsTransparency 这个变量。
+        if (Array.IndexOf(e.Args, "--gpu3d") >= 0)
+        {
+            Gpu3dProbe.Run(e.Args);
+            return;
+        }
+
         // --skin <png>：不启窗口，直接出一张软件光栅化的皮肤预览，用来和 GL 版截图对齐。
         // --compare <a.png> --with <b.png>：逐像素比两张预览图。
         if (Array.IndexOf(e.Args, "--skin") >= 0 || Array.IndexOf(e.Args, "--compare") >= 0)
