@@ -158,9 +158,11 @@ public static class PetDebugCommands
             case "pet-mode":
                 return PetDebugMailbox.Ui(() =>
                 {
-                    if (arg == "free") pet.CurrentMode = PetWindow.PetInteractionMode.Free;
-                    else if (arg == "control") pet.CurrentMode = PetWindow.PetInteractionMode.Control;
-                    else if (arg == "follow") pet.CurrentMode = PetWindow.PetInteractionMode.FollowMouse;
+                    // PetInteractionMode 现在在 NegiCraftLauncher.Pet.Core（共享层），
+                    // 不再是 PetWindow 的嵌套类型。
+                    if (arg == "free") pet.CurrentMode = PetInteractionMode.Free;
+                    else if (arg == "control") pet.CurrentMode = PetInteractionMode.Control;
+                    else if (arg == "follow") pet.CurrentMode = PetInteractionMode.FollowMouse;
                     return "OK mode=" + pet.CurrentMode;
                 });
             case "pet-menu":

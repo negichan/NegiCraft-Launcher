@@ -38,20 +38,12 @@ public partial class PetWindow : Window
     private double _currentScale = 1.0;
     private readonly IPetHost? _host;
 
-    public enum PetInteractionMode
-    {
-        Free,
-        Control,
-        FollowMouse,
-        NavigateToCoord,
-    }
+    // 操控 / 跟随 / 导航物理、鼠标视线追踪、身体自动转身、键位与导航状态机全在这里。
+    // 它与 Avalonia 侧那个 PetWindow 用的是**同一份实现**（NegiCraftLauncher.Pet.Core），
+    // 所以两边的速度、阈值、手感不可能再漂开。
+    private readonly PetMotion _motion = new();
 
-    private PetInteractionMode _currentMode = PetInteractionMode.Free;
-    private readonly List<(double X, double Y)> _navQueue = new();
-    private (double X, double Y) _currentNavTarget;
-    private bool _hasNavTarget;
-
-    public int RemainingWaypointCount => (_hasNavTarget ? 1 : 0) + _navQueue.Count;
+    public int RemainingWaypointCount => _motion.RemainingWaypointCount;
 
     /// <summary>宿主契约，null 表示没有宿主（独立版就是给一个最小宿主）。调试桥通过它读名字与账号列表。</summary>
     public IPetHost? Host => _host;
@@ -61,26 +53,21 @@ public partial class PetWindow : Window
 
     public PetInteractionMode CurrentMode
     {
-        get => _currentMode;
-        set
-        {
-            if (_currentMode != value)
-            {
-                _currentMode = value;
-                UpdateModeUi();
-            }
-        }
+        get => _motion.Mode;
+        // 状态清理（丢途经点队列、松开按键）在 PetMotion.SetMode 里做，
+        // 清完触发 ModeChanged → OnMotionModeChanged 更新菜单与焦点。
+        set => _motion.SetMode(value);
     }
 
     public bool IsControlMode
     {
-        get => _currentMode == PetInteractionMode.Control;
+        get => _motion.Mode == PetInteractionMode.Control;
         set => CurrentMode = value ? PetInteractionMode.Control : PetInteractionMode.Free;
     }
 
     public bool IsFollowMouseMode
     {
-        get => _currentMode == PetInteractionMode.FollowMouse;
+        get => _motion.Mode == PetInteractionMode.FollowMouse;
         set => CurrentMode = value ? PetInteractionMode.FollowMouse : PetInteractionMode.Free;
     }
 
@@ -226,40 +213,13 @@ public partial class PetWindow : Window
         public int Y;
     }
 
+    // 只留光标查询。WASD / 空格 / Shift / Ctrl 的按住状态走 Pet.Core 的
+    // Services.PetNativeKeys（那份 GetAsyncKeyState + VK 常量两端共用，不用各写一遍）。
     [DllImport("user32.dll")]
     private static extern bool GetCursorPos(out WinPoint lpPoint);
 
-    [DllImport("user32.dll")]
-    private static extern short GetAsyncKeyState(int vKey);
-
-    private const int VK_SHIFT = 0x10;
-    private const int VK_CONTROL = 0x11;
-    private const int VK_SPACE = 0x20;
-    private const int VK_A = 0x41;
-    private const int VK_D = 0x44;
-    private const int VK_S = 0x53;
-    private const int VK_W = 0x57;
-
     private DispatcherTimer? _physicsTimer;
     private readonly System.Diagnostics.Stopwatch _physicsStopwatch = new();
-    private DateTime _lastWPressTime = DateTime.MinValue;
-    private bool _isSprintLocked;
-    private bool _manualSneakToggle;
-    private bool _isKeyShiftHeld;
-    private bool _isPhysicalShiftDown;
-
-    private double _groundPosX;
-    private double _groundPosY;
-    private double _jumpOffsetY;
-    private double _jumpVelocityY;
-    private bool _isJumping;
-
-    private bool _keyW;
-    private bool _keyA;
-    private bool _keyS;
-    private bool _keyD;
-    private bool _keySpace;
-    private bool _keyCtrl;
 
     public PetWindow()
     {
@@ -267,6 +227,9 @@ public partial class PetWindow : Window
 
         // 窗口还没上屏时 HWND 不存在，ApplyToolWindow 会挂到 SourceInitialized 上。
         PetShellStyle.ApplyToolWindow(this);
+
+        // 菜单图标、焦点、回自由待机时把窗口摆回去 —— 这些是 view 的事，物理内核不管。
+        _motion.ModeChanged += OnMotionModeChanged;
     }
 
     public PetWindow(string initialPlayerName, IPetHost? host = null) : this()
@@ -427,56 +390,12 @@ public partial class PetWindow : Window
         {
             var dt = _physicsStopwatch.Elapsed.TotalSeconds;
             _physicsStopwatch.Restart();
-            if (dt < 0.002) return;
-            if (dt > 0.04) dt = 0.04;
 
-            // 被抓握或在空中拖拽时，以挣扎晃头动画为先
-            if (_isLeftPressed || _isLeftDragging)
-            {
-                _isJumping = false;
-                _jumpOffsetY = 0;
-                _jumpVelocityY = 0;
-                _groundPosX = Left;
-                _groundPosY = Top;
-                PetPreview.IsWalking = false;
-                PetPreview.IsJumping = false;
-                PetPreview.IsSprinting = false;
-                return;
-            }
+            // 抓握 / 拖拽时物理让位给挣扎晃头动画（判断在窗口这边，物理只是别乱动）。
+            _motion.IsDragging = _isLeftPressed || _isLeftDragging;
 
-            if (_groundPosX == 0 && _groundPosY == 0 && (Left != 0 || Top != 0))
-            {
-                _groundPosX = Left;
-                _groundPosY = Top;
-            }
-
-            // 1. Shift 下蹲状态检测
-            var isDown = (GetAsyncKeyState(VK_SHIFT) & 0x8000) != 0;
-            if (isDown != _isPhysicalShiftDown)
-            {
-                _isPhysicalShiftDown = isDown;
-                UpdateSneakState();
-            }
-
-            // 2. 模式检测与物理模拟
-            switch (_currentMode)
-            {
-                case PetInteractionMode.Control:
-                    UpdateControlPhysics(dt);
-                    break;
-                case PetInteractionMode.FollowMouse:
-                    UpdateFollowMousePhysics(dt);
-                    break;
-                case PetInteractionMode.NavigateToCoord:
-                    UpdateCoordNavigationPhysics(dt);
-                    break;
-                case PetInteractionMode.Free:
-                default:
-                    break;
-            }
-
-            // 3. 鼠标视线追踪与身体自动平滑转向
-            UpdateMouseLookAndBodyTurn(dt);
+            _motion.Tick(dt, BuildMotionContext());
+            ApplyMotionToView();
         }
         catch (Exception ex)
         {
@@ -484,7 +403,45 @@ public partial class PetWindow : Window
         }
     }
 
-    public string TrackDebugInfo { get; private set; } = "";
+    /// <summary>把一帧物理需要的平台信息打包给内核。**全是 DIP** —— WPF 这边本来就是，不用换算。</summary>
+    private PetMotionContext BuildMotionContext()
+    {
+        var workArea = SystemParameters.WorkArea;
+        return new PetMotionContext(
+            new PetStage(Width, Height, _currentScale, PetPreview.StageOffsetY),
+            new PetWorkArea(workArea.X, workArea.Y, workArea.Width, workArea.Height),
+            new PetPoint(Left, Top),
+            CursorDip(),
+            PetPreview.CurrentYawDeg);
+    }
+
+    /// <summary>
+    /// 把物理算出来的东西推给预览控件与窗口。内核不碰 UI，这一步是宿主的活。
+    /// 朝向只吃增量 —— 右键拖拽旋转、<c>ResetRotation</c>、<c>pet-yaw</c> 都直接改预览控件的 yaw，
+    /// 两边各记一份迟早会漂开。
+    /// </summary>
+    private void ApplyMotionToView()
+    {
+        PetPreview.IsWalking = _motion.Walking;
+        PetPreview.IsSprinting = _motion.Sprinting;
+        PetPreview.IsJumping = _motion.IsJumping;
+        PetPreview.Sneaking = _motion.Sneaking;
+        PetPreview.SetJumpOffset(_motion.JumpOffsetY);
+
+        if (_motion.YawDelta != 0f) PetPreview.RotateModel(_motion.YawDelta);
+        if (_motion.HasHeadLook) PetPreview.SetHeadLookAt(_motion.HeadPitch, _motion.HeadYaw);
+        if (_motion.PositionDirty) MoveWindowTo(_motion.GroundX, _motion.GroundY);
+
+        MenuSneakIcon.Visibility = Vis(_motion.ManualSneakToggle);
+    }
+
+    /// <summary>诊断串，<c>pet-track</c> 动词读它。物理每帧往里写，宿主也会写（启动标记 / 异常）。</summary>
+    public string TrackDebugInfo
+    {
+        get => _motion.DebugInfo;
+        private set => _motion.DebugInfo = value;
+    }
+
     private WinPoint _lastCursorPos = new() { X = -1, Y = -1 };
     private bool _hasVirtualCursor;
     private WinPoint _virtualCursor;
@@ -501,269 +458,30 @@ public partial class PetWindow : Window
         _hasVirtualCursor = false;
     }
 
-    /// <summary>取当前光标（DIP）。虚拟光标优先，其次是真实光标，最后退回上一次的位置。</summary>
-    private (double X, double Y) CursorDip()
+    /// <summary>
+    /// 取当前光标（DIP）。虚拟光标优先，其次是真实光标，再次是上一次的位置。
+    /// 三者都没有就回 <c>null</c>，由物理内核自己决定怎么兜底（看方向时退到"屏幕正前方"，
+    /// 跟随鼠标时干脆不动）。
+    /// </summary>
+    private PetPoint? CursorDip()
     {
-        if (_hasVirtualCursor) return ToDip(_virtualCursor);
+        if (_hasVirtualCursor) return DipPoint(_virtualCursor);
 
         if (GetCursorPos(out var realCur))
         {
             _lastCursorPos = realCur;
-            return ToDip(realCur);
+            return DipPoint(realCur);
         }
 
-        if (_lastCursorPos.X != -1) return ToDip(_lastCursorPos);
+        if (_lastCursorPos.X != -1) return DipPoint(_lastCursorPos);
 
-        // 兜底为屏幕正前方
-        return (_groundPosX + (Width / 2.0), _groundPosY - 100.0);
+        return null;
     }
 
-    private void UpdateMouseLookAndBodyTurn(double dt)
+    private PetPoint DipPoint(WinPoint p)
     {
-        if (_isLeftDragging || _isLeftPressed)
-        {
-            TrackDebugInfo = "LOOK_DRAGGING";
-            return;
-        }
-
-        var (curX, curY) = CursorDip();
-
-        var headCenterX = _groundPosX + (Width / 2.0);
-        var headCenterY = _groundPosY + ((52.0 + PetPreview.StageOffsetY) * _currentScale);
-
-        var dx = curX - headCenterX;
-        var dy = curY - headCenterY;
-
-        // 计算光标相对于小人的水平方位角与俯仰角
-        var targetLookYaw = (float)(Math.Atan2(dx, 420.0) * (180.0 / Math.PI));
-        var targetPitchDeg = (float)Math.Clamp(Math.Atan2(dy, 380.0) * (180.0 / Math.PI), -24.0, 24.0);
-
-        var currentYaw = PetPreview.CurrentYawDeg;
-        var diffYaw = targetLookYaw - currentYaw;
-        while (diffYaw > 180f) diffYaw -= 360f;
-        while (diffYaw < -180f) diffYaw += 360f;
-
-        TrackDebugInfo =
-            $"cursor=({curX:F0},{curY:F0}) head=({(int)headCenterX},{(int)headCenterY}) dx={dx:F0} dy={dy:F0} " +
-            $"targetYaw={targetLookYaw:F1} curYaw={currentYaw:F1} diffYaw={diffYaw:F1} isWalking={PetPreview.IsWalking}";
-
-        // 身体自动平滑转身：静止且头部扭角超出舒适范围（|diffYaw| > 25°）时，身体平滑转向鼠标。
-        if (!PetPreview.IsWalking)
-        {
-            var absDiff = Math.Abs(diffYaw);
-            if (absDiff > 25f)
-            {
-                var deficit = absDiff - 15f;
-                var maxTurn = 260f * (float)dt; // 最大角速度 260 deg/s
-                var turnStep = Math.Clamp(deficit * 7f * (float)dt, -maxTurn, maxTurn) * Math.Sign(diffYaw);
-                PetPreview.RotateModel(turnStep);
-            }
-        }
-
-        PetPreview.SetHeadLookAt(targetPitchDeg, targetLookYaw);
-    }
-
-    private void UpdateControlPhysics(double dt)
-    {
-        var wDown = (GetAsyncKeyState(VK_W) & 0x8000) != 0 || _keyW;
-        var aDown = (GetAsyncKeyState(VK_A) & 0x8000) != 0 || _keyA;
-        var sDown = (GetAsyncKeyState(VK_S) & 0x8000) != 0 || _keyS;
-        var dDown = (GetAsyncKeyState(VK_D) & 0x8000) != 0 || _keyD;
-        var spaceDown = (GetAsyncKeyState(VK_SPACE) & 0x8000) != 0 || _keySpace;
-        var ctrlDown = (GetAsyncKeyState(VK_CONTROL) & 0x8000) != 0 || _keyCtrl;
-
-        double moveX = 0;
-        double moveY = 0;
-        if (dDown) moveX += 1;
-        if (aDown) moveX -= 1;
-        if (sDown) moveY += 1;
-        if (wDown) moveY -= 1;
-
-        var isMoving = moveX != 0 || moveY != 0;
-        PetPreview.IsWalking = isMoving;
-
-        // 疾跑状态：按住 Ctrl 或双击 W，且不在下蹲
-        var isSprinting = isMoving && (ctrlDown || _isSprintLocked) && !PetPreview.Sneaking;
-        PetPreview.IsSprinting = isSprinting;
-
-        if (isMoving)
-        {
-            var len = Math.Sqrt((moveX * moveX) + (moveY * moveY));
-            var dirX = moveX / len;
-            var dirY = moveY / len;
-
-            // 桌面环境适配速度 (DIP/s):
-            // 潜行 ~80 / 行走 ~180 / 疾跑 ~270 / 跳跃中移动 200(走) 290(疾跑)
-            double speed;
-            if (PetPreview.Sneaking)
-            {
-                speed = 80.0;
-            }
-            else if (isSprinting)
-            {
-                speed = _isJumping ? 290.0 : 270.0;
-            }
-            else
-            {
-                speed = _isJumping ? 200.0 : 180.0;
-            }
-
-            _groundPosX += dirX * speed * dt;
-            _groundPosY += dirY * speed * dt;
-            ClampToScreenBounds();
-
-            // 平滑旋转至前进方向（最大转速 720 deg/s）
-            var targetYaw = (float)(Math.Atan2(dirX, dirY) * (180.0 / Math.PI));
-            var diff = targetYaw - PetPreview.CurrentYawDeg;
-            while (diff > 180f) diff -= 360f;
-            while (diff < -180f) diff += 360f;
-            var maxTurn = 720f * (float)dt;
-            var turnStep = Math.Clamp(diff * 14f * (float)dt, -maxTurn, maxTurn);
-            PetPreview.RotateModel(turnStep);
-        }
-
-        // Minecraft 风格起跳模拟 (初速度 -460 DIP/s, 重力 2400 DIP/s², 滞空约 0.38s, 高度约 44 DIP)
-        if (spaceDown && !_isJumping)
-        {
-            _isJumping = true;
-            _jumpVelocityY = -460.0;
-            PetPreview.IsJumping = true;
-        }
-
-        if (_isJumping)
-        {
-            const double gravity = 2400.0;
-            _jumpOffsetY += _jumpVelocityY * dt;
-            _jumpVelocityY += gravity * dt;
-
-            if (_jumpOffsetY >= 0)
-            {
-                _jumpOffsetY = 0;
-                _jumpVelocityY = 0;
-                _isJumping = false;
-                PetPreview.IsJumping = false;
-
-                // 连跳检测（按住空格落地继续跳）
-                if (spaceDown)
-                {
-                    _isJumping = true;
-                    _jumpVelocityY = -460.0;
-                    PetPreview.IsJumping = true;
-                }
-            }
-        }
-
-        PetPreview.SetJumpOffset(_jumpOffsetY);
-        MoveWindowTo(_groundPosX, _groundPosY);
-    }
-
-    private void UpdateFollowMousePhysics(double dt)
-    {
-        var (curX, curY) = CursorDip();
-
-        var petFeetX = _groundPosX + (Width / 2.0);
-        var petFeetY = _groundPosY + ((160.0 + PetPreview.StageOffsetY) * _currentScale);
-
-        var dx = curX - petFeetX;
-        var dy = curY - petFeetY;
-        var dist = Math.Sqrt((dx * dx) + (dy * dy));
-
-        // 停靠半径：鼠标在身旁 ~85px 内时停下脚步
-        const double dockRadius = 85.0;
-
-        if (dist <= dockRadius)
-        {
-            PetPreview.IsWalking = false;
-            PetPreview.IsSprinting = false;
-            return;
-        }
-
-        PetPreview.IsWalking = true;
-        var isSprint = dist > 360.0;
-        PetPreview.IsSprinting = isSprint;
-
-        var speed = isSprint ? 270.0 : 180.0;
-        var dirX = dx / dist;
-        var dirY = dy / dist;
-
-        var targetYaw = (float)(Math.Atan2(dirX, dirY) * (180.0 / Math.PI));
-        var diff = targetYaw - PetPreview.CurrentYawDeg;
-        while (diff > 180f) diff -= 360f;
-        while (diff < -180f) diff += 360f;
-        var maxTurn = 720f * (float)dt;
-        var turnStep = Math.Clamp(diff * 14f * (float)dt, -maxTurn, maxTurn);
-        PetPreview.RotateModel(turnStep);
-
-        var moveDist = Math.Min(speed * dt, dist - dockRadius + 2.0);
-        _groundPosX += dirX * moveDist;
-        _groundPosY += dirY * moveDist;
-
-        ClampToScreenBounds();
-        MoveWindowTo(_groundPosX, _groundPosY);
-    }
-
-    private void UpdateCoordNavigationPhysics(double dt)
-    {
-        if (!_hasNavTarget)
-        {
-            PetPreview.IsWalking = false;
-            PetPreview.IsSprinting = false;
-            CurrentMode = PetInteractionMode.Free;
-            return;
-        }
-
-        var petFeetX = _groundPosX + (Width / 2.0);
-        var petFeetY = _groundPosY + ((160.0 + PetPreview.StageOffsetY) * _currentScale);
-
-        var dx = _currentNavTarget.X - petFeetX;
-        var dy = _currentNavTarget.Y - petFeetY;
-        var dist = Math.Sqrt((dx * dx) + (dy * dy));
-
-        // 到达当前航点（8px 内）
-        if (dist <= 8.0)
-        {
-            if (_navQueue.Count > 0)
-            {
-                // 还有后续途经点：出队下一个点继续移动
-                _currentNavTarget = _navQueue[0];
-                _navQueue.RemoveAt(0);
-                dx = _currentNavTarget.X - petFeetX;
-                dy = _currentNavTarget.Y - petFeetY;
-                dist = Math.Sqrt((dx * dx) + (dy * dy));
-            }
-            else
-            {
-                // 全部途经点到达完成，停下脚步，自动切回自由待机模式
-                _hasNavTarget = false;
-                PetPreview.IsWalking = false;
-                PetPreview.IsSprinting = false;
-                CurrentMode = PetInteractionMode.Free;
-                return;
-            }
-        }
-
-        PetPreview.IsWalking = true;
-        var isSprint = dist > 350.0;
-        PetPreview.IsSprinting = isSprint;
-
-        var speed = isSprint ? 270.0 : 180.0;
-        var dirX = dx / dist;
-        var dirY = dy / dist;
-
-        var targetYaw = (float)(Math.Atan2(dirX, dirY) * (180.0 / Math.PI));
-        var diff = targetYaw - PetPreview.CurrentYawDeg;
-        while (diff > 180f) diff -= 360f;
-        while (diff < -180f) diff += 360f;
-        var maxTurn = 720f * (float)dt;
-        var turnStep = Math.Clamp(diff * 14f * (float)dt, -maxTurn, maxTurn);
-        PetPreview.RotateModel(turnStep);
-
-        var moveDist = Math.Min(speed * dt, dist);
-        _groundPosX += dirX * moveDist;
-        _groundPosY += dirY * moveDist;
-
-        ClampToScreenBounds();
-        MoveWindowTo(_groundPosX, _groundPosY);
+        var (x, y) = ToDip(p);
+        return new PetPoint(x, y);
     }
 
     private void MoveWindowTo(double dipX, double dipY)
@@ -776,99 +494,44 @@ public partial class PetWindow : Window
         Top = roundedY;
     }
 
-    private void ClampToScreenBounds()
-    {
-        var workArea = SystemParameters.WorkArea;
-
-        var minX = workArea.X;
-        var maxX = workArea.X + workArea.Width - Width;
-        var minY = workArea.Y;
-        var maxY = workArea.Y + workArea.Height - Height;
-
-        _groundPosX = Math.Clamp(_groundPosX, minX, maxX);
-        _groundPosY = Math.Clamp(_groundPosY, minY, maxY);
-    }
-
     private void OnWindowKeyDown(object sender, KeyEventArgs e)
     {
-        if (e.Key is Key.LeftShift or Key.RightShift)
+        if (ToMotionKey(e.Key) is { } key)
         {
-            _isKeyShiftHeld = true;
-            UpdateSneakState();
-        }
-        else if (e.Key is Key.LeftCtrl or Key.RightCtrl)
-        {
-            _keyCtrl = true;
-        }
-        else if (e.Key == Key.W)
-        {
-            var now = DateTime.UtcNow;
-            if ((now - _lastWPressTime).TotalMilliseconds < 350)
-            {
-                _isSprintLocked = true;
-            }
-            _lastWPressTime = now;
-            _keyW = true;
-        }
-        else if (e.Key == Key.A) _keyA = true;
-        else if (e.Key == Key.S) _keyS = true;
-        else if (e.Key == Key.D) _keyD = true;
-        else if (e.Key == Key.Space) _keySpace = true;
-        else if (e.Key == Key.Escape)
-        {
-            ClearNavigation();
-            if (_currentMode != PetInteractionMode.Free)
-            {
-                CurrentMode = PetInteractionMode.Free;
-            }
+            _motion.OnKeyDown(key);
+            // Shift 会改下蹲，得立刻反映到预览控件上（不等下一帧心跳）。
+            if (key == PetMotionKey.Shift) PetPreview.Sneaking = _motion.Sneaking;
         }
     }
 
     private void OnWindowKeyUp(object sender, KeyEventArgs e)
     {
-        if (e.Key is Key.LeftShift or Key.RightShift)
+        if (ToMotionKey(e.Key) is { } key)
         {
-            _isKeyShiftHeld = false;
-            UpdateSneakState();
+            _motion.OnKeyUp(key);
+            if (key == PetMotionKey.Shift) PetPreview.Sneaking = _motion.Sneaking;
         }
-        else if (e.Key is Key.LeftCtrl or Key.RightCtrl)
-        {
-            _keyCtrl = false;
-        }
-        else if (e.Key == Key.W)
-        {
-            _keyW = false;
-            _isSprintLocked = false;
-        }
-        else if (e.Key == Key.A) _keyA = false;
-        else if (e.Key == Key.S) _keyS = false;
-        else if (e.Key == Key.D) _keyD = false;
-        else if (e.Key == Key.Space) _keySpace = false;
     }
+
+    /// <summary>WPF 的键映射到物理内核的键。不关心的键回 <c>null</c>。</summary>
+    private static PetMotionKey? ToMotionKey(Key key) => key switch
+    {
+        Key.LeftShift or Key.RightShift => PetMotionKey.Shift,
+        Key.LeftCtrl or Key.RightCtrl => PetMotionKey.Ctrl,
+        Key.W => PetMotionKey.W,
+        Key.A => PetMotionKey.A,
+        Key.S => PetMotionKey.S,
+        Key.D => PetMotionKey.D,
+        Key.Space => PetMotionKey.Space,
+        Key.Escape => PetMotionKey.Escape,
+        _ => null,
+    };
 
     /// <summary>调试用：模拟按键，绕开"窗口拿不到焦点"这件事。</summary>
     public void SetSimulatedKey(string key, bool down)
     {
-        switch (key.ToLowerInvariant())
-        {
-            case "w": _keyW = down; break;
-            case "a": _keyA = down; break;
-            case "s": _keyS = down; break;
-            case "d": _keyD = down; break;
-            case "space": _keySpace = down; break;
-            case "ctrl": _keyCtrl = down; break;
-            case "shift": _isKeyShiftHeld = down; UpdateSneakState(); break;
-        }
-    }
-
-    private void UpdateSneakState()
-    {
-        var shouldSneak = _manualSneakToggle || _isKeyShiftHeld || _isPhysicalShiftDown;
-        if (PetPreview.Sneaking != shouldSneak)
-        {
-            PetPreview.Sneaking = shouldSneak;
-        }
-        MenuSneakIcon.Visibility = Vis(_manualSneakToggle);
+        _motion.SetSimulatedKey(key, down);
+        if (key.Equals("shift", StringComparison.OrdinalIgnoreCase)) PetPreview.Sneaking = _motion.Sneaking;
     }
 
     #endregion
@@ -889,11 +552,12 @@ public partial class PetWindow : Window
         // 双击切换手动潜行（Avalonia 是 DoubleTapped；WPF 的 Grid 没有 DoubleClick 事件，看 ClickCount）。
         if (e.ClickCount == 2)
         {
-            _manualSneakToggle = !_manualSneakToggle;
-            UpdateSneakState();
+            _motion.ToggleManualSneak();
+            PetPreview.Sneaking = _motion.Sneaking;
+            MenuSneakIcon.Visibility = Vis(_motion.ManualSneakToggle);
         }
 
-        if (_currentMode == PetInteractionMode.NavigateToCoord)
+        if (_motion.Mode == PetInteractionMode.NavigateToCoord)
         {
             ClearNavigation();
         }
@@ -974,15 +638,10 @@ public partial class PetWindow : Window
             Cursor = Cursors.Hand;
             RootPanel.Cursor = Cursors.Hand;
 
-            _groundPosX = Left;
-            _groundPosY = Top;
-            _jumpOffsetY = 0;
-            _jumpVelocityY = 0;
-            _isJumping = false;
+            _motion.EndDrag(Left, Top);
             PetPreview.SetJumpOffset(0);
-
-            // 落地时检查是否处于按 Shift 状态
-            UpdateSneakState();
+            PetPreview.IsJumping = false;
+            // 下蹲状态由心跳里的物理 Shift 轮询 + 按键事件维护，下一帧（16ms）就同步上了。
         }
         RootPanel.ReleaseMouseCapture();
         e.Handled = true;
@@ -1020,13 +679,9 @@ public partial class PetWindow : Window
             PetPreview.IsDangling = false;
             Cursor = Cursors.Hand;
             RootPanel.Cursor = Cursors.Hand;
-            _groundPosX = Left;
-            _groundPosY = Top;
-            _jumpOffsetY = 0;
-            _jumpVelocityY = 0;
-            _isJumping = false;
+            _motion.EndDrag(Left, Top);
             PetPreview.SetJumpOffset(0);
-            UpdateSneakState();
+            PetPreview.IsJumping = false;
         }
         if (_isRightPressed)
         {
@@ -1078,88 +733,53 @@ public partial class PetWindow : Window
 
     private void OnToggleSneakClick(object sender, RoutedEventArgs e)
     {
-        _manualSneakToggle = !_manualSneakToggle;
-        UpdateSneakState();
+        _motion.ToggleManualSneak();
+        PetPreview.Sneaking = _motion.Sneaking;
+        MenuSneakIcon.Visibility = Vis(_motion.ManualSneakToggle);
     }
 
     /// <summary>调试用：设一个屏幕坐标（物理像素）作为导航目标。</summary>
     public void SetNavigationTarget(double screenX, double screenY)
     {
-        _navQueue.Clear();
-        _currentNavTarget = ToDip(screenX, screenY);
-        _hasNavTarget = true;
-        CurrentMode = PetInteractionMode.NavigateToCoord;
+        var (x, y) = ToDip(screenX, screenY);
+        _motion.SetNavigationTarget(x, y);
     }
 
-    /// <summary>调试用：追加一个途经点。</summary>
+    /// <summary>调试用：追加一个途经点（物理像素）。</summary>
     public void AddNavigationTarget(double screenX, double screenY)
     {
-        var target = ToDip(screenX, screenY);
-        if (_currentMode != PetInteractionMode.NavigateToCoord || !_hasNavTarget)
-        {
-            _navQueue.Clear();
-            _currentNavTarget = target;
-            _hasNavTarget = true;
-            CurrentMode = PetInteractionMode.NavigateToCoord;
-        }
-        else
-        {
-            _navQueue.Add(target);
-        }
+        var (x, y) = ToDip(screenX, screenY);
+        _motion.AddNavigationTarget(x, y);
     }
 
-    public void ClearNavigation()
+    public void ClearNavigation() => _motion.ClearNavigation();
+
+    /// <summary>
+    /// 模式变了。菜单图标、切到操控模式时抢焦点、回自由待机时把窗口摆回地面位置 ——
+    /// 这些都是 view 的事；丢途经点队列、松开按键那类纯状态清理在 <see cref="PetMotion.SetMode"/> 里做完了。
+    /// </summary>
+    private void OnMotionModeChanged(PetInteractionMode mode)
     {
-        _navQueue.Clear();
-        _hasNavTarget = false;
-        if (_currentMode == PetInteractionMode.NavigateToCoord)
-        {
-            CurrentMode = PetInteractionMode.Free;
-        }
-    }
+        MenuFreeModeIcon.Visibility = Vis(mode == PetInteractionMode.Free);
+        MenuControlModeIcon.Visibility = Vis(mode == PetInteractionMode.Control);
+        MenuFollowMouseIcon.Visibility = Vis(mode == PetInteractionMode.FollowMouse);
 
-    private void UpdateModeUi()
-    {
-        MenuFreeModeIcon.Visibility = Vis(_currentMode == PetInteractionMode.Free);
-        MenuControlModeIcon.Visibility = Vis(_currentMode == PetInteractionMode.Control);
-        MenuFollowMouseIcon.Visibility = Vis(_currentMode == PetInteractionMode.FollowMouse);
+        switch (mode)
+        {
+            case PetInteractionMode.Control:
+                _motion.BeginControlMode(Left, Top);
+                Activate();
+                Focus();
+                break;
 
-        if (_currentMode != PetInteractionMode.NavigateToCoord)
-        {
-            _navQueue.Clear();
-            _hasNavTarget = false;
-        }
-
-        if (_currentMode == PetInteractionMode.Control)
-        {
-            _groundPosX = Left;
-            _groundPosY = Top;
-            _jumpOffsetY = 0;
-            _jumpVelocityY = 0;
-            _isJumping = false;
-            Activate();
-            Focus();
-        }
-        else
-        {
-            _keyW = false;
-            _keyA = false;
-            _keyS = false;
-            _keyD = false;
-            _keySpace = false;
-            _keyCtrl = false;
-            _isSprintLocked = false;
-            if (_currentMode == PetInteractionMode.Free)
-            {
+            case PetInteractionMode.Free:
+                _motion.EnterFreeIdle();
                 PetPreview.IsWalking = false;
                 PetPreview.IsSprinting = false;
                 PetPreview.IsJumping = false;
-                _isJumping = false;
-                _jumpOffsetY = 0;
                 PetPreview.SetJumpOffset(0);
-                Left = Math.Round(_groundPosX);
-                Top = Math.Round(_groundPosY);
-            }
+                MoveWindowTo(_motion.GroundX, _motion.GroundY);
+                break;
         }
     }
 
