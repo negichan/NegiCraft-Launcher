@@ -19,6 +19,14 @@ public sealed class PetSettings
     /// <summary>User-chosen name; null means "use the default name".</summary>
     public string? CustomName { get; set; }
 
+    /// <summary>
+    /// 桌宠是否用 GPU 硬件渲染（WPF <c>Viewport3D</c> 后端）。
+    ///
+    /// <para>只有 Windows 侧有这条后端；Avalonia 侧本来就走 OpenGL，读到 true 也无处可用。
+    /// 默认 false —— 软件光栅化是回归基线，GPU 是可选加速项。</para>
+    /// </summary>
+    public bool UseGpu { get; set; }
+
     private static string FilePath => Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "NCL", "pet.json");
 

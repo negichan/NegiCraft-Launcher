@@ -67,6 +67,25 @@ public partial class MainWindowViewModel : ViewModelBase
             ? PetCustomName
             : (CurrentAccount?.Name ?? "pingplus");
 
+    /// <summary>
+    /// 桌宠是否用 GPU 硬件渲染。设置页与桌宠右键菜单改的是同一个值（走 <c>IPetHost.UseGpu</c>）。
+    ///
+    /// <para>只有 Windows(WPF) 侧有这条后端；Avalonia 侧读到了也只是忽略，但值照存不误 ——
+    /// 两边共用一份 settings.json，不存的话在 mac/Linux 上跑一次就会把 Windows 侧的开关抹掉。</para>
+    /// </summary>
+    public bool PetUseGpu
+    {
+        get => _launcher.Settings.PetUseGpu;
+        set
+        {
+            if (_launcher.Settings.PetUseGpu == value) return;
+
+            _launcher.Settings.PetUseGpu = value;
+            PersistSettings();
+            OnPropertyChanged();
+        }
+    }
+
     [RelayCommand]
     private void OpenPet() => OpenPetRequested?.Invoke();
 

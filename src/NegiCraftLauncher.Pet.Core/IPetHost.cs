@@ -26,6 +26,18 @@ public interface IPetHost
     /// <summary>Whether the pet may offer "打开启动器". False in the standalone build.</summary>
     bool CanOpenLauncher { get; }
 
+    /// <summary>
+    /// 桌宠是否用 GPU 硬件渲染。
+    ///
+    /// <para>宿主只负责**存**：进程内托管的桌宠存进启动器设置（这样设置页和桌宠菜单改的是同一个值），
+    /// 独立版存进 <see cref="PetSettings"/>。至于这条后端在不在、能不能用，由视图层判断 ——
+    /// 目前只有 Windows(WPF) 侧有（<c>Viewport3D</c>），Avalonia 侧取到 true 也只会忽略。</para>
+    ///
+    /// <para>改动时应当触发 <see cref="PropertyChanged"/> 的 <c>UseGpu</c> 通知，好让已经开着的
+    /// 桌宠窗口在设置页一改就跟着换后端。</para>
+    /// </summary>
+    bool UseGpu { get; set; }
+
     /// <summary>Brings the launcher to the front.</summary>
     void OpenLauncher();
 

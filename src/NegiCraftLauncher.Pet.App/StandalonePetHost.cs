@@ -39,6 +39,20 @@ internal sealed class StandalonePetHost : IPetHost
 
     public bool CanOpenLauncher => false;
 
+    /// <summary>The standalone build has no settings page, so this is only ever changed from the pet's own menu.</summary>
+    public bool UseGpu
+    {
+        get => _settings.UseGpu;
+        set
+        {
+            if (_settings.UseGpu == value) return;
+
+            _settings.UseGpu = value;
+            _settings.Save();
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(UseGpu)));
+        }
+    }
+
     /// <summary>Never reachable: the menu item is hidden when <see cref="CanOpenLauncher"/> is false.</summary>
     public void OpenLauncher()
     {

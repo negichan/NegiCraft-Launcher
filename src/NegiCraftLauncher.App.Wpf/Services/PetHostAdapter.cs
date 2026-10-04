@@ -41,6 +41,16 @@ internal sealed class PetHostAdapter : IPetHost
 
     public bool CanOpenLauncher => true;
 
+    /// <summary>
+    /// 直接读写启动器设置 —— 桌宠菜单和设置页改的是同一个值，两边不会漂开。
+    /// 设置页那边一改，<see cref="OnVmPropertyChanged"/> 会把通知改名转给桌宠。
+    /// </summary>
+    public bool UseGpu
+    {
+        get => _vm.PetUseGpu;
+        set => _vm.PetUseGpu = value;
+    }
+
     public void OpenLauncher()
     {
         // WPF 的 Window.IsVisible 是只读的（Avalonia 那边可写），恢复显示要用 Show()。
@@ -70,6 +80,11 @@ internal sealed class PetHostAdapter : IPetHost
         if (e.PropertyName == nameof(MainWindowViewModel.EffectivePetName))
         {
             _listeners?.Invoke(this, new PropertyChangedEventArgs(nameof(EffectiveName)));
+        }
+        else if (e.PropertyName == nameof(MainWindowViewModel.PetUseGpu))
+        {
+            // 设置页里改了 GPU 开关 —— 已经开着的桌宠窗口要立刻跟着换后端。
+            _listeners?.Invoke(this, new PropertyChangedEventArgs(nameof(UseGpu)));
         }
     }
 }
