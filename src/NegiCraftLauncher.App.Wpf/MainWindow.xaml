@@ -62,43 +62,6 @@
                           BlurRadius="50" ShadowDepth="20" Direction="270"
                           Color="#000000" Opacity="0.87" RenderingBias="Performance" />
 
-        <!-- 一行下载任务，弹层与设置里的「下载中心」共用。
-             行内的按钮要够到窗口级 VM，因为行自己的类型是 DownloadTaskModel。 -->
-        <DataTemplate x:Key="DownloadRowTemplate">
-            <Border BorderBrush="#26262b" BorderThickness="0,0,0,1" Padding="12,10">
-                <neg:NegiStackPanel Spacing="8">
-                    <neg:NegiGrid Columns="* Auto">
-                        <neg:NegiStackPanel Grid.Column="0" Spacing="3" VerticalAlignment="Center">
-                            <TextBlock Text="{Binding Name}" FontWeight="Bold" FontSize="13"
-                                       Foreground="#fafafa" TextTrimming="CharacterEllipsis" />
-                            <neg:NegiStackPanel Orientation="Horizontal" Spacing="8">
-                                <TextBlock Text="{Binding Status}" FontSize="12" Foreground="#a1a1aa" />
-                                <TextBlock Text="{Binding PercentText}" FontSize="12" Foreground="#71717a" />
-                            </neg:NegiStackPanel>
-                        </neg:NegiStackPanel>
-                        <neg:NegiStackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
-                            <Button Style="{StaticResource BtnSmOutlineStyle}" Content="暂停" Height="26" FontSize="12" Padding="10,0"
-                                    Visibility="{Binding IsRunning, Converter={StaticResource BoolToVis}}"
-                                    Command="{Binding DataContext.PauseDownloadTaskCommand, RelativeSource={RelativeSource AncestorType=Window}}"
-                                    CommandParameter="{Binding .}" />
-                            <Button Style="{StaticResource BtnSmOutlineStyle}" Content="取消" Height="26" FontSize="12" Padding="10,0"
-                                    Visibility="{Binding IsRunning, Converter={StaticResource BoolToVis}}"
-                                    Command="{Binding DataContext.CancelDownloadTaskCommand, RelativeSource={RelativeSource AncestorType=Window}}"
-                                    CommandParameter="{Binding .}" />
-                            <Button Style="{StaticResource BtnSmOutlineStyle}" Content="继续" Height="26" FontSize="12" Padding="10,0"
-                                    Visibility="{Binding CanResume, Converter={StaticResource BoolToVis}}"
-                                    Command="{Binding DataContext.ResumeDownloadTaskCommand, RelativeSource={RelativeSource AncestorType=Window}}"
-                                    CommandParameter="{Binding .}" />
-                        </neg:NegiStackPanel>
-                    </neg:NegiGrid>
-                    <ProgressBar Value="{Binding Progress}" Maximum="100" Height="4"
-                                 neg:Negi.CornerRadius="2" Foreground="#fafafa" Background="#26262b" />
-                    <TextBlock Text="{Binding Detail}" FontSize="12" Foreground="#71717a"
-                               TextTrimming="CharacterEllipsis" />
-                </neg:NegiStackPanel>
-            </Border>
-        </DataTemplate>
-
         <!-- ================= 样式 ================= -->
 
         <!-- 导航按钮：42x42，圆角 12，图标 20x20。
@@ -403,6 +366,50 @@
                 </Trigger>
             </Style.Triggers>
         </Style>
+
+        <!-- 一行下载任务，弹层与设置里的「下载中心」共用。
+             行内的按钮要够到窗口级 VM，因为行自己的类型是 DownloadTaskModel。
+
+             **必须放在所有样式之后。** `DataTemplate` 里的 `StaticResource` 是在**模板被
+             实例化时**、按模板在文档里的位置解析的 —— 解析时能看到的只有它**之前**已经登记的
+             条目（同一份字典里 `BoolToVis` 在前面所以一直没事）。模板原来放在文件顶部，
+             而它引用的 `BtnSmOutlineStyle` 定义在后面 ⇒ 第一次真的出现下载行时抛
+             `XamlParseException: 无法找到名为"BtnSmOutlineStyle"的资源`，未处理异常直接杀进程。
+             因为空列表不实例化模板，像素回归只截空态，一直没暴露 —— 是 `demo` 动词先踩到的。 -->
+        <DataTemplate x:Key="DownloadRowTemplate">
+            <Border BorderBrush="#26262b" BorderThickness="0,0,0,1" Padding="12,10">
+                <neg:NegiStackPanel Spacing="8">
+                    <neg:NegiGrid Columns="* Auto">
+                        <neg:NegiStackPanel Grid.Column="0" Spacing="3" VerticalAlignment="Center">
+                            <TextBlock Text="{Binding Name}" FontWeight="Bold" FontSize="13"
+                                       Foreground="#fafafa" TextTrimming="CharacterEllipsis" />
+                            <neg:NegiStackPanel Orientation="Horizontal" Spacing="8">
+                                <TextBlock Text="{Binding Status}" FontSize="12" Foreground="#a1a1aa" />
+                                <TextBlock Text="{Binding PercentText}" FontSize="12" Foreground="#71717a" />
+                            </neg:NegiStackPanel>
+                        </neg:NegiStackPanel>
+                        <neg:NegiStackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                            <Button Style="{StaticResource BtnSmOutlineStyle}" Content="暂停" Height="26" FontSize="12" Padding="10,0"
+                                    Visibility="{Binding IsRunning, Converter={StaticResource BoolToVis}}"
+                                    Command="{Binding DataContext.PauseDownloadTaskCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                    CommandParameter="{Binding .}" />
+                            <Button Style="{StaticResource BtnSmOutlineStyle}" Content="取消" Height="26" FontSize="12" Padding="10,0"
+                                    Visibility="{Binding IsRunning, Converter={StaticResource BoolToVis}}"
+                                    Command="{Binding DataContext.CancelDownloadTaskCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                    CommandParameter="{Binding .}" />
+                            <Button Style="{StaticResource BtnSmOutlineStyle}" Content="继续" Height="26" FontSize="12" Padding="10,0"
+                                    Visibility="{Binding CanResume, Converter={StaticResource BoolToVis}}"
+                                    Command="{Binding DataContext.ResumeDownloadTaskCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                    CommandParameter="{Binding .}" />
+                        </neg:NegiStackPanel>
+                    </neg:NegiGrid>
+                    <ProgressBar Value="{Binding Progress}" Maximum="100" Height="4"
+                                 neg:Negi.CornerRadius="2" Foreground="#fafafa" Background="#26262b" />
+                    <TextBlock Text="{Binding Detail}" FontSize="12" Foreground="#71717a"
+                               TextTrimming="CharacterEllipsis" />
+                </neg:NegiStackPanel>
+            </Border>
+        </DataTemplate>
     </Window.Resources>
 
     <!-- 最外层窗口壳：22px 圆角，背景 #09090b。
