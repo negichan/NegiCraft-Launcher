@@ -43,7 +43,20 @@ public partial class App : Application
             return;
         }
 
-        MainWindow = new MainWindow();
+        // 共享层不依赖任何 UI 框架：调度器与主题都得由平台侧注入。
+        // 必须赶在构造 VM 之前 —— VM 初始化时就会去拉皮肤与版本列表。
+        ViewModels.AppDispatcher.Current = new Services.WpfUiDispatcher(Dispatcher);
+
+        // --ui：把真正的主窗口摆在屏幕外逐页出图（自己收尾，不在这里 Shutdown）。
+        if (Array.IndexOf(e.Args, "--ui") >= 0)
+        {
+            UiShot.Run(e.Args);
+            return;
+        }
+
+        var vm = new ViewModels.MainWindowViewModel();
+
+        MainWindow = new MainWindow { DataContext = vm };
         MainWindow.Show();
     }
 }
