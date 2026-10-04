@@ -5,8 +5,6 @@ using System.Net.Http;
 using System.Security.Cryptography;
 using System.Text;
 using System.Threading.Tasks;
-using Avalonia;
-using Avalonia.Media.Imaging;
 using Avalonia.Platform;
 using SkiaSharp;
 
@@ -343,66 +341,6 @@ public static class SkinService
         {
             return CreateDefaultSteveSkin();
         }
-    }
-
-    private const int AvatarSize = 64;
-
-    /// <summary>
-    /// Creates a pixel-perfect 64x64 head avatar by compositing the 8x8 base face and 8x8 hat/hair layer
-    /// in 1:1 pixel alignment, then upscaling 8x with nearest-neighbor interpolation.
-    /// Eliminates all misalignment and tearing between face and hair layers for Alex and custom skins.
-    /// </summary>
-    public static WriteableBitmap CreateAvatarFromSkin(uint[] skinPixels)
-    {
-        var bmp = new WriteableBitmap(new PixelSize(AvatarSize, AvatarSize), new Vector(96, 96), PixelFormat.Bgra8888, AlphaFormat.Premul);
-        using var fb = bmp.Lock();
-        unsafe
-        {
-            uint* ptr = (uint*)fb.Address;
-
-            // 1. Composite 8x8 face and hat layer
-            var head8 = stackalloc uint[64];
-            for (int y = 0; y < 8; y++)
-            {
-                for (int x = 0; x < 8; x++)
-                {
-                    uint face = skinPixels[(8 + y) * 64 + (8 + x)];
-                    uint hat = skinPixels[(8 + y) * 64 + (40 + x)];
-                    uint hatA = (hat >> 24) & 0xFF;
-
-                    if (hatA == 0)
-                    {
-                        head8[y * 8 + x] = face;
-                    }
-                    else if (hatA == 255)
-                    {
-                        head8[y * 8 + x] = hat;
-                    }
-                    else
-                    {
-                        // Alpha blend hat over face
-                        uint faceA = (face >> 24) & 0xFF;
-                        uint outA = hatA + faceA * (255 - hatA) / 255;
-                        uint outR = (((hat >> 16) & 0xFF) * hatA + ((face >> 16) & 0xFF) * (255 - hatA)) / 255;
-                        uint outG = (((hat >> 8) & 0xFF) * hatA + ((face >> 8) & 0xFF) * (255 - hatA)) / 255;
-                        uint outB = ((hat & 0xFF) * hatA + (face & 0xFF) * (255 - hatA)) / 255;
-                        head8[y * 8 + x] = (outA << 24) | (outR << 16) | (outG << 8) | outB;
-                    }
-                }
-            }
-
-            // 2. Scale 8x8 up to 64x64 with Nearest-Neighbor
-            for (int y = 0; y < AvatarSize; y++)
-            {
-                int srcY = y / 8;
-                for (int x = 0; x < AvatarSize; x++)
-                {
-                    int srcX = x / 8;
-                    ptr[y * AvatarSize + x] = head8[srcY * 8 + srcX];
-                }
-            }
-        }
-        return bmp;
     }
 
     /// <summary>
