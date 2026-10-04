@@ -370,11 +370,10 @@ public sealed class PetMotion
     }
 
     /// <summary>
-    /// 松手：落脚位置对齐到窗口当前落点，然后用拖拽期间采到的速度决定要不要"甩出去"。
+    /// 松手：落脚位置对齐到窗口当前落点。
     ///
-    /// <para><b>只有甩出去才飞</b>（见 <see cref="PetPhysicsProfile.ThrowMinBlocksPerSecond"/>）：
-    /// 速度不够就只是"轻轻放下"，停在原地 —— 桌宠是自由移动的，不主动甩就不受重力。
-    /// 甩出去了就进 <see cref="_thrown"/>，由 <see cref="StepThrown"/> 做抛体运动。</para>
+    /// <para><b>「甩出去」目前是关着的</b> —— 见方法体里那段注释。代码留着没删
+    /// （<see cref="EstimateThrowVelocity"/> / <see cref="StepThrown"/>），打开时把注入点恢复即可。</para>
     /// </summary>
     public void EndDrag(double windowX, double windowY)
     {
@@ -387,23 +386,39 @@ public sealed class PetMotion
         _thrown = false;
         OnGround = true;
 
-        // 抛出期间找支撑面要用"上一帧停稳的位置"做防穿透（见 _standFeetY）。拖拽期间它一直没被
-        // 更新过，留着上一次的值会让第一帧的探针高得离谱 —— 所有台面都成了候选，桌宠会被往上吸。
-        // 所以按松手位置重设一次。
+        // 找支撑面要用"上一帧停稳的位置"做防穿透（见 _standFeetY）。拖拽期间它一直没被更新过，
+        // 留着上一次的值会让下一帧的探针高得离谱 —— 所有台面都成了候选，桌宠会被往上吸。
+        // 所以按松手位置重设一次。**这段与抛出开不开无关，都要做。**
         _standFeetY = LastStage.Scale > 0
             ? windowY + ((FeetStageY + LastStage.StageOffsetY) * LastStage.Scale)
             : double.PositiveInfinity;
 
-        var (vx, vy) = EstimateThrowVelocity();
         _dragSamples.Clear();
 
-        if (vx == 0 && vy == 0) return;
-
-        _velocityX = vx;
-        _velocityY = vy;
-        _thrown = true;
-        OnGround = false;
-        PositionDirty = true;
+        // ═══════════════════════════════════════════════════════════════════════════
+        //  「拖拽抛出」（P4）暂时关掉 —— 代码全在，打开时把下面两段恢复即可。
+        //
+        //  为什么关：抛出要有意义，得先有"可落脚的台面"。宿主现在往
+        //  PetMotionContext.Surfaces 传的还是 null，全屏只剩任务栏那一条地板 —— 甩出去只能
+        //  在屏幕底边来回弹，是个纯粹的玩具动作，还和"自由移动"的手感互相干扰。
+        //  等「地面模式」（把窗口顶边填进 Surfaces）接上，"甩到某个窗口上站住"才成立。
+        //
+        //  实现一件都没删：
+        //    · EstimateThrowVelocity()  对拖拽采样做最小二乘回归求松手速度
+        //    · StepThrown()             抛体运动（重力 / 落地弹跳 / 撞墙反弹）
+        //    · PetPhysicsProfile 里那 7 个手感参数
+        //    · PetPhysicsSelfTest 里那 5 条断言 + NarrowRoom / StandYIn / NewMotionIn / Flight / Fly
+        //  （Tick 里每帧记拖拽采样那行也留着 —— 打开时只需放开这里，不用满地图找。）
+        // ═══════════════════════════════════════════════════════════════════════════
+        // var (vx, vy) = EstimateThrowVelocity();
+        // if (vx == 0 && vy == 0) return;   // 速度不够 ⇒ 只是"轻轻放下"，停在原地
+        //
+        // _velocityX = vx;
+        // _velocityY = vy;
+        // _thrown = true;
+        // OnGround = false;
+        // PositionDirty = true;
+        // ═══════════════════════════════════════════════════════════════════════════
     }
 
     // ---------------------------------------------------------------- 输入
@@ -575,6 +590,8 @@ public sealed class PetMotion
             // **采样就靠这一句**：宿主每帧把窗口挪到光标处，内核每帧从 ctx.Window 记一个点。
             // 不用宿主额外报速度，也不用宿主提供时钟 —— 内核自己的 _timeSeconds 就够了（16ms 一个点，
             // 对"手甩出去"这种量级绰绰有余）。
+            // 抛出目前关着（见 EndDrag 的注释），这里**照样记** —— 打开时就只需放开那一处，
+            // 不用满地图找"哪还得补一行"。一次 List.Add，只有拖拽期间跑。
             RecordDragSample(ctx.Window.X, ctx.Window.Y);
 
             JumpOffsetY = 0;
@@ -1000,6 +1017,10 @@ public sealed class PetMotion
     /// <summary>
     /// 被甩出去的抛体运动：<b>整只桌宠（窗口）在空中飞</b> —— 受重力、撞左右墙与天花板反弹、
     /// 落到台面上按恢复系数弹几下，弹不动了就停住。
+    ///
+    /// <para><b>当前不可达</b>：<see cref="EndDrag"/> 里的注入点被注释掉了（P4 预留，
+    /// 理由见那里的注释），所以 <see cref="_thrown"/> 现在恒为 <c>false</c>。代码留着是为了
+    /// 「地面模式」接上窗口顶面后直接打开。</para>
     ///
     /// <para><b>它和跳跃不是一回事</b>。跳跃只有模型往上飘（窗口不动、阴影留在地面，见
     /// <see cref="JumpOffsetY"/>）；抛出是整只桌宠真的在屏幕里飞，所以走的是
