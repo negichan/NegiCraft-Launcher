@@ -449,7 +449,10 @@ public class SkinRenderControl : OpenGlControlBase, ICustomHitTest
         float armLean = CrouchArmLean * e * RadToRotateInput;
 
         // Walking & sprinting limb swing (airborne suppresses ground walk swings):
-        float sprintBodyLean = _isSprinting ? (0.07f * RadToRotateInput * wk * (1.0f - jk)) : 0f;
+        // ⚠️ 这个值**不要再乘 RadToRotateInput** —— 它在下面 BodyRotate 的 Y 分量里已经乘过一次。
+        // 早先这里多乘了一次 ⇒ 疾跑前倾变成 0.07×360×360（≈25.2 rad = 4 整圈），
+        // 一按疾跑 / 一起跳躯干就转 4 圈再转回来。与 WPF 侧 SkinPoseDriver 保持同一处修正。
+        float sprintBodyLean = _isSprinting ? (0.07f * wk * (1.0f - jk)) : 0f;
         float sprintFactor = _isSprinting ? 1.25f : 1.0f;
         float airLimbFactor = 1.0f - jk * 0.85f;
         float legSwing = (float)(Math.Sin(_walkClock) * 0.62 * RadToRotateInput) * wk * sprintFactor * airLimbFactor;

@@ -218,7 +218,10 @@ public sealed class SkinPoseDriver
         var armLean = CrouchArmLean * e * RadToRotateInput;
 
         // 走路 / 疾跑摆臂摆腿（腾空时压掉地面摆动）。
-        var sprintBodyLean = Sprinting ? 0.07f * RadToRotateInput * wk * (1.0f - jk) : 0f;
+        // ⚠️ 这个值**不要再乘 RadToRotateInput** —— 它在下面 BodyRotate.Y 里已经乘过一次了。
+        // 早先这里多乘了一次，导致疾跑前倾变成 0.07×360×360（≈25.2 rad = 4 整圈）：
+        // 一按疾跑、一起跳，躯干就"唰"地转 4 圈再转回来，看着像胳膊旁边有东西一闪而过。
+        var sprintBodyLean = Sprinting ? 0.07f * wk * (1.0f - jk) : 0f;
         var sprintFactor = Sprinting ? 1.25f : 1.0f;
         var airLimbFactor = 1.0f - (jk * 0.85f);
         var legSwing = (float)(Math.Sin(_walkClock) * 0.62 * RadToRotateInput) * wk * sprintFactor * airLimbFactor;
