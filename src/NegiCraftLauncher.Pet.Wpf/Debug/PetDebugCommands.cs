@@ -242,6 +242,17 @@ public static class PetDebugCommands
                 });
             case "pet-track":
                 return PetDebugMailbox.Ui(() => "OK " + pet.TrackDebugInfo);
+            case "pet-area":
+                // 只读探测内核**真正用来夹取**的工作区（DIP）。多屏下这里能直接看出桌宠被夹在
+                // 哪块屏 —— WPF 侧过去只报主屏（SystemParameters.WorkArea），是条真 bug。
+                // 与 Avalonia 侧逐字节一致。
+                return PetDebugMailbox.Ui(() =>
+                {
+                    var area = pet.CurrentWorkArea;
+                    var win = pet.CurrentWindow;
+                    return $"OK work=({area.X:F0},{area.Y:F0},{area.Width:F0},{area.Height:F0}) " +
+                           $"window=({win.X:F0},{win.Y:F0})";
+                });
             case "pet-mouse":
                 return PetDebugMailbox.Ui(() =>
                 {

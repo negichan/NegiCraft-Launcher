@@ -426,6 +426,15 @@ public partial class PetWindow : Window
         if (Position != target) Position = target;
     }
 
+    /// <summary>
+    /// 内核上一帧真正用来夹取的工作区（DIP）。<c>pet-area</c> 动词读它 ——
+    /// 报内核看到的那个，而不是宿主以为的。
+    /// </summary>
+    public PetWorkArea CurrentWorkArea => _motion.LastWorkArea;
+
+    /// <summary>内核上一帧看到的窗口左上角（DIP）。</summary>
+    public PetPoint CurrentWindow => _motion.LastWindow;
+
     /// <summary>诊断串，<c>pet-track</c> 动词读它。物理每帧往里写，宿主也会写（启动标记 / 异常）。</summary>
     public string TrackDebugInfo
     {
