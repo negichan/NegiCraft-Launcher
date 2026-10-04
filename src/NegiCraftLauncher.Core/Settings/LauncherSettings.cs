@@ -43,6 +43,15 @@ public sealed class LauncherSettings
     public double BackgroundBlur { get; set; }
     public double BackgroundBrightness { get; set; }
 
+    /// <summary>
+    ///     视频壁纸。与 <see cref="CustomBackgroundPath" /> 互斥 —— 两个都设了就按视频算。
+    ///
+    ///     <para>只有 Windows(WPF) 侧会播它：Avalonia 侧没有视频面，读到非空值等于没有背景，
+    ///     会回落到生成图。所以这个字段跨平台共享，语义是"用户在这台机器上选了这段视频当背景"，
+    ///     而不是"背景一定是视频"。</para>
+    /// </summary>
+    public string? VideoBackgroundPath { get; set; }
+
     public string? CurrentInstanceId { get; set; }
 
     /// <summary>桌宠独立自定义名称；为 null 或空时继承当前主账号名称。</summary>

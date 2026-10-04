@@ -10,6 +10,7 @@ using NegiCraftLauncher.Core.Launch;
 using NegiCraftLauncher.Core.Modrinth;
 using NegiCraftLauncher.Core.Net;
 using NegiCraftLauncher.Core.Versions;
+using NegiCraftLauncher.Core.WallpaperEngine;
 using NegiCraftLauncher.Raster;
 using SourceKind = NegiCraftLauncher.Core.Settings.DownloadSource;
 
@@ -143,9 +144,40 @@ public partial class MainWindowViewModel : ViewModelBase
 
     public bool IsCustomBackground => CustomBackgroundPath is not null;
 
+    /// <summary>
+    ///     背景是否被用户改过（选了图或选了视频）。"调整 / 恢复默认"两个按钮看的是它 ——
+    ///     只按 <see cref="IsCustomBackground" /> 的话，换成视频壁纸后按钮会整排消失。
+    /// </summary>
+    public bool HasCustomBackground => IsCustomBackground || IsVideoBackground;
+
     partial void OnCustomBackgroundPathChanged(string? value)
     {
+        // 背景图与视频壁纸互斥：后写的赢。这里只在"真的选了图"时清视频，
+        // 清空（value is null）不触发，否则 ApplySettingsToUi 读回设置时会互相清空。
+        if (value is not null && VideoBackgroundPath is not null) VideoBackgroundPath = null;
+
         OnPropertyChanged(nameof(IsCustomBackground));
+        OnPropertyChanged(nameof(HasCustomBackground));
+        PersistSettings();
+    }
+
+    /// <summary>
+    /// 视频壁纸的文件路径。<b>VM 只持有路径，不持有任何播放器</b> ——
+    /// <c>MediaPlayer</c> 是 WPF 类型，而本工程被 Avalonia 侧共用。
+    /// 视图订阅这个属性，自己去建播放器和画刷（见 App 的 <c>Media/VideoBackgroundController</c>）。
+    /// </summary>
+    [ObservableProperty]
+    private string? _videoBackgroundPath;
+
+    public bool IsVideoBackground => VideoBackgroundPath is not null;
+
+    partial void OnVideoBackgroundPathChanged(string? value)
+    {
+        // 视频优先：一旦有视频就把背景图让出来（见 LauncherSettings.VideoBackgroundPath 的注释）。
+        if (value is not null && CustomBackgroundPath is not null) CustomBackgroundPath = null;
+
+        OnPropertyChanged(nameof(IsVideoBackground));
+        OnPropertyChanged(nameof(HasCustomBackground));
         PersistSettings();
     }
 
@@ -227,6 +259,92 @@ public partial class MainWindowViewModel : ViewModelBase
         }
     }
 
+    /// <summary>
+    /// 视频壁纸的候选扩展名。这里只做粗筛，真正的判据是"能不能播"——
+    /// 播不了由视图侧的 <c>MediaFailed</c> 兜底报错。
+    /// </summary>
+    private static readonly string[] VideoExtensions =
+        [".mp4", ".webm", ".avi", ".mkv", ".mov", ".m4v", ".wmv", ".mpg", ".mpeg"];
+
+    [RelayCommand]
+    private void SetVideoBackground(string path)
+    {
+        if (!IsPlayableVideo(path))
+        {
+            ShowBanner("这不是一个可播放的视频文件。");
+            return;
+        }
+
+        VideoBackgroundPath = path;
+
+        // 和选图片一样：背景只在首页可见，跳过去并把调节浮层打开。
+        CurrentPage = "home";
+        IsBgPopOpen = true;
+    }
+
+    private static bool IsPlayableVideo(string path)
+    {
+        try
+        {
+            return File.Exists(path)
+                   && VideoExtensions.Contains(Path.GetExtension(path), StringComparer.OrdinalIgnoreCase);
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// 把 Wallpaper Engine 当前选中的壁纸搬过来。
+    ///
+    /// <para>只有视频类壁纸能原样播；场景 / 网页 / 应用类壁纸要靠 WE 自己的引擎渲染，
+    /// 我们渲染不了，退而求其次用它的预览图当静态背景，并明确告诉用户"这不是视频"。
+    /// 拿不到预览图时只提示、不改背景 —— 悄悄换成别的比什么都不做更糟。</para>
+    /// </summary>
+    [RelayCommand]
+    private void SyncWallpaperEngine()
+    {
+        var current = WallpaperEngineLocator.GetCurrent(refresh: true);
+        if (current is null)
+        {
+            ShowBanner("没找到 Wallpaper Engine 的壁纸设置，确认它已经装好并选过壁纸。");
+            return;
+        }
+
+        var title = string.IsNullOrWhiteSpace(current.Title) ? "当前壁纸" : current.Title!;
+
+        if (current.Kind == WallpaperEngineKind.Video)
+        {
+            if (current.VideoPath is null)
+            {
+                ShowBanner($"Wallpaper Engine 的「{title}」是视频，但文件已经不在原处了。");
+                return;
+            }
+
+            SetVideoBackground(current.VideoPath);
+            ShowBanner($"已同步 Wallpaper Engine 的视频壁纸：{title}");
+            return;
+        }
+
+        if (current.PreviewPath is null)
+        {
+            ShowBanner($"Wallpaper Engine 的「{title}」是{DescribeKind(current.Kind)}壁纸，拿不到预览图。");
+            return;
+        }
+
+        SetBackground(current.PreviewPath);
+        ShowBanner($"Wallpaper Engine 的「{title}」是{DescribeKind(current.Kind)}壁纸，已用预览图代替。");
+    }
+
+    private static string DescribeKind(WallpaperEngineKind kind) => kind switch
+    {
+        WallpaperEngineKind.Scene => "场景",
+        WallpaperEngineKind.Application => "应用",
+        WallpaperEngineKind.Web => "网页",
+        _ => "未知类型的",
+    };
+
     [RelayCommand]
     private void OpenBgPop()
     {
@@ -242,6 +360,7 @@ public partial class MainWindowViewModel : ViewModelBase
     private void ResetBackground()
     {
         BgArt = PixelArt.CreateBackground(IsDark);
+        VideoBackgroundPath = null;
         CustomBackgroundPath = null;
         BgBlur = 0;
         BgBrightness = 0;
@@ -1434,6 +1553,14 @@ public partial class MainWindowViewModel : ViewModelBase
                 CustomBackgroundPath = settings.CustomBackgroundPath;
             }
 
+            // 视频排在图片后面读：两个 setter 的互斥是"后写的赢"，这样设置里万一两个都有，
+            // 结果稳定地按视频算（见 LauncherSettings.VideoBackgroundPath）。
+            if (!string.IsNullOrEmpty(settings.VideoBackgroundPath) &&
+                File.Exists(settings.VideoBackgroundPath))
+            {
+                VideoBackgroundPath = settings.VideoBackgroundPath;
+            }
+
             BgBlur = settings.BackgroundBlur;
             BgBrightness = settings.BackgroundBrightness;
         }
@@ -1465,6 +1592,7 @@ public partial class MainWindowViewModel : ViewModelBase
         settings.DownloadThreads = DownloadThreads;
         settings.IsDark = IsDark;
         settings.CustomBackgroundPath = CustomBackgroundPath;
+        settings.VideoBackgroundPath = VideoBackgroundPath;
         settings.BackgroundBlur = BgBlur;
         settings.BackgroundBrightness = BgBrightness;
 
@@ -1574,6 +1702,17 @@ public partial class MainWindowViewModel : ViewModelBase
         var timer = new CancellationTokenSource();
         _bannerTimer = timer;
         _ = DismissBannerAsync(timer.Token);
+    }
+
+    /// <summary>
+    /// 视频后端出问题时由视图回调进来。<b>VM 里没有播放器</b>（<c>MediaPlayer</c> 是 WPF 类型，
+    /// 本工程被 Avalonia 共用），所以"能不能播"只有视图知道。
+    /// 这里顺手把视频清掉，让背景回落到生成图 —— 否则会留一块一直不动的空背景。
+    /// </summary>
+    public void ReportVideoBackgroundFailure(string message)
+    {
+        VideoBackgroundPath = null;
+        ShowBanner(message);
     }
 
     private async Task DismissBannerAsync(CancellationToken ct)
