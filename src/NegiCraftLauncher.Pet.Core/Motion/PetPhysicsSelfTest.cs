@@ -35,12 +35,20 @@ public static class PetPhysicsSelfTest
     private const double Scale = 1.0;
     private const double StageOffsetY = 75.0;
 
-    // 工作区给得足够大，保证测速期间不会被左右墙夹到。
-    private static readonly PetWorkArea Room = new(0, 0, 4000, 4000);
+    // 工作区必须**容得下测速期间的整段行程**，否则桌宠半路撞到墙 / 地板，稳态速度就被量低了。
+    // 需求：StartX ≥ 行程（向左测速）且 Room.Width - StartX ≥ 行程（向右），
+    // 其中 行程 = MeasureFrames × FrameSeconds × SprintBlocksPerSecond。
+    // ⚠️ 疾跑从 5.612 提到 11.224 格/s 后，老房间（4000 宽、起点 x=1000）就不够了 ——
+    // 症状是 2tap_a_333 / 2tap_s_333 两条莫名其妙 FAIL，而实现其实是对的。
+    private static readonly PetWorkArea Room = new(0, 0, 8000, 8000);
 
     private static readonly PetStage StageGeometry = new(StageWidth, StageHeight, Scale, StageOffsetY);
 
-    private const double StartX = 1000.0;
+    /// <summary>
+    /// 起始窗口 X。放在房间正中 —— 左右两个方向都要留出 ≥ 行程 的空档
+    /// （见 <see cref="Room"/> 的注释），所以不能贴着左边。
+    /// </summary>
+    private const double StartX = 4000.0;
 
     /// <summary>脚底在窗口内的 Y（DIP）。</summary>
     private static double FeetInWindow => (PetMotion.FeetStageY + StageOffsetY) * Scale;
@@ -112,7 +120,9 @@ public static class PetPhysicsSelfTest
         {
             // S 要先把桌宠抬离地面：它起点就站在地板上，往下会被"不许沉到地面以下"夹住，
             // 速度会量成 0，看着像"双击 S 没生效"。
-            var startY = key == "s" ? StartY - 1500.0 : double.NaN;
+            // ⚠️ 抬升量必须 **大于测速行程**（= MeasureFrames × FrameSeconds × 疾跑速度 ≈ 1437 DIP），
+            // 否则后半段被地板夹住、量出来的速度偏低。疾跑提速后 1500 就不够了。
+            var startY = key == "s" ? StartY - 2500.0 : double.NaN;
             var fast = MeasureSpeed(DoubleTap(key, fastGap), 2 + fastGap + 8, startY);
             Check($"2tap_{key}_333", Math.Abs(fast.BlocksPerSecond - P.SprintBlocksPerSecond) < 0.01 && fast.Sprinting,
                 $"{fast.BlocksPerSecond:F3}/{P.SprintBlocksPerSecond:F3}");
@@ -167,8 +177,9 @@ public static class PetPhysicsSelfTest
         }
 
         // ---------------------------------------------------------- 地面（下界）
-        // 一块离地板 1000 DIP 的平台（模拟某个窗口的标题栏），水平方向罩住起始位置。
-        var ledge = new[] { new PetSurface(900, 1200, FloorTop - 1000) };
+        // 一块离地板 1000 DIP 的平台（模拟某个窗口的标题栏），水平方向**罩住起始位置**
+        // （StartX 落在 [3900, 4200] 里 —— 平台跟着 StartX 一起搬家，见 Room 的注释）。
+        var ledge = new[] { new PetSurface(3900, 4200, FloorTop - 1000) };
 
         // 升到平台上方再按 S 沉下来 → 应当停在平台顶面，而不是穿过去。
         {
@@ -201,13 +212,14 @@ public static class PetPhysicsSelfTest
         }
 
         // ---------------------------------------------------------- 左右墙
+        // 帧数按"走得完半个房间"给：1200 帧 × 1/60s × 5.612 格/s ≈ 7180 DIP > 4000（半宽）。
         {
             var m = NewMotion();
-            Run(m, Hold("a"), 700);
+            Run(m, Hold("a"), 1200);
             var leftOk = Near(m.GroundX, Room.X);
 
             var m2 = NewMotion();
-            Run(m2, Hold("d"), 700);
+            Run(m2, Hold("d"), 1200);
             var rightOk = Near(m2.GroundX, Room.X + Room.Width - StageWidth);
 
             Check("walls", leftOk && rightOk);
