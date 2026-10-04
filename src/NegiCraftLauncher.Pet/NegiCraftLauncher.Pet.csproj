@@ -11,6 +11,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\NegiCraftLauncher.Pet.Core\NegiCraftLauncher.Pet.Core.csproj" />
     <ProjectReference Include="..\NegiCraftLauncher.Skin\NegiCraftLauncher.Skin.csproj" />
   </ItemGroup>
 </Project>

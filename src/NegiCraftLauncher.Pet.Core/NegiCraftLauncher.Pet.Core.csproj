@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <TargetFramework>net10.0</TargetFramework>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <Nullable>enable</Nullable>
+        <IsPackable>false</IsPackable>
+        <GenerateDocumentationFile>false</GenerateDocumentationFile>
+        <!-- 命名空间仍为 NegiCraftLauncher.Pet / .Pet.Services，与 Avalonia 侧那个程序集一致，
+             调用方不用改 using。 -->
+        <RootNamespace>NegiCraftLauncher.Pet</RootNamespace>
+    </PropertyGroup>
+
+    <!-- 刻意零 PackageReference：这个程序集要能被 WPF 侧的桌宠直接引用。
+         桌宠要换后端就必须甩掉 Avalonia，所以这里不能沾 Avalonia ——
+         哪怕只是"签名里出现"也不行，否则它会被复制进 WPF 的输出目录。
+
+         这里放的是**两端共用的契约与 P/Invoke**：
+           IPetHost / PetSettings          宿主契约与名字存储
+           GlobalKeyboardHook / GlobalMouseHook   全局钩子（纯 P/Invoke）
+
+         Avalonia 侧 `NegiCraftLauncher.Pet` 与 WPF 侧 `NegiCraftLauncher.Pet.Wpf`
+         都引用本工程。窗口本体、ShellStyle、调试动词各写各的（view 层不共享）。 -->
+</Project>
