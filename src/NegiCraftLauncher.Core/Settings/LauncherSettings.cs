@@ -54,11 +54,21 @@ public sealed class LauncherSettings
 
     /// <summary>
     ///     视频壁纸是否出声。<b>默认 <c>false</c>（静音）</b> —— 背景视频是替用户放着的，
-    ///     不是他主动点开播的，默认出声太唐突；而且这里没有音量控制，只有开关。
+    ///     不是他主动点开播的，默认出声太唐突。想要声音的用户自己打开。
     ///
     ///     <para>跨平台共享：Avalonia 侧没有视频面，读到什么都不用管。</para>
     /// </summary>
     public bool VideoBackgroundSound { get; set; }
+
+    /// <summary>
+    ///     视频壁纸出声时的音量，<c>0</c>–<c>100</c>。<b>默认 <c>100</c></b>。
+    ///
+    ///     <para>与 <see cref="VideoBackgroundSound" /> 分工：那个是静音开关，这个是"出声时多大声"。
+    ///     拖到 <c>0</c> 会被 VM 顺手当成静音（否则会出现"喇叭开着却没声"的假象）。</para>
+    ///
+    ///     <para>跨平台共享：Avalonia 侧没有视频面，读到什么都不用管。</para>
+    /// </summary>
+    public int VideoBackgroundVolume { get; set; } = 100;
 
     public string? CurrentInstanceId { get; set; }
 

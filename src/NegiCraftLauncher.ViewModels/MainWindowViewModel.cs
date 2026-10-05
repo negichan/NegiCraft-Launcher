@@ -122,6 +122,7 @@ public partial class MainWindowViewModel : ViewModelBase
     partial void OnCurrentPageChanged(string value)
     {
         OnPropertyChanged(nameof(IsOnHome));
+        OnPropertyChanged(nameof(ShowVideoSoundButton));
         CloseAllPopovers();
     }
 
@@ -178,12 +179,15 @@ public partial class MainWindowViewModel : ViewModelBase
 
         OnPropertyChanged(nameof(IsVideoBackground));
         OnPropertyChanged(nameof(HasCustomBackground));
+        OnPropertyChanged(nameof(ShowVideoSoundButton));
+        // 视频没了，喇叭和它底下那条都该消失 —— 按钮的显隐走绑定，浮层得自己收。
+        if (value is null) IsVolumePopOpen = false;
         PersistSettings();
     }
 
     /// <summary>
     /// 视频壁纸是否出声。<b>默认关（静音）</b> —— 背景视频是我们替用户放着的，不是他主动点开播的，
-    /// 突然出声很唐突；而且这里没有音量控制，只有开关。想要声音的用户自己打开。
+    /// 突然出声很唐突。想要声音的用户自己打开（右上角的喇叭，或外观浮层里那行复选框）。
     ///
     /// <para>和 <see cref="VideoBackgroundPath"/> 一样，VM 只存值、不碰播放器 ——
     /// 真正把它应用到 <c>MediaPlayer</c> 的是视图侧的 <c>VideoBackgroundController</c>。</para>
@@ -192,6 +196,43 @@ public partial class MainWindowViewModel : ViewModelBase
     private bool _videoBackgroundSound;
 
     partial void OnVideoBackgroundSoundChanged(bool value) => PersistSettings();
+
+    /// <summary>
+    /// 视频壁纸出声时的音量，0–100，默认 100。
+    ///
+    /// <para>和 <see cref="VideoBackgroundSound"/> 分工明确：那个是静音开关，这个是"出声时多大声"。
+    /// 但拖到 <c>0</c> 会顺手把开关也关掉 —— 否则喇叭图标显示"开着"却一点声音没有，
+    /// 用户只会以为是坏了。</para>
+    /// </summary>
+    [ObservableProperty]
+    private int _videoBackgroundVolume = 100;
+
+    partial void OnVideoBackgroundVolumeChanged(int value)
+    {
+        // 输入框/绑定都可能送来越界值，先夹回去（夹完会再进来一次，那次就走正常分支）。
+        var clamped = Math.Clamp(value, 0, 100);
+        if (clamped != value)
+        {
+            VideoBackgroundVolume = clamped;
+            return;
+        }
+
+        if (clamped == 0 && VideoBackgroundSound) VideoBackgroundSound = false;
+        PersistSettings();
+    }
+
+    /// <summary>
+    /// 右上角那个喇叭按钮是否出现。<b>只有"首页 + 视频背景"才成立</b> —— 背景只在首页可见，
+    /// 在别的页面上留一个管不着的按钮没有意义。
+    /// </summary>
+    public bool ShowVideoSoundButton => IsVideoBackground && IsOnHome;
+
+    /// <summary>
+    /// 喇叭底下那条竖排音量条是否展开。视图侧靠鼠标进出驱动（悬停喇叭就展开），
+    /// 值本身放 VM 只是为了复用 <c>Pop</c> 那套开合动画。
+    /// </summary>
+    [ObservableProperty]
+    private bool _isVolumePopOpen;
 
     [ObservableProperty]
     private double _bgBlur;
@@ -368,6 +409,7 @@ public partial class MainWindowViewModel : ViewModelBase
         BgArt = PixelArt.CreateBackground(IsDark);
         VideoBackgroundPath = null;
         VideoBackgroundSound = false;
+        VideoBackgroundVolume = 100;
         CustomBackgroundPath = null;
         BgBlur = 0;
         BgBrightness = 0;
@@ -563,6 +605,7 @@ public partial class MainWindowViewModel : ViewModelBase
         IsInstPopOpen = false;
         IsDlPopOpen = false;
         IsInstConfigOpen = false;
+        IsVolumePopOpen = false;
     }
 
     // ==========================================================
@@ -1571,6 +1614,7 @@ public partial class MainWindowViewModel : ViewModelBase
             BgBlur = settings.BackgroundBlur;
             BgBrightness = settings.BackgroundBrightness;
             VideoBackgroundSound = settings.VideoBackgroundSound;
+            VideoBackgroundVolume = settings.VideoBackgroundVolume;
         }
         finally
         {
@@ -1604,6 +1648,7 @@ public partial class MainWindowViewModel : ViewModelBase
         settings.BackgroundBlur = BgBlur;
         settings.BackgroundBrightness = BgBrightness;
         settings.VideoBackgroundSound = VideoBackgroundSound;
+        settings.VideoBackgroundVolume = VideoBackgroundVolume;
 
         // Sliders fire on every tick; write once they settle.
         _saveDebounce?.Cancel();
