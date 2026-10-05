@@ -310,6 +310,49 @@
             <Setter Property="IsHitTestVisible" Value="False" />
         </Style>
 
+        <!-- 音量浮层专用的开合动画 —— **刻意不走 `Pop`**。
+             `Pop` 那套是"从触发控件的矩形里长出来、飞出去过冲 1.05 再回落到 0.987"的
+             **菜单**动画（150+110+110ms，还带一条揭示裁切），挂在按钮上的菜单很合适；
+             但音量条是**悬停即出**的东西 —— 370ms 太慢、弹那一下也多余，而且飞行期间
+             `Pop` 会把 `IsHitTestVisible` 压成 false，害得收合看门狗还得配一段宽限。
+             这里换成自己的节奏：淡入 130ms + 从按钮底下滑出 6px（180ms ease-out），
+             关掉时 100ms 原路收回。命中从一开始就可用，宽限期也就不需要了。
+             ⚠️ `RenderTransform` 写在元素自己身上而不是这个 Style 里：样式 setter 里的
+               `Freezable` 有被冻结的风险，冻住就动不了了。 -->
+        <Style x:Key="VolumePopStyle" TargetType="{x:Type Border}">
+            <Setter Property="Opacity" Value="0" />
+            <Setter Property="IsHitTestVisible" Value="False" />
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding IsVolumePopOpen}" Value="True">
+                    <Setter Property="IsHitTestVisible" Value="True" />
+                    <DataTrigger.EnterActions>
+                        <BeginStoryboard>
+                            <Storyboard>
+                                <DoubleAnimation Storyboard.TargetProperty="Opacity"
+                                                 To="1" Duration="0:0:0.13" />
+                                <DoubleAnimation Storyboard.TargetProperty="(UIElement.RenderTransform).(TranslateTransform.Y)"
+                                                 To="0" Duration="0:0:0.18">
+                                    <DoubleAnimation.EasingFunction>
+                                        <CubicEase EasingMode="EaseOut" />
+                                    </DoubleAnimation.EasingFunction>
+                                </DoubleAnimation>
+                            </Storyboard>
+                        </BeginStoryboard>
+                    </DataTrigger.EnterActions>
+                    <DataTrigger.ExitActions>
+                        <BeginStoryboard>
+                            <Storyboard>
+                                <DoubleAnimation Storyboard.TargetProperty="Opacity"
+                                                 To="0" Duration="0:0:0.1" />
+                                <DoubleAnimation Storyboard.TargetProperty="(UIElement.RenderTransform).(TranslateTransform.Y)"
+                                                 To="-6" Duration="0:0:0.1" />
+                            </Storyboard>
+                        </BeginStoryboard>
+                    </DataTrigger.ExitActions>
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
+
         <!-- ============ 竖排音量条（喇叭底下那条）============
              布局照音乐软件那种：一条细轨道，已过部分是实心的、未过部分是暗的，
              小圆钮压在分界处，下面是百分比。
@@ -651,16 +694,22 @@
                    太占地方了。现在轨道 76、内边距 9。
                  ⚠️ 横向定位**不写死边距**：浮层宽度由内容决定，写死数字一改里面的
                    尺寸箭头就不在喇叭正下方了。左边距 0、右边缘由 MainWindow 按
-                   "喇叭中心 − 浮层宽/2" 实时算（见 RepositionVolumePanel）。 -->
+                   "喇叭中心 − 浮层宽/2" 实时算（见 RepositionVolumePanel）。
+                 ⚠️ 上边距 44 = 喇叭按钮的下边缘（12 + 32），**紧贴着不留缝**，
+                   再加 `Background="Transparent"` 把整块矩形都变成可命中 ——
+                   否则指针从按钮往下挪时要穿过一段谁都不算"悬停"的死区，
+                   收合看门狗正好在那 180ms 里轮询一次就会把浮层关掉。
+                 ⚠️ 开合动画**不用 `Pop`**，用资源里 VolumePopStyle 那套自己的。 -->
             <Border x:Name="VolumePanel"
                     HorizontalAlignment="Right" VerticalAlignment="Top"
-                    Margin="0,50,0,0"
-                    Style="{StaticResource PopoverStyle}"
-                    pop:Pop.Anchor="TopCenter"
-                    pop:Pop.Trigger="{Binding ElementName=VideoSoundButton}"
-                    pop:Pop.IsOpen="{Binding IsVolumePopOpen}"
+                    Margin="0,44,0,0"
+                    Background="Transparent"
+                    Style="{StaticResource VolumePopStyle}"
                     Panel.ZIndex="45"
                     MouseEnter="OnVolumePanelMouseEnter">
+                <Border.RenderTransform>
+                    <TranslateTransform Y="-6" />
+                </Border.RenderTransform>
                 <neg:NegiStackPanel Spacing="0" HorizontalAlignment="Center">
                     <!-- 指向喇叭的小尖角。和面板同色，接缝在面板上边的直线段上（圆角在两侧，碰不到）。 -->
                     <Polygon Points="0,7 7,0 14,7" Fill="#111114" HorizontalAlignment="Center" />

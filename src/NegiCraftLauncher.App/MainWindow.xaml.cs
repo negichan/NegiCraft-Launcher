@@ -403,16 +403,13 @@ public partial class MainWindow : Window
     /// 用户看到的就是"鼠标放不过去"。所以这里改成轮询：每次 tick 直接问两个元素
     /// <c>IsMouseOver</c>，只要还在任意一个里面就继续等。</para>
     ///
-    /// <para>另外还要一段宽限：<c>Pop</c> 的开合动画要 370ms，飞行期间它会把浮层的
-    /// <c>IsHitTestVisible</c> 压成 false —— 这段时间 <c>IsMouseOver</c> 恒为 false，
-    /// 不宽限的话浮层刚出来就被看门狗收掉了（见 <see cref="VolumeOpenGraceMs"/>）。</para>
+    /// <para>浮层那块死区靠 XAML 兜掉了（上边距贴住按钮下沿 + <c>Background="Transparent"</c>
+    /// 把整块矩形都变成可命中）。开合动画是 <c>VolumePopStyle</c> 自己的那套，全程可命中，
+    /// 所以这里不需要像 <c>Pop</c> 那样再配一段"动画飞行期间别判"的宽限期。</para>
     /// </summary>
     private readonly DispatcherTimer _volumeHoverTimer;
 
     private const int VolumeHoverPollMs = 180;
-    private const int VolumeOpenGraceMs = 520;
-
-    private DateTime _volumeOpenedAt;
 
     private void OnVideoSoundMouseEnter(object sender, MouseEventArgs e) => ShowVolumePanel();
 
@@ -421,7 +418,6 @@ public partial class MainWindow : Window
     private void ShowVolumePanel()
     {
         if (_vm is null) return;
-        if (!_vm.IsVolumePopOpen) _volumeOpenedAt = DateTime.UtcNow;
         RepositionVolumePanel();
         _vm.IsVolumePopOpen = true;
         _volumeHoverTimer.Start();
@@ -457,9 +453,6 @@ public partial class MainWindow : Window
             _volumeHoverTimer.Stop();
             return;
         }
-
-        // 开合动画还没落定（这期间浮层不可命中），先别判。
-        if ((DateTime.UtcNow - _volumeOpenedAt).TotalMilliseconds < VolumeOpenGraceMs) return;
 
         if (VideoSoundButton.IsMouseOver || VolumePanel.IsMouseOver) return;
 
