@@ -41,6 +41,7 @@ internal sealed class VideoBackgroundController : IDisposable
 
     private string? _path;
     private bool _sound;
+    private int _volume = 100;
     private bool _disposed;
 
     public VideoBackgroundController()
@@ -79,7 +80,25 @@ internal sealed class VideoBackgroundController : IDisposable
     }
 
     /// <summary>
-    /// 把 <see cref="Sound"/> 落到播放器上。<c>Volume</c> 和 <c>IsMuted</c> 一起设：
+    /// 出声时的音量，<c>0</c>–<c>100</c>。值没变时不做任何事。
+    ///
+    /// <para>与 <see cref="Sound" /> 分工：那个是静音开关，这个是"出声时多大声"。
+    /// 静音时一律把播放器音量压到 <c>0</c>，所以这里改成多少都不会漏音。</para>
+    /// </summary>
+    public int Volume
+    {
+        get => _volume;
+        set
+        {
+            var clamped = Math.Clamp(value, 0, 100);
+            if (_volume == clamped) return;
+            _volume = clamped;
+            ApplySound();
+        }
+    }
+
+    /// <summary>
+    /// 把 <see cref="Sound"/> / <see cref="Volume"/> 落到播放器上。<c>Volume</c> 和 <c>IsMuted</c> 一起设：
     /// 光靠 <c>IsMuted</c> 在某些驱动/音频会话上不够干净，<c>Volume=0</c> 是第二道保险。
     /// </summary>
     private void ApplySound()
@@ -89,7 +108,7 @@ internal sealed class VideoBackgroundController : IDisposable
         try
         {
             _player.IsMuted = !_sound;
-            _player.Volume = _sound ? 1.0 : 0.0;
+            _player.Volume = _sound ? _volume / 100.0 : 0.0;
         }
         catch (Exception)
         {
@@ -103,7 +122,7 @@ internal sealed class VideoBackgroundController : IDisposable
         {
             try
             {
-                return $"muted={_player.IsMuted} volume={_player.Volume:0.##} " +
+                return $"muted={_player.IsMuted} volume={_player.Volume:0.##} want={_volume} " +
                        $"hasAudio={_player.HasAudio} pos={_player.Position.TotalSeconds:0.0}s " +
                        $"source={(string.IsNullOrEmpty(_path) ? "n/a" : Path.GetFileName(_path))}";
             }

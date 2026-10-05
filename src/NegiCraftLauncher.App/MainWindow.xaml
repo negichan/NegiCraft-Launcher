@@ -175,6 +175,31 @@
             </Style.Triggers>
         </Style>
 
+        <!-- 亮底变体：图标色按右上角那块背景的亮度自动换（见 MainWindow.UpdateWindowButtonTone）。
+             ⚠️ 为什么是"换整套 Style"而不是给 Button 写 Foreground：
+               WPF 的**本地值优先级高于样式触发器**，直接写 Foreground 会把下面的 IsMouseOver
+               触发器压死，悬停就不变白了。换 Style 没有这个坑。
+             ⚠️ BasedOn 不继承基类的 Style.Triggers，所以悬停那两条必须在这里重写一遍。
+               悬停态自带对比度（深色胶囊 + 白字），所以两种底色下完全一样，不用跟着变。 -->
+        <Style x:Key="WinCtrlLightStyle" TargetType="{x:Type Button}" BasedOn="{StaticResource WinCtrlStyle}">
+            <Setter Property="Foreground" Value="#18181b" />
+            <Style.Triggers>
+                <Trigger Property="IsMouseOver" Value="True">
+                    <Setter Property="Background" Value="#1c1c21" />
+                    <Setter Property="Foreground" Value="#fafafa" />
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+        <Style x:Key="WinCtrlCloseLightStyle" TargetType="{x:Type Button}" BasedOn="{StaticResource WinCtrlCloseStyle}">
+            <Setter Property="Foreground" Value="#18181b" />
+            <Style.Triggers>
+                <Trigger Property="IsMouseOver" Value="True">
+                    <Setter Property="Background" Value="#e81123" />
+                    <Setter Property="Foreground" Value="#ffffff" />
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+
         <!-- Shadcn 风格按钮 -->
         <Style x:Key="BtnStyle" TargetType="{x:Type Button}" BasedOn="{StaticResource {x:Type Button}}">
             <Setter Property="Height" Value="36" />
@@ -283,6 +308,81 @@
         <Style x:Key="PopoverStyle" TargetType="{x:Type Border}">
             <Setter Property="Opacity" Value="0" />
             <Setter Property="IsHitTestVisible" Value="False" />
+        </Style>
+
+        <!-- ============ 竖排音量条（喇叭底下那条）============
+             布局照音乐软件那种：一条细轨道，已过部分是实心的、未过部分是暗的，
+             小圆钮压在分界处，下面是百分比。
+             ⚠️ 配色**用项目自己的 token**（PrimaryBrush / MutedBrush），不要照抄参考图里的红 ——
+               参考图只是拿来说明"布局长什么样"，颜色得跟本项目的深色 zinc 主题走。
+             ⚠️ 轨道用 RepeatButton 的**模板里再放一条细 Border** 来画，而不是直接给
+               RepeatButton 上色 —— 这样按钮本身仍是整幅宽的（好抓、好拖），
+               但看着只有中间 3px 有颜色。直接上色会变成一根 14px 宽的实心柱子。
+             ⚠️ 竖直 Track **不能**写 IsDirectionReversed="True"：实测那样反而是
+               "0 在顶上、100 在底下"，而且 DecreaseRepeatButton（实心那半）跑到上面，
+               成了"音量越小上面越白"。不写（默认 False）才是 0 在下、往上长。
+               实测方法：v=40 时量轨道上圆钮中心，应落在自下往上 40% 处。 -->
+        <Style x:Key="VolumeBarStyle" TargetType="{x:Type RepeatButton}">
+            <Setter Property="Focusable" Value="False" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="{x:Type RepeatButton}">
+                        <Border Width="3" CornerRadius="1.5"
+                                Background="{TemplateBinding Background}"
+                                HorizontalAlignment="Center" />
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+        <Style x:Key="VolumeFillStyle" TargetType="{x:Type RepeatButton}" BasedOn="{StaticResource VolumeBarStyle}">
+            <Setter Property="Background" Value="{DynamicResource PrimaryBrush}" />
+        </Style>
+        <Style x:Key="VolumeRestStyle" TargetType="{x:Type RepeatButton}" BasedOn="{StaticResource VolumeBarStyle}">
+            <Setter Property="Background" Value="{DynamicResource MutedBrush}" />
+        </Style>
+        <Style x:Key="VolumeThumbStyle" TargetType="{x:Type Thumb}">
+            <Setter Property="Width" Value="12" />
+            <Setter Property="Height" Value="12" />
+            <Setter Property="Focusable" Value="False" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="{x:Type Thumb}">
+                        <!-- 实心那半也是浅色，所以钮得自带一圈底色描边，否则和轨道糊在一起 -->
+                        <Ellipse Width="10" Height="10"
+                                 Fill="{DynamicResource PrimaryBrush}"
+                                 Stroke="{DynamicResource CardBackgroundBrush}"
+                                 StrokeThickness="2" />
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+        <Style x:Key="VolumeSliderStyle" TargetType="{x:Type Slider}">
+            <Setter Property="Orientation" Value="Vertical" />
+            <Setter Property="Minimum" Value="0" />
+            <Setter Property="Maximum" Value="100" />
+            <Setter Property="IsSnapToTickEnabled" Value="True" />
+            <Setter Property="TickFrequency" Value="1" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="{x:Type Slider}">
+                        <!-- 整幅背景透明但**可命中**：点在轨道旁边的空白处也能直接跳值 -->
+                        <Grid Background="Transparent">
+                            <Track x:Name="PART_Track"
+                                   Orientation="{TemplateBinding Orientation}">
+                                <Track.DecreaseRepeatButton>
+                                    <RepeatButton Style="{StaticResource VolumeFillStyle}" />
+                                </Track.DecreaseRepeatButton>
+                                <Track.IncreaseRepeatButton>
+                                    <RepeatButton Style="{StaticResource VolumeRestStyle}" />
+                                </Track.IncreaseRepeatButton>
+                                <Track.Thumb>
+                                    <Thumb Style="{StaticResource VolumeThumbStyle}" />
+                                </Track.Thumb>
+                            </Track>
+                        </Grid>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
         </Style>
 
         <!-- 实例卡片 -->
@@ -454,7 +554,10 @@
             <!-- ========================================== -->
             <!-- 1. 像素背景与压暗（仅首页）                  -->
             <!-- ========================================== -->
-            <Grid Visibility="{Binding IsOnHome, Converter={StaticResource BoolToVis}}">
+            <!-- x:Name 是给 MainWindow 的亮度采样用的：窗口按钮的图标色要跟着这块区域变，
+                 采样必须打在**合成完的**画面上（模糊 / 亮度叠加 / .shade 渐变都算在内），
+                 所以取的是这一层的根，而不是单独的 BgLayer。 -->
+            <Grid x:Name="BgRoot" Visibility="{Binding IsOnHome, Converter={StaticResource BoolToVis}}">
                 <!-- 生成的 240x146 场景拉伸铺满并保持硬边；用户选的图片则按比例裁切、允许插值。
                      RenderOptions 不能绑，所以两条路拆成两个元素。 -->
                 <Grid x:Name="BgLayer">
@@ -511,17 +614,70 @@
                     MouseLeftButtonDown="OnDragAreaMouseDown"
                     Panel.ZIndex="25" />
 
-            <!-- 右上角：只留最小化与关闭 -->
+            <!-- 右上角：视频壁纸时多一个喇叭，然后是常规的最小化与关闭 -->
             <neg:NegiStackPanel Orientation="Horizontal" Spacing="4"
                                 HorizontalAlignment="Right" VerticalAlignment="Top"
                                 Margin="0,12,14,0" Panel.ZIndex="30">
-                <Button Style="{StaticResource WinCtrlStyle}" ToolTip="最小化" Click="OnMinimizeClick">
+                <!-- 喇叭本体。图标只反映"开 / 关"两态；音量在它下面那条竖排浮层里调。
+                     ⚠️ 刻意**不给 ToolTip**：悬停时音量浮层会出现在正下方，再弹一个提示气泡
+                       就把浮层盖住了（两个都是"悬停出现"）。图标本身已经够自解释。 -->
+                <Button x:Name="VideoSoundButton"
+                        Style="{StaticResource WinCtrlStyle}"
+                        Visibility="{Binding ShowVideoSoundButton, Converter={StaticResource BoolToVis}}"
+                        Click="OnVideoSoundClick"
+                        MouseEnter="OnVideoSoundMouseEnter">
+                    <Grid Width="17" Height="17">
+                        <materialIcons:MaterialIcon Kind="VolumeHigh" Width="17" Height="17"
+                                                    Visibility="{Binding VideoBackgroundSound, Converter={StaticResource BoolToVis}}" />
+                        <materialIcons:MaterialIcon Kind="VolumeOff" Width="17" Height="17"
+                                                    Visibility="{Binding VideoBackgroundSound, Converter={StaticResource BoolToVis}, ConverterParameter=invert}" />
+                    </Grid>
+                </Button>
+
+                <Button x:Name="MinimizeButton" Style="{StaticResource WinCtrlStyle}" ToolTip="最小化" Click="OnMinimizeClick">
                     <materialIcons:MaterialIcon Kind="WindowMinimize" Width="17" Height="17" />
                 </Button>
-                <Button Style="{StaticResource WinCtrlCloseStyle}" ToolTip="关闭" Click="OnCloseClick">
+                <Button x:Name="CloseButton" Style="{StaticResource WinCtrlCloseStyle}" ToolTip="关闭" Click="OnCloseClick">
                     <materialIcons:MaterialIcon Kind="Close" Width="17" Height="17" />
                 </Button>
             </neg:NegiStackPanel>
+
+            <!-- 音量浮层：喇叭底下那条竖排音量条，照音乐软件那种样式。
+                 ⚠️ 之前做的是"悬停时从喇叭左边滑出一条横的"，那个鼠标很难挪上去
+                   （条子在往左长、指针却在按钮上）。改成挂在按钮正下方的浮层，
+                   指针往下走就进得去；开合靠 MainWindow 里的进出轮询兜底。
+                 ⚠️ 尺寸刻意压小：这是"悬停顺手拨一下"的浮层，不是设置项。
+                   之前 112 高的轨道 + 12 的上下内边距，整块将近 170px（窗口才 720），
+                   太占地方了。现在轨道 76、内边距 9。
+                 ⚠️ 横向定位**不写死边距**：浮层宽度由内容决定，写死数字一改里面的
+                   尺寸箭头就不在喇叭正下方了。左边距 0、右边缘由 MainWindow 按
+                   "喇叭中心 − 浮层宽/2" 实时算（见 RepositionVolumePanel）。 -->
+            <Border x:Name="VolumePanel"
+                    HorizontalAlignment="Right" VerticalAlignment="Top"
+                    Margin="0,50,0,0"
+                    Style="{StaticResource PopoverStyle}"
+                    pop:Pop.Anchor="TopCenter"
+                    pop:Pop.Trigger="{Binding ElementName=VideoSoundButton}"
+                    pop:Pop.IsOpen="{Binding IsVolumePopOpen}"
+                    Panel.ZIndex="45"
+                    MouseEnter="OnVolumePanelMouseEnter">
+                <neg:NegiStackPanel Spacing="0" HorizontalAlignment="Center">
+                    <!-- 指向喇叭的小尖角。和面板同色，接缝在面板上边的直线段上（圆角在两侧，碰不到）。 -->
+                    <Polygon Points="0,7 7,0 14,7" Fill="#111114" HorizontalAlignment="Center" />
+                    <Border Background="#111114" BorderBrush="#26262b" BorderThickness="1"
+                            CornerRadius="10" Padding="9,9">
+                        <neg:NegiStackPanel Spacing="7" HorizontalAlignment="Center">
+                            <Slider x:Name="VideoVolumeSlider"
+                                    Style="{StaticResource VolumeSliderStyle}"
+                                    Height="76" Width="22"
+                                    Value="{Binding VideoBackgroundVolume, Mode=TwoWay}" />
+                            <TextBlock Text="{Binding VideoBackgroundVolume, StringFormat={}{0}%}"
+                                       Foreground="#fafafa" FontSize="11" FontWeight="Medium"
+                                       HorizontalAlignment="Center" />
+                        </neg:NegiStackPanel>
+                    </Border>
+                </neg:NegiStackPanel>
+            </Border>
 
             <!-- ========================================== -->
             <!-- 3. 侧栏底下的磨砂背板                        -->
