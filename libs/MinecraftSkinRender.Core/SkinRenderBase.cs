@@ -1,4 +1,4 @@
-using System.Numerics;
+﻿using System.Numerics;
 
 namespace MinecraftSkinRender;
 
@@ -626,8 +626,15 @@ public abstract class SkinRenderBase
         // 肩线（躯干局部 y = CubeModel.Value）正好是脊椎参考高度的 t=1，所以胳膊和头挂的
         // 就是"扭到头"的那一节；躯干网格自己的顶点按各自高度取同一族矩阵（SpineMatrixAt），
         // 两边共用一个函数，不会出现胳膊转了、肩头的皮没转。
+        // ⚠️ 这条链里**故意不乘 torso**（BodyRotate / BodyPos）。蹲下 / 走路 / 挥拳 / 被拎那几套是照
+        // skinview3d 逐条抄的刚性动作，它们已经把手工的前倾量加在胳膊角度上了（armLean =
+        // CrouchArmLean * e、attackYaw = bodyTurn * 1.8 …）—— 那是扁平骨架年代"胳膊不跟躯干转"
+        // 的必要补偿。躯干一转就带动四肢之后，那些补偿变成第二份：实测蹲下躯干 26° + 胳膊再补
+        // 23.5° ≈ 50°，看着就是整个人往前折。新姿势（骨盆 / 胸椎那两节）根本不写 BodyRotate，
+        // 所以摘掉 torso 对它们零影响。
+
         var chest = Pose(Vector3.Zero, Vector3.Zero, SpineRotate, Vector3.Zero)
-                  * SpineMatrixAt(CubeModel.Value) * torso * pelvis;
+                  * SpineMatrixAt(CubeModel.Value) * pelvis;
 
         return type switch
         {
