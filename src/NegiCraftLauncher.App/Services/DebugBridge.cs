@@ -363,6 +363,8 @@ public sealed class DebugBridge
         sb.Append($"bgvol={_vm.VideoBackgroundVolume} ");
         sb.Append($"video=[{(_window as MainWindow)?.VideoBackgroundDebug ?? "n/a"}] ");
         sb.Append($"speaker=[{(_window as MainWindow)?.SpeakerDebug ?? "n/a"}] ");
+        // 音量条"点哪儿跳到哪儿"的那套换算：拿真实排出来的钮中心反查，差应当是 0。
+        sb.Append($"volbar=[{(_window as MainWindow)?.VolumeBarDebug ?? "n/a"}] ");
         sb.Append($"tone=[{(_window as MainWindow)?.WindowToneDebug ?? "n/a"}] ");
 
         var preview = (_window as MainWindow)?.SkinPreview;

@@ -291,8 +291,9 @@
              ⚠️ 配色**用项目自己的 token**（PrimaryBrush / MutedBrush），不要照抄参考图里的红 ——
                参考图只是拿来说明"布局长什么样"，颜色得跟本项目的深色 zinc 主题走。
              ⚠️ 轨道用 RepeatButton 的**模板里再放一条细 Border** 来画，而不是直接给
-               RepeatButton 上色 —— 这样按钮本身仍是整幅宽的（好抓、好拖），
-               但看着只有中间 3px 有颜色。直接上色会变成一根 14px 宽的实心柱子。
+               RepeatButton 上色 —— 那样看着只有中间 5px 有颜色，直接上色会变成一根
+               24px 宽的实心柱子。命中区域不受这根细条限制：模板根那层透明 Grid 把
+               整列 24px 都算"按到了"，跳值由 OnVolumeBarMouseDown 现算（见 VolumeSliderStyle）。
              ⚠️ 竖直 Track **不能**写 IsDirectionReversed="True"：实测那样反而是
                "0 在顶上、100 在底下"，而且 DecreaseRepeatButton（实心那半）跑到上面，
                成了"音量越小上面越白"。不写（默认 False）才是 0 在下、往上长。
@@ -346,7 +347,10 @@
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="{x:Type Slider}">
-                        <!-- 整幅背景透明但**可命中**：点在轨道旁边的空白处也能直接跳值 -->
+                        <!-- 整幅背景透明但**可命中**：点条上任何一处（不只中间那 5px）都落到这层，
+                             再由 Slider 上的 PreviewMouseLeftButtonDown 换成值。
+                             ⚠️ WPF 的 Track **没有** IsMoveToPointEnabled（那是 Avalonia/WinUI 上的属性），
+                             而这两根 RepeatButton 也没绑 LargeChange 命令 —— 不自己接事件，点轨道就是没反应。 -->
                         <Grid Background="Transparent">
                             <Track x:Name="PART_Track"
                                    Orientation="{TemplateBinding Orientation}">
@@ -697,6 +701,8 @@
                             <Slider x:Name="VideoVolumeSlider"
                                     Style="{StaticResource VolumeSliderStyle}"
                                     Height="96" Width="24"
+                                    PreviewMouseLeftButtonDown="OnVolumeBarMouseDown"
+                                    MouseMove="OnVolumeBarMouseMove"
                                     Value="{Binding VideoBackgroundVolume, Mode=TwoWay}" />
                             <TextBlock Text="{Binding VideoBackgroundVolume, StringFormat={}{0}%}"
                                        Foreground="#fafafa" FontSize="11" FontWeight="Medium"
