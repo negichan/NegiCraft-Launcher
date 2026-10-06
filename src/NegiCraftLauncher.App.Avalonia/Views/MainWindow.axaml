@@ -1,3 +1,9 @@
+<!-- 1180x720 is the *visible* window (Shell); the window itself opens at 1300x840 with
+     60 on each side as room for the drop shadow. Tailwind's shadow-lg overflows only
+     ~12px sideways / ~22px down, so most of that margin is slack — kept anyway, since
+     shrinking it would move the window rect for no visible gain.
+     A borderless transparent window cannot paint outside its own rect, so the window is
+     grown and Shell sits inset instead. The fully transparent margin is click-through. -->
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:vm="using:NegiCraftLauncher.ViewModels"
@@ -11,8 +17,8 @@
         mc:Ignorable="d" d:DesignWidth="1180" d:DesignHeight="720"
         x:Class="NegiCraftLauncher.App.Avalonia.Views.MainWindow"
         x:DataType="vm:MainWindowViewModel"
-        Width="1180" Height="720"
-        MinWidth="960" MinHeight="620"
+        Width="1300" Height="840"
+        MinWidth="1080" MinHeight="740"
         WindowStartupLocation="CenterScreen"
         WindowDecorations="None"
         Background="Transparent"
@@ -139,43 +145,8 @@
             <Setter Property="Foreground" Value="#ffffff"/>
         </Style>
 
-        <!-- General Shadcn Button Styles -->
-        <Style Selector="Button.Btn">
-            <Setter Property="Height" Value="36"/>
-            <Setter Property="Padding" Value="16,0"/>
-            <Setter Property="CornerRadius" Value="10"/>
-            <Setter Property="FontWeight" Value="Medium"/>
-            <Setter Property="Cursor" Value="Hand"/>
-            <Setter Property="BorderThickness" Value="0"/>
-            <Setter Property="HorizontalContentAlignment" Value="Center"/>
-            <Setter Property="VerticalContentAlignment" Value="Center"/>
-        </Style>
-        <Style Selector="Button.BtnSm">
-            <Setter Property="Height" Value="32"/>
-            <Setter Property="Padding" Value="12,0"/>
-            <Setter Property="FontSize" Value="13"/>
-            <Setter Property="CornerRadius" Value="10"/>
-            <Setter Property="FontWeight" Value="Medium"/>
-            <Setter Property="Cursor" Value="Hand"/>
-            <Setter Property="HorizontalContentAlignment" Value="Center"/>
-            <Setter Property="VerticalContentAlignment" Value="Center"/>
-        </Style>
-        <Style Selector="Button.BtnPrimary">
-            <Setter Property="Background" Value="#fafafa"/>
-            <Setter Property="Foreground" Value="#18181b"/>
-        </Style>
-        <Style Selector="Button.BtnPrimary:pointerover">
-            <Setter Property="Opacity" Value="0.9"/>
-        </Style>
-        <Style Selector="Button.BtnOutline">
-            <Setter Property="Background" Value="#111114"/>
-            <Setter Property="Foreground" Value="#fafafa"/>
-            <Setter Property="BorderBrush" Value="#26262b"/>
-            <Setter Property="BorderThickness" Value="1"/>
-        </Style>
-        <Style Selector="Button.BtnOutline:pointerover">
-            <Setter Property="Background" Value="#1c1c21"/>
-        </Style>
+        <!-- Shadcn 按钮那套（Button.Btn / BtnSm / BtnPrimary / BtnOutline）在 App.axaml ——
+             背景调节窗和这扇窗共用同一套，抄两份必然有一天只改一边。 -->
 
         <!-- Instance Selector in Dock -->
         <Style Selector="Button.InstSelect">
@@ -325,15 +296,35 @@
         </Style>
     </Window.Styles>
 
-    <!-- Outermost Window Shell: 22px border radius, background #09090b,
-         1px border #26262b (BorderLineBrush) — matches design/mockup.html .window. -->
-    <Border x:Name="Shell"
+    <!-- Outermost Window Shell: 22px border radius, background #09090b, **no outline** —
+         the shell reads against the desktop from its own fill plus the shadow below.
+         Do not add a BorderThickness here: it would inset every child by that much. -->
+    <!-- Wrapper Panel: keeps the window's Content a full-size (1300x840) element so the
+         debug bridge's `shot` (which renders Window.Content) includes the shadow margin —
+         same as the WPF side, whose root is a Grid. Without it Content would be the
+         inset Shell (1180x720) and the shadow would never appear in a screenshot. -->
+    <Panel>
+    <!-- Shadow caster: a separate Border that only exists to cast the shadow; the Shell
+         (same rect, painted on top) covers its body completely.
+         ⚠️ The BoxShadow must NOT live on Shell itself: Shell has ClipToBounds="True",
+         and Avalonia clips a visual's *own* drawing to its bounds too — so the shadow
+         (painted outside the rect) got cut away entirely and never showed.
+         Value = Tailwind v4 `shadow-lg` verbatim (two layers, both black at 10%).
+         Avalonia parses the comma-separated list and the negative spread natively, so
+         this is a 1:1 port; the WPF side has to fake it with two casters.
+         Margin 60 = exactly the Shell's rect: the insetting is the spread's job. -->
+    <Border x:Name="ShellShadowCaster"
+            Margin="60"
             Background="#09090b"
-            BorderBrush="{DynamicResource BorderLineBrush}"
-            BorderThickness="1"
             CornerRadius="22"
-            ClipToBounds="True"
-            BoxShadow="0 30 80 -20 #CC000000">
+            IsHitTestVisible="False"
+            BoxShadow="0 10 15 -3 #1A000000, 0 4 6 -4 #1A000000"/>
+    <!-- Margin 60 = room for the shadow, which is painted outside this Border's rect. -->
+    <Border x:Name="Shell"
+            Margin="60"
+            Background="#09090b"
+            CornerRadius="22"
+            ClipToBounds="True">
 
         <Panel>
             <!-- ========================================== -->
@@ -350,10 +341,16 @@
                     <Image Source="{Binding BgArt, Converter={StaticResource PixelsToBitmap}}"
                            Stretch="Fill"
                            RenderOptions.BitmapInterpolationMode="None"
-                           IsVisible="{Binding !IsCustomBackground}"/>
-                    <Image Source="{Binding CustomBackgroundPath, Converter={StaticResource PathToBitmap}}"
-                           Stretch="UniformToFill"
-                           IsVisible="{Binding IsCustomBackground}"/>
+                           IsVisible="{Binding !HasCustomBackground}"/>
+                    <!-- Picked wallpaper: same shape as the WPF side — a Rectangle filled with one
+                         shared ImageBrush whose SourceRect/DestinationRect are absolute, so the
+                         framing math is identical on both stacks. Do NOT switch back to
+                         <Image Stretch="UniformToFill"> + RenderTransform: an Image inflates its
+                         own measured size to the cover result, so the element stops being the
+                         visible rect and the pan range comes out wrong (measured on WPF: 1200
+                         inside an 1180 shell ⇒ 5px short on every pan). -->
+                    <Rectangle x:Name="BgCustomImage"
+                               IsVisible="{Binding IsCustomBackground}"/>
                 </Panel>
 
                 <!-- 亮度: negative dims the art under a black wash, positive lifts it with a white one -->
@@ -379,6 +376,7 @@
                         </Border.Background>
                     </Border>
                 </Panel>
+
             </Panel>
 
             <!-- ========================================== -->
@@ -406,7 +404,8 @@
             <!-- ========================================== -->
             <!-- 3. FROSTED BACKDROP UNDER THE SIDEBAR      -->
             <!-- ========================================== -->
-            <Border HorizontalAlignment="Left" VerticalAlignment="Stretch"
+            <Border x:Name="SidebarBackdrop"
+                    HorizontalAlignment="Left" VerticalAlignment="Stretch"
                     Margin="12" Width="60"
                     CornerRadius="18"
                     ClipToBounds="True"
@@ -423,22 +422,24 @@
                            Width="{Binding #Shell.Bounds.Width}"
                            Height="{Binding #Shell.Bounds.Height}"
                            RenderOptions.BitmapInterpolationMode="None"
-                           IsVisible="{Binding !IsCustomBackground}">
+                           IsVisible="{Binding !HasCustomBackground}">
                         <Image.Effect>
                             <BlurEffect Radius="18"/>
                         </Image.Effect>
                     </Image>
-                    <Image Source="{Binding CustomBackgroundPath, Converter={StaticResource PathToBitmap}}"
-                           Stretch="UniformToFill"
-                           HorizontalAlignment="Left" VerticalAlignment="Top"
-                           Margin="-12,-12,0,0"
-                           Width="{Binding #Shell.Bounds.Width}"
-                           Height="{Binding #Shell.Bounds.Height}"
-                           IsVisible="{Binding IsCustomBackground}">
-                        <Image.Effect>
+                    <!-- Same brush instance as the main layer (assigned in code): its local rect is
+                         the shell rect (the -12 margin cancels the backdrop's 12 margin), so one
+                         absolute SourceRect serves both and they cannot drift apart. -->
+                    <Rectangle x:Name="SidebarCustomImage"
+                               HorizontalAlignment="Left" VerticalAlignment="Top"
+                               Margin="-12,-12,0,0"
+                               Width="{Binding #Shell.Bounds.Width}"
+                               Height="{Binding #Shell.Bounds.Height}"
+                               IsVisible="{Binding IsCustomBackground}">
+                        <Rectangle.Effect>
                             <BlurEffect Radius="18"/>
-                        </Image.Effect>
-                    </Image>
+                        </Rectangle.Effect>
+                    </Rectangle>
                     <!-- same bottom shade as the art layer, so the glass is not brighter -->
                     <Border>
                         <Border.Background>
@@ -621,7 +622,8 @@
 
                     <!-- #launchProgress: its own card in the empty bottom-left area, so the dock
                          does not change height while the game is starting -->
-                    <Border HorizontalAlignment="Left" VerticalAlignment="Bottom"
+                    <Border x:Name="LaunchProgressCard"
+                            HorizontalAlignment="Left" VerticalAlignment="Bottom"
                             Margin="100,0,0,20" Width="320"
                             Background="#8C0E0E12"
                             BorderBrush="#17FFFFFF"
@@ -847,8 +849,10 @@
 
                         <!-- .settings: 2 columns 160px 1fr -->
                         <Grid Grid.Row="1" ColumnDefinitions="160 24 *">
-                            <!-- .set-nav -->
-                            <StackPanel Grid.Column="0" Spacing="4">
+                            <!-- .set-nav. ⚠️ The Debug entry is NOT in this file — it is appended
+                                 from MainWindow.Debug.cs under #if DEBUG, so a Release build never
+                                 compiles it (see that file). -->
+                            <StackPanel x:Name="SettingsNavPanel" Grid.Column="0" Spacing="4">
                                 <Button Classes="SetNavBtn" Content="游戏"
                                         Classes.On="{Binding CurrentSettingsTab, Converter={x:Static ObjectConverters.Equal}, ConverterParameter='游戏'}"
                                         Command="{Binding SelectSettingsTabCommand}" CommandParameter="游戏"/>
@@ -866,8 +870,9 @@
                                         Command="{Binding SelectSettingsTabCommand}" CommandParameter="关于"/>
                             </StackPanel>
 
-                            <!-- .set-card: one card per tab, so each group ends on a borderless row -->
-                            <Panel Grid.Column="2" VerticalAlignment="Top">
+                            <!-- .set-card: one card per tab, so each group ends on a borderless row.
+                                 The Debug card is likewise appended from MainWindow.Debug.cs (Debug only). -->
+                            <Panel x:Name="SettingsCardsPanel" Grid.Column="2" VerticalAlignment="Top">
 
                                 <!-- 游戏 -->
                                 <Border Background="#111114" BorderBrush="#26262b" BorderThickness="1" CornerRadius="14" Padding="18,0"
@@ -1087,17 +1092,22 @@
                                                             BorderBrush="#26262b" BorderThickness="1"
                                                             IsVisible="{Binding IsCustomBackground}">
                                                         <Panel>
-                                                            <Image Source="{Binding CustomBackgroundPath, Converter={StaticResource PathToBitmap}}" Stretch="UniformToFill"/>
+                                                            <Image Source="{Binding BgCustomArt, Converter={StaticResource PixelsToBitmap}}" Stretch="UniformToFill"/>
                                                             <Border Background="#ffffff" Opacity="{Binding BgLightOpacity}"/>
                                                             <Border Background="#000000" Opacity="{Binding BgDarkOpacity}"/>
                                                         </Panel>
                                                     </Border>
+                                                    <!-- 门控看 HasCustomBackground（图片**或**视频），
+                                                         与 WPF 侧一致：只按 IsCustomBackground 的话，
+                                                         换成视频壁纸后这一排按钮会整排消失。 -->
                                                     <Button Classes="BtnSm BtnOutline" Content="调整"
-                                                            Command="{Binding OpenBgPopCommand}"
-                                                            IsVisible="{Binding IsCustomBackground}"/>
-                                                    <Button Classes="BtnSm BtnOutline" Content="恢复默认"
+                                                            Command="{Binding OpenBgTuningCommand}"
+                                                            IsVisible="{Binding HasCustomBackground}"/>
+                                                    <!-- 这颗是"换回默认壁纸"（连背景一起清掉）；调节窗里那颗同名的
+                                                         只归零参数、不动壁纸 —— 两件事，文案必须分开。 -->
+                                                    <Button Classes="BtnSm BtnOutline" Content="恢复默认壁纸"
                                                             Command="{Binding ResetBackgroundCommand}"
-                                                            IsVisible="{Binding IsCustomBackground}"/>
+                                                            IsVisible="{Binding HasCustomBackground}"/>
                                                     <Button Classes="BtnSm BtnOutline" Click="OnPickBackgroundClick">
                                                         <StackPanel Orientation="Horizontal" Spacing="6">
                                                             <materialIcons:MaterialIcon Kind="ImageFrame" Width="14" Height="14"/>
@@ -1302,57 +1312,73 @@
             </Border>
 
             <!-- ========================================== -->
-            <!-- 8. BACKGROUND PREVIEW POPUP                -->
-            <!--      (home art stays visible behind it)    -->
+            <!-- 8. BACKGROUND FRAMING TRIO (picked art)    -->
+            <!--      与 WPF 的 8. 背景取景三件套逐项对齐     -->
             <!-- ========================================== -->
-            <Panel ZIndex="55" IsHitTestVisible="{Binding IsBgPopOpen}">
-                <Panel Background="Transparent" PointerPressed="OnBgPopBackdropPointerPressed"/>
-                <Border HorizontalAlignment="Center" VerticalAlignment="Bottom"
-                        Margin="0,0,0,28" Width="480"
-                        Background="#F2111114" BorderBrush="#26262b" BorderThickness="1"
-                        CornerRadius="14" Padding="18,14"
-                        Classes="Popover"
-                        pop:Pop.Anchor="BottomCenter"
-                        pop:Pop.IsOpen="{Binding IsBgPopOpen}"
-                        Classes.Open="{Binding IsBgPopOpen}"
-                        BoxShadow="0 30 80 -20 #EE000000">
-                    <StackPanel Spacing="8">
-                        <Grid ColumnDefinitions="* Auto">
-                            <TextBlock Text="背景预览" FontWeight="SemiBold" Foreground="#fafafa" VerticalAlignment="Center"/>
-                            <TextBlock Grid.Column="1" Text="首页效果" FontSize="11" Foreground="#71717a" VerticalAlignment="Center"/>
-                        </Grid>
+            <!-- 调节卡片已经搬去独立窗口（Views/BackgroundTuningWindow），主窗口里只留"看"的
+                 东西：中上一句提示、右上角一格画中画、底下一条操作说明。 -->
+            <!-- 调节模式的独占层：按住拖 = 平移，滚轮 = 缩放。它压在侧栏 / 皮肤 / 停靠栏**之上**
+                 （ZIndex 44），所以调节期间那些控件点不动 —— 否则一边调一边能翻页、甚至把游戏
+                 启动了，而背景只在首页存在，调节窗就成了在调一个看不见的东西。
+                 顶部让出 52px：窗口按钮和拖窗口那条得一直能用。
+                 ⚠️ 这里绝不能碰 BeginMoveDrag()：那是拖窗口，本层拖的是背景。 -->
+            <Panel x:Name="BgPanSurface" ZIndex="44" Background="Transparent" Cursor="SizeAll"
+                   Margin="0,52,0,0"
+                   IsVisible="{Binding IsFramingVisible}"
+                   PointerPressed="OnBackgroundPanPressed"
+                   PointerMoved="OnBackgroundPanMoved"
+                   PointerReleased="OnBackgroundPanReleased"
+                   PointerCaptureLost="OnBackgroundPanCaptureLost"
+                   PointerWheelChanged="OnBackgroundWheel"/>
 
-                        <Grid ColumnDefinitions="44 * 62">
-                            <TextBlock Text="亮度" VerticalAlignment="Center" Foreground="#a1a1aa" FontSize="13"/>
-                            <Slider Grid.Column="1" Minimum="-100" Maximum="100" Value="{Binding BgBrightness}"
-                                    IsSnapToTickEnabled="True" TickFrequency="1"/>
-                            <TextBox Grid.Column="2" Text="{Binding BgBrightness, Mode=TwoWay}"
-                                     Width="46" Height="28" MinHeight="0" Padding="4,0" HorizontalAlignment="Right"
-                                     TextAlignment="Right" HorizontalContentAlignment="Right"
-                                     VerticalAlignment="Center" VerticalContentAlignment="Center"
-                                     Background="#1c1c21" BorderBrush="#26262b" BorderThickness="1"
-                                     CornerRadius="8" FontSize="13" Foreground="#fafafa"/>
-                        </Grid>
+            <Border x:Name="BgHintPill" ZIndex="45" Cursor="SizeAll"
+                    HorizontalAlignment="Center" VerticalAlignment="Top" Margin="0,50,0,0"
+                    Background="#E6111114" BorderBrush="#26262b" BorderThickness="1"
+                    CornerRadius="15" Padding="11,0" Height="30"
+                    BoxShadow="0 20 50 -20 #DE000000"
+                    PointerPressed="OnHintPillPressed"
+                    PointerMoved="OnFloatDragMove"
+                    PointerReleased="OnFloatDragEnd"
+                    PointerCaptureLost="OnFloatDragCaptureLost"
+                    IsVisible="{Binding IsFramingVisible}">
+                <StackPanel Orientation="Horizontal" Spacing="7" VerticalAlignment="Center">
+                    <materialIcons:MaterialIcon Kind="ImageFrame" Width="13" Height="13"
+                                                Foreground="#a1a1aa" VerticalAlignment="Center"/>
+                    <TextBlock Text="背景预览" FontSize="12" Foreground="#d4d4d8" VerticalAlignment="Center"/>
+                </StackPanel>
+            </Border>
 
-                        <Grid ColumnDefinitions="44 * 62">
-                            <TextBlock Text="模糊" VerticalAlignment="Center" Foreground="#a1a1aa" FontSize="13"/>
-                            <Slider Grid.Column="1" Minimum="0" Maximum="40" Value="{Binding BgBlur}"
-                                    IsSnapToTickEnabled="True" TickFrequency="1"/>
-                            <TextBox Grid.Column="2" Text="{Binding BgBlur, Mode=TwoWay}"
-                                     Width="46" Height="28" MinHeight="0" Padding="4,0" HorizontalAlignment="Right"
-                                     TextAlignment="Right" HorizontalContentAlignment="Right"
-                                     VerticalAlignment="Center" VerticalContentAlignment="Center"
-                                     Background="#1c1c21" BorderBrush="#26262b" BorderThickness="1"
-                                     CornerRadius="8" FontSize="13" Foreground="#fafafa"/>
-                        </Grid>
+            <!-- 画中画：整张图 contain 进来，白框 = 窗口真正看得见的那一块。两个矩形都出自
+                 共享的 BackgroundFrame.ComputeCoverage，和背景同一组数 ⇒ 不可能对不上。
+                 ⚠️ 视频没有解码缓冲，画不出缩略图，所以这格只给自选图片看。 -->
+            <Border x:Name="BgShot" ZIndex="45" Cursor="SizeAll"
+                    HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,52,14,0"
+                    Width="156" Height="95" CornerRadius="6" ClipToBounds="True"
+                    BoxShadow="0 10 15 -3 #1A000000, 0 4 6 -4 #1A000000"
+                    PointerPressed="OnBackgroundShotPressed"
+                    PointerMoved="OnFloatDragMove"
+                    PointerReleased="OnFloatDragEnd"
+                    PointerCaptureLost="OnFloatDragCaptureLost"
+                    IsVisible="{Binding IsFramingVisible}">
+                <Canvas>
+                    <!-- 描边画的是"整张画面"的边界：图片有缩略图时贴着图边几乎看不见，
+                         而视频没有缓冲可画，全靠这条线才看得出"只看到中间这块"。 -->
+                    <Rectangle x:Name="BgShotImage" Stroke="#3f3f46" StrokeThickness="1"/>
+                    <Rectangle x:Name="BgShotView" Stroke="#fafafa" StrokeThickness="1.5"
+                               RadiusX="3" RadiusY="3"/>
+                </Canvas>
+            </Border>
 
-                        <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right" Margin="0,4,0,0">
-                            <Button Classes="BtnSm BtnOutline" Content="恢复默认" Command="{Binding ResetBackgroundCommand}"/>
-                            <Button Classes="BtnSm BtnPrimary" Content="完成" Command="{Binding CloseBgPopCommand}"/>
-                        </StackPanel>
-                    </StackPanel>
-                </Border>
-            </Panel>
+            <!-- 操作说明：窗口最下面。左右分别是停靠栏和进度卡，居中这条正好落在它们中间。 -->
+            <Border ZIndex="45"
+                    HorizontalAlignment="Center" VerticalAlignment="Bottom" Margin="0,0,0,20"
+                    Background="#E6111114" BorderBrush="#26262b" BorderThickness="1"
+                    CornerRadius="15" Padding="12,0" Height="30"
+                    BoxShadow="0 20 50 -20 #DE000000"
+                    IsVisible="{Binding IsFramingVisible}">
+                <TextBlock Text="在背景上按住拖动即可平移，滚轮缩放"
+                           FontSize="12" Foreground="#d4d4d8" VerticalAlignment="Center"/>
+            </Border>
 
             <!-- ========================================== -->
             <!-- 9. BANNER (transient status message)       -->
@@ -1574,16 +1600,7 @@
                 </Border>
             </Panel>
 
-            <!-- ========================================== -->
-            <!-- 11. WINDOW OUTLINE (on top of everything:  -->
-            <!--     the full-bleed home art hides a stroke -->
-            <!--     drawn by the shell border itself)      -->
-            <!-- ========================================== -->
-            <Border IsHitTestVisible="False"
-                    CornerRadius="22"
-                    BorderThickness="1"
-                    BorderBrush="#3f3f46"
-                    ZIndex="80"/>
         </Panel>
     </Border>
+    </Panel>
 </Window>

@@ -41,35 +41,6 @@ public sealed class PixelBufferToBitmapConverter : IValueConverter
         throw new NotSupportedException();
 }
 
-/// <summary>把磁盘路径变成 WPF 的 <see cref="BitmapImage"/>（用户自选的背景照片）。</summary>
-public sealed class PathToBitmapConverter : IValueConverter
-{
-    public object? Convert(object? value, Type targetType, object? parameter, CultureInfo culture)
-    {
-        if (value is not string path || path.Length == 0) return null;
-
-        try
-        {
-            var image = new BitmapImage();
-            image.BeginInit();
-            image.CacheOption = BitmapCacheOption.OnLoad;
-            image.CreateOptions = BitmapCreateOptions.IgnoreImageCache;
-            image.UriSource = new Uri(Path.GetFullPath(path));
-            image.EndInit();
-            image.Freeze();
-            return image;
-        }
-        catch (Exception)
-        {
-            // 用户可能选了张读不出来的图；让背景回落到生成图，而不是让绑定抛异常。
-            return null;
-        }
-    }
-
-    public object? ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture) =>
-        throw new NotSupportedException();
-}
-
 /// <summary>
 /// <c>bool</c> → <see cref="Visibility"/>。传 <c>invert</c> 取反，对应 Avalonia 的
 /// <c>IsVisible="{Binding !X}"</c>。

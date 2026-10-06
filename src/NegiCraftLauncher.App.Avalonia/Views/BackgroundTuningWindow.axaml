@@ -1,0 +1,170 @@
+<!-- 背景调节窗（Avalonia 侧）：与 WPF 的 App/Views/BackgroundTuningWindow.xaml 逐项对齐 ——
+     同样的 320 宽、18 留白、#F2111114 卡底、同一批图标和文案。
+     为什么搬到主窗口外面：弹层整个盖在它正在调的那块背景上，调完才看得见效果。 -->
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:NegiCraftLauncher.ViewModels"
+        xmlns:materialIcons="clr-namespace:NegiCraftLauncher.Icons.Avalonia;assembly=NegiCraftLauncher.Icons.Avalonia"
+        x:Class="NegiCraftLauncher.App.Avalonia.Views.BackgroundTuningWindow"
+        x:DataType="vm:MainWindowViewModel"
+        Title="背景调节"
+        Width="320" SizeToContent="Height"
+        WindowDecorations="None"
+        Background="Transparent"
+        TransparencyLevelHint="Transparent"
+        CanResize="False"
+        ShowInTaskbar="False"
+        WindowStartupLocation="Manual"
+        FontFamily="{StaticResource ContentFontFamily}">
+
+    <Border Margin="18" CornerRadius="14" Background="#F2111114"
+            BorderBrush="#26262b" BorderThickness="1"
+            BoxShadow="0 30 80 -20 #EE000000">
+        <StackPanel Spacing="0">
+
+            <!-- 标题栏：整条可拖（BeginMoveDrag），右边一个关闭。它同时是"这是个窗口"的证据。 -->
+            <Border Background="Transparent" Cursor="SizeAll" Padding="14,11,10,11"
+                    PointerPressed="OnTitleBarPressed">
+                <Grid ColumnDefinitions="Auto * Auto">
+                    <materialIcons:MaterialIcon Kind="DotsGrid" Width="14" Height="14"
+                                                Foreground="#52525b" VerticalAlignment="Center"/>
+                    <TextBlock Grid.Column="1" Text="背景调节" FontWeight="SemiBold" FontSize="13"
+                               Foreground="#fafafa" Margin="8,0,0,0" VerticalAlignment="Center"/>
+                    <!-- 关闭走 VM 而不是 Window.Close：可见性由 IsBgTuningOpen 一处说了算。 -->
+                    <Button Grid.Column="2" Width="28" Height="26" Background="Transparent"
+                            BorderThickness="0" Foreground="#a1a1aa" Cursor="Hand"
+                            Command="{Binding CloseBgTuningCommand}" ToolTip.Tip="关闭">
+                        <materialIcons:MaterialIcon Kind="Close" Width="15" Height="15"/>
+                    </Button>
+                </Grid>
+            </Border>
+
+            <Border Height="1" Background="#26262b"/>
+
+            <StackPanel Spacing="14" Margin="16,14,16,16">
+
+                <StackPanel Spacing="12">
+                    <TextBlock Text="背景" FontSize="12" FontWeight="SemiBold" Foreground="#fafafa"/>
+
+                    <StackPanel Spacing="0">
+                        <Grid ColumnDefinitions="* Auto">
+                            <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                                <materialIcons:MaterialIcon Kind="WeatherSunny" Width="14" Height="14"
+                                                            Foreground="#a1a1aa" VerticalAlignment="Center"/>
+                                <TextBlock Text="亮度" FontSize="13" Foreground="#a1a1aa" VerticalAlignment="Center"/>
+                            </StackPanel>
+                            <TextBlock Grid.Column="1" Text="{Binding BgBrightness}" FontSize="13" FontWeight="Medium"
+                                       Foreground="#fafafa" HorizontalAlignment="Right" VerticalAlignment="Center"/>
+                        </Grid>
+                        <Slider Minimum="-100" Maximum="100" Value="{Binding BgBrightness}"
+                                IsSnapToTickEnabled="True" TickFrequency="1" Margin="0,7,0,0"/>
+                    </StackPanel>
+
+                    <StackPanel Spacing="0">
+                        <Grid ColumnDefinitions="* Auto">
+                            <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                                <materialIcons:MaterialIcon Kind="BlurLinear" Width="14" Height="14"
+                                                            Foreground="#a1a1aa" VerticalAlignment="Center"/>
+                                <TextBlock Text="模糊" FontSize="13" Foreground="#a1a1aa" VerticalAlignment="Center"/>
+                            </StackPanel>
+                            <TextBlock Grid.Column="1" Text="{Binding BgBlur}" FontSize="13" FontWeight="Medium"
+                                       Foreground="#fafafa" HorizontalAlignment="Right" VerticalAlignment="Center"/>
+                        </Grid>
+                        <Slider Minimum="0" Maximum="40" Value="{Binding BgBlur}"
+                                IsSnapToTickEnabled="True" TickFrequency="1" Margin="0,7,0,0"/>
+                    </StackPanel>
+                </StackPanel>
+
+                <!-- 调色只在吃调色的那种背景才出现：色彩矩阵只作用于自选图片，视频和内置场景
+                     都不吃 ⇒ 不支持的时候这一整段（连同上面那条分隔线）不占位置。 -->
+                <Border Height="1" Background="#26262b" IsVisible="{Binding IsCustomBackground}"/>
+
+                <StackPanel Spacing="12" IsVisible="{Binding IsCustomBackground}">
+                    <TextBlock Text="调色" FontSize="12" FontWeight="SemiBold" Foreground="#fafafa"/>
+
+                    <StackPanel Spacing="0">
+                        <Grid ColumnDefinitions="* Auto">
+                            <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                                <materialIcons:MaterialIcon Kind="Contrast" Width="14" Height="14"
+                                                            Foreground="#a1a1aa" VerticalAlignment="Center"/>
+                                <TextBlock Text="对比度" FontSize="13" Foreground="#a1a1aa" VerticalAlignment="Center"/>
+                            </StackPanel>
+                            <TextBlock Grid.Column="1" Text="{Binding BgContrast}" FontSize="13" FontWeight="Medium"
+                                       Foreground="#fafafa" HorizontalAlignment="Right" VerticalAlignment="Center"/>
+                        </Grid>
+                        <Slider Minimum="-100" Maximum="100" Value="{Binding BgContrast}"
+                                IsSnapToTickEnabled="True" TickFrequency="1" Margin="0,7,0,0"/>
+                    </StackPanel>
+
+                    <StackPanel Spacing="0">
+                        <Grid ColumnDefinitions="* Auto">
+                            <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                                <materialIcons:MaterialIcon Kind="Water" Width="14" Height="14"
+                                                            Foreground="#a1a1aa" VerticalAlignment="Center"/>
+                                <TextBlock Text="饱和度" FontSize="13" Foreground="#a1a1aa" VerticalAlignment="Center"/>
+                            </StackPanel>
+                            <TextBlock Grid.Column="1" Text="{Binding BgSaturation}" FontSize="13" FontWeight="Medium"
+                                       Foreground="#fafafa" HorizontalAlignment="Right" VerticalAlignment="Center"/>
+                        </Grid>
+                        <Slider Minimum="-100" Maximum="100" Value="{Binding BgSaturation}"
+                                IsSnapToTickEnabled="True" TickFrequency="1" Margin="0,7,0,0"/>
+                    </StackPanel>
+
+                    <StackPanel Spacing="0">
+                        <Grid ColumnDefinitions="* Auto">
+                            <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                                <materialIcons:MaterialIcon Kind="Palette" Width="14" Height="14"
+                                                            Foreground="#a1a1aa" VerticalAlignment="Center"/>
+                                <TextBlock Text="色相" FontSize="13" Foreground="#a1a1aa" VerticalAlignment="Center"/>
+                            </StackPanel>
+                            <TextBlock Grid.Column="1" Text="{Binding BgHue}" FontSize="13" FontWeight="Medium"
+                                       Foreground="#fafafa" HorizontalAlignment="Right" VerticalAlignment="Center"/>
+                        </Grid>
+                        <Slider Minimum="-180" Maximum="180" Value="{Binding BgHue}"
+                                IsSnapToTickEnabled="True" TickFrequency="1" Margin="0,7,0,0"/>
+                    </StackPanel>
+                </StackPanel>
+
+                <!-- 声音开关：只对视频背景有意义。Avalonia 侧没有视频面，这条实际不会出现，
+                     但留着让两端的结构对得上（WPF 那边有视频时会显示）。 -->
+                <Grid ColumnDefinitions="* Auto" IsVisible="{Binding IsVideoBackground}">
+                    <StackPanel Spacing="1" VerticalAlignment="Center">
+                        <TextBlock Text="播放声音" Foreground="#a1a1aa" FontSize="13"/>
+                        <TextBlock Text="默认静音；打开后视频壁纸的声音会外放。"
+                                   FontSize="11" Foreground="#71717a"/>
+                    </StackPanel>
+                    <CheckBox Grid.Column="1" VerticalAlignment="Center" IsChecked="{Binding VideoBackgroundSound}"/>
+                </Grid>
+
+                <Border Height="1" Background="#26262b"/>
+
+                <StackPanel Spacing="8">
+                    <!-- 只有"选择图片"：Avalonia 侧没有视频壁纸这条面（WPF 专属），
+                         所以这里也不摆那颗点了没反应的按钮。 -->
+                    <Button Classes="BtnSm BtnOutline" Content="选择图片"
+                            HorizontalAlignment="Stretch" Click="OnPickImageClick"/>
+                    <Button Classes="BtnSm BtnOutline" HorizontalAlignment="Stretch" Click="OnSyncWallpaperEngineClick">
+                        <StackPanel Orientation="Horizontal" Spacing="6">
+                            <materialIcons:MaterialIcon Kind="Wallpaper" Width="14" Height="14"/>
+                            <TextBlock Text="同步 Wallpaper Engine" VerticalAlignment="Center"/>
+                        </StackPanel>
+                    </Button>
+                    <!-- 两颗等宽（原型是 flex:1 平分）。恢复默认带图标、完成不带；
+                         而且它只归零参数，不动用户选的那张背景 —— "换回默认壁纸"在设置页的「背景」那一行。 -->
+                    <Grid ColumnDefinitions="* *" Margin="0,2,0,0">
+                        <Button Classes="BtnSm BtnOutline" HorizontalAlignment="Stretch"
+                                Command="{Binding ResetBackgroundTuningCommand}">
+                            <StackPanel Orientation="Horizontal" Spacing="6">
+                                <materialIcons:MaterialIcon Kind="Restore" Width="14" Height="14"/>
+                                <TextBlock Text="恢复默认" VerticalAlignment="Center"/>
+                            </StackPanel>
+                        </Button>
+                        <Button Grid.Column="1" Classes="BtnSm BtnPrimary" Content="完成"
+                                Margin="8,0,0,0" HorizontalAlignment="Stretch"
+                                Command="{Binding CloseBgTuningCommand}"/>
+                    </Grid>
+                </StackPanel>
+            </StackPanel>
+        </StackPanel>
+    </Border>
+</Window>

@@ -93,8 +93,13 @@ public partial class MainWindowViewModel : ViewModelBase
     [RelayCommand]
     private void RecallPet() => RecallPetRequested?.Invoke();
 
-    public MainWindowViewModel()
+    public MainWindowViewModel(IBitmapDecoder? decoder = null)
     {
+        // ⚠️ 必须是构造参数，不能是 init 属性：对象初始化器跑在构造函数**之后**，
+        //    而下面的 ApplySettingsToUi 就会去解保存的壁纸 —— 用 init 的话那次解码永远
+        //    拿到 null 解码器，用户重启后自选壁纸静默变回内置场景（踩过，两端都中）。
+        Decoder = decoder;
+
         _launcher = new Launcher();
         _launcher.Initialize();
 
@@ -123,6 +128,7 @@ public partial class MainWindowViewModel : ViewModelBase
     {
         OnPropertyChanged(nameof(IsOnHome));
         OnPropertyChanged(nameof(ShowVideoSoundButton));
+        RaiseFramingVisibility();
         CloseAllPopovers();
     }
 
@@ -159,7 +165,11 @@ public partial class MainWindowViewModel : ViewModelBase
 
         OnPropertyChanged(nameof(IsCustomBackground));
         OnPropertyChanged(nameof(HasCustomBackground));
+        RaiseFramingVisibility();
         PersistSettings();
+
+        // 自选壁纸的像素由共享层持有（解码 + 调色都在那儿做），这里只是通知它"图换了"。
+        RequestBackgroundDecode();
     }
 
     /// <summary>
@@ -180,6 +190,7 @@ public partial class MainWindowViewModel : ViewModelBase
         OnPropertyChanged(nameof(IsVideoBackground));
         OnPropertyChanged(nameof(HasCustomBackground));
         OnPropertyChanged(nameof(ShowVideoSoundButton));
+        RaiseFramingVisibility();
         // 视频没了，喇叭和它底下那条都该消失 —— 按钮的显隐走绑定，浮层得自己收。
         if (value is null) IsVolumePopOpen = false;
         PersistSettings();
@@ -241,8 +252,82 @@ public partial class MainWindowViewModel : ViewModelBase
     [ObservableProperty]
     private double _bgBrightness;
 
+    /// <summary>
+    /// 背景调节窗口是否开着。它<b>不再是主窗口里的弹层</b>：弹层整个盖在它正在调的那块背景上，
+    /// 而且加了取景和调色之后卡片已经顶到窗口底边，所以挪到窗口外面做成一个独立小窗。
+    /// </summary>
     [ObservableProperty]
-    private bool _isBgPopOpen;
+    private bool _isBgTuningOpen;
+
+    /// <summary>
+    /// 取景手势层（拖背景平移 + 滚轮缩放）与提示胶囊 / 画中画 / 底部说明是否出现 ——
+    /// <b>只在调节窗开着、在首页、而且有自选内容可调的时候</b>。
+    ///
+    /// <para>平常状态背景就该只是一张背景：按住不该能拖，滚轮更不该被"缩放背景"吃掉。
+    /// 挂 <see cref="IsOnHome" /> 是因为背景本身只在首页可见（<c>BgRoot</c> 的可见性就是它），
+    /// 调节的东西不在屏幕上，控件就该一起退场。</para>
+    /// </summary>
+    public bool IsFramingVisible => IsBgTuningOpen && IsOnHome && HasCustomBackground;
+
+    partial void OnIsBgTuningOpenChanged(bool value) => RaiseFramingVisibility();
+
+    /// <summary>门控是算出来的，任何一路输入变了都要重发（换图、换视频、开关窗）。</summary>
+    private void RaiseFramingVisibility() => OnPropertyChanged(nameof(IsFramingVisible));
+
+    /// <summary>调节窗贴在主窗口的哪一侧：false=右。右侧屏幕余量不够时视图会翻到左边。</summary>
+    [ObservableProperty]
+    private bool _bgTuningLeft;
+
+    /// <summary>
+    /// 调节窗的位置（屏幕坐标）。<b>null = 用户没拖过</b>，由视图按"贴主窗口一侧"自己算；
+    /// 拖过一次之后就固定下来，下次开机还在老地方。
+    /// </summary>
+    [ObservableProperty]
+    private double? _bgTuningX;
+
+    [ObservableProperty]
+    private double? _bgTuningY;
+
+    // 视图拖完窗口只管把位置写回这三个属性，落盘统一在这里做 —— 视图不该知道设置文件的存在。
+    // PersistSettings 自带防抖，一次拖动连改三个值也只落盘一次。
+    partial void OnBgTuningLeftChanged(bool value) => PersistSettings();
+    partial void OnBgTuningXChanged(double? value) => PersistSettings();
+    partial void OnBgTuningYChanged(double? value) => PersistSettings();
+
+    // ── 取景与调色 ────────────────────────────────────────────────────────
+    // 这六个都是"滑块值"（百分比 / 度），不是像素也不是矩阵系数：换算全在
+    // Raster/BackgroundFrame.cs 与 Raster/ColorMatrix.cs 里，两端共用一份。
+    //
+    // 两条变更通知是**分开的**：取景只改变换（零像素工作），调色要重跑色彩内核。
+    // 拖动平移如果也触发调色，就是每帧白烧几百万像素 —— 用户的头號红线是帧率。
+
+    /// <summary>横向平移，单位 = 可平移范围的百分比（−100..100）。</summary>
+    [ObservableProperty]
+    private double _bgPanX;
+
+    /// <summary>纵向平移，同上。</summary>
+    [ObservableProperty]
+    private double _bgPanY;
+
+    /// <summary>缩放，100 = 今天的居中裁切铺满。</summary>
+    [ObservableProperty]
+    private double _bgZoom;
+
+    [ObservableProperty]
+    private double _bgContrast;
+
+    [ObservableProperty]
+    private double _bgSaturation;
+
+    /// <summary>色相旋转，−180..180 度。</summary>
+    [ObservableProperty]
+    private double _bgHue;
+
+    /// <summary>取景变了：视图重算变换即可，不用碰像素。</summary>
+    public event Action? BackgroundFramingChanged;
+
+    /// <summary>调色变了：需要重跑 <c>ImageGrade</c>。</summary>
+    public event Action? BackgroundGradeChanged;
 
     public double BgDarkOpacity => BgBrightness < 0 ? -BgBrightness / 200 : 0;
 
@@ -275,6 +360,237 @@ public partial class MainWindowViewModel : ViewModelBase
         PersistSettings();
     }
 
+    partial void OnBgPanXChanged(double value)
+    {
+        if (ClampBack(value, -100, 100, out var c)) { BgPanX = c; return; }
+        RaiseFraming();
+    }
+
+    partial void OnBgPanYChanged(double value)
+    {
+        if (ClampBack(value, -100, 100, out var c)) { BgPanY = c; return; }
+        RaiseFraming();
+    }
+
+    partial void OnBgZoomChanged(double value)
+    {
+        // 下限跟着共享层的 MinZoom 走（100% 仍是 cover 铺满，更小则是"图之外露主题底色"）。
+        // NaN 的兜底必须是 100 而不是下限：一个坏值不该把背景缩成一小块。
+        if (ClampBack(value, BackgroundFrame.MinZoom, BackgroundFrame.MaxZoom, 100, out var c)) { BgZoom = c; return; }
+        RaiseFraming();
+    }
+
+    partial void OnBgContrastChanged(double value)
+    {
+        if (ClampBack(value, -100, 100, out var c)) { BgContrast = c; return; }
+        RaiseGrade();
+    }
+
+    partial void OnBgSaturationChanged(double value)
+    {
+        if (ClampBack(value, -100, 100, out var c)) { BgSaturation = c; return; }
+        RaiseGrade();
+    }
+
+    partial void OnBgHueChanged(double value)
+    {
+        if (ClampBack(value, -180, 180, out var c)) { BgHue = c; return; }
+        RaiseGrade();
+    }
+
+    private void RaiseFraming()
+    {
+        BackgroundFramingChanged?.Invoke();
+        PersistSettings();
+    }
+
+    private void RaiseGrade()
+    {
+        Regrade();
+        BackgroundGradeChanged?.Invoke();
+        PersistSettings();
+    }
+
+    /// <summary>
+    /// 数字框是直写属性的，所以手输的越界值 / 非有限值要夹回去（沿用 <c>BgBrightness</c> 那套写法）。
+    /// 返回 true 表示"值被改过，重新赋值后会有第二次回调，这次就到此为止"。
+    /// </summary>
+    /// <summary>非有限值的兜底：参数域含 0 就回 0，否则回下限。</summary>
+    private static bool ClampBack(double value, double min, double max, out double clamped) =>
+        ClampBack(value, min, max, min <= 0 && max >= 0 ? 0 : min, out clamped);
+
+    private static bool ClampBack(double value, double min, double max, double nonFinite, out double clamped)
+    {
+        clamped = double.IsFinite(value) ? Math.Clamp(value, min, max) : nonFinite;
+        return !clamped.Equals(value);
+    }
+
+    // ==========================================================
+    // 自选壁纸：解码一次 + 调色一次，三个绘制点共用
+    // ==========================================================
+
+    /// <summary>视图注入的解码器；没注入（离屏探针、单测）就不出自选壁纸，安静回落到生成场景。</summary>
+    public IBitmapDecoder? Decoder { get; }
+
+    /// <summary>
+    /// 壁纸解码的长边上限。窗口只有 1180×720，缩到 2560 在 200% 缩放下仍然够锐；
+    /// 按 4K 原尺寸解要多养 18MB 像素，每次调色还白烧一倍时间。
+    /// </summary>
+    public const int BackgroundMaxLongEdge = 2560;
+
+    /// <summary>解码出来的原图（直通 alpha 已在 <c>PixelBuffer.FromBgra</c> 里预乘过）。</summary>
+    private PixelBuffer? _bgSource;
+
+    /// <summary>调色输出。可反复就地重写，见 <see cref="Regrade"/> 的单飞说明。</summary>
+    private PixelBuffer? _bgOut;
+
+    private PixelBuffer? _bgGraded;
+    private CancellationTokenSource? _bgDecode;
+    private bool _gradeRunning;
+    private bool _gradePending;
+
+    /// <summary>
+    /// 自选壁纸最终上屏的像素。主层、侧栏磨砂背板、设置里那张 52×34 缩略图都绑这一个 ⇒
+    /// 一张图只解码一次、只调色一次。<b>没调色时它就是原图同一个实例</b>（直通，不复制），
+    /// 所以默认参数下像素一字不差。
+    /// </summary>
+    public PixelBuffer? BgCustomArt => _bgGraded;
+
+    /// <summary>
+    /// 最近一次自选壁纸解码的结论。壁纸没出来是"静默回落"的（不能因为一张坏图让启动器崩），
+    /// 所以必须留一个能问的地方 —— 调试桥的 <c>state</c> 会把它打出来。
+    /// </summary>
+    public string BackgroundDecodeState { get; private set; } = "idle";
+
+    /// <summary>换图 / 清图：重新解码。latest-wins，旧请求直接作废。</summary>
+    private void RequestBackgroundDecode()
+    {
+        _bgDecode?.Cancel();
+        _gradeRunning = false;
+        _gradePending = false;
+
+        var path = CustomBackgroundPath;
+        if (path is null)
+        {
+            BackgroundDecodeState = "cleared";
+            _bgSource = null;
+            PublishGraded(null);
+            return;
+        }
+
+        if (Decoder is null)
+        {
+            BackgroundDecodeState = "no decoder injected";
+            _bgSource = null;
+            PublishGraded(null);
+            return;
+        }
+
+        var decoder = Decoder;
+        var cts = new CancellationTokenSource();
+        _bgDecode = cts;
+
+        // 解码放后台线程：磁盘读 + 一张 4K 照片的解码是几十毫秒量级，
+        // 不能挡在"刚选完文件"那一下。
+        _ = Task.Run(() =>
+        {
+            PixelBuffer? decoded = null;
+            try
+            {
+                // 缩放放在这里、不交给解码器：两端必须缩同一档、用同一个算法，
+                // 否则同一张图在 WPF 与 Avalonia 上就不是同一份像素（见 IBitmapDecoder）。
+                decoded = PixelBuffer.Downsample(decoder.Decode(path), BackgroundMaxLongEdge);
+                BackgroundDecodeState = $"ok {decoded.Width}x{decoded.Height}";
+            }
+            catch (Exception ex)
+            {
+                decoded = null;
+                BackgroundDecodeState = $"{ex.GetType().Name}: {ex.Message}";
+            }
+
+            if (cts.IsCancellationRequested) return;
+            AppDispatcher.Current.Post(() =>
+            {
+                if (cts.IsCancellationRequested) return;
+                _bgSource = decoded;
+                _bgOut = null;   // 尺寸可能变了，输出缓冲重建
+                Regrade();
+            });
+        }, cts.Token);
+    }
+
+    private void Regrade()
+    {
+        var source = _bgSource;
+        if (source is null)
+        {
+            PublishGraded(null);
+            return;
+        }
+
+        var matrix = ColorMatrix.Build(BgContrast, BgSaturation, BgHue);
+        if (ColorMatrix.IsIdentity(matrix))
+        {
+            // 没调色 ⇒ 直接发布原图那一个实例，一次拷贝都不做。默认参数下像素一字不差。
+            PublishGraded(source);
+            return;
+        }
+
+        if (_gradeRunning)
+        {
+            _gradePending = true;   // 单飞 + 补跑：拖动时永远收敛到最新一组值，不会排队积压
+            return;
+        }
+
+        _gradeRunning = true;
+        var output = EnsureOutput(source);
+
+        // 反复就地重写同一个输出缓冲是安全的，因为：
+        // ① 视图把 PixelBuffer 转成位图时**必定复制**（WPF 的 BitmapSource.Create、
+        //    Avalonia 的 Lock + MemoryCopy），已经上屏的那张不受后续改写影响；
+        // ② 只有回到 UI 线程才发 PropertyChanged。
+        // ⚠️ 哪天给转换器加了缓存 / 共享位图，这条前提就断了，得改成每次新分配。
+        //
+        // 一次调色只有几毫秒，不做中途取消：算完发现有了更进一步的请求就不发布、直接补跑。
+        _ = Task.Run(() =>
+        {
+            ImageGrade.Grade(source.Pixels, output.Pixels, matrix);
+            AppDispatcher.Current.Post(() =>
+            {
+                _gradeRunning = false;
+                if (_gradePending)
+                {
+                    _gradePending = false;
+                    Regrade();
+                    return;
+                }
+
+                // 期间换了图的话 _bgSource 已经不是我刚算的那一张，新请求会自己发布。
+                if (ReferenceEquals(_bgSource, source)) PublishGraded(_bgOut);
+            });
+        });
+    }
+
+    private PixelBuffer EnsureOutput(PixelBuffer source)
+    {
+        var output = _bgOut;
+        if (output is not null && output.Width == source.Width && output.Height == source.Height)
+        {
+            return output;
+        }
+
+        output = new PixelBuffer(source.Width, source.Height);
+        _bgOut = output;
+        return output;
+    }
+
+    private void PublishGraded(PixelBuffer? art)
+    {
+        if (ReferenceEquals(_bgGraded, art)) return;
+        _bgGraded = art;
+        OnPropertyChanged(nameof(BgCustomArt));
+    }
+
     [RelayCommand]
     private void SetBackground(string path)
     {
@@ -288,7 +604,7 @@ public partial class MainWindowViewModel : ViewModelBase
 
         // The art only shows on home, so jump there and open the tuning popup.
         CurrentPage = "home";
-        IsBgPopOpen = true;
+        IsBgTuningOpen = true;
     }
 
     /// <summary>
@@ -332,7 +648,7 @@ public partial class MainWindowViewModel : ViewModelBase
 
         // 和选图片一样：背景只在首页可见，跳过去并把调节浮层打开。
         CurrentPage = "home";
-        IsBgPopOpen = true;
+        IsBgTuningOpen = true;
     }
 
     private static bool IsPlayableVideo(string path)
@@ -393,15 +709,30 @@ public partial class MainWindowViewModel : ViewModelBase
     };
 
     [RelayCommand]
-    private void OpenBgPop()
+    private void OpenBgTuning()
     {
-        // The popup previews the home art, which only renders on that page.
+        // 调节的是首页那层背景，所以开窗前先把人带回首页（弹层时代同一条规矩）。
         CurrentPage = "home";
-        IsBgPopOpen = true;
+        IsBgTuningOpen = true;
     }
 
     [RelayCommand]
-    private void CloseBgPop() => IsBgPopOpen = false;
+    private void CloseBgTuning() => IsBgTuningOpen = false;
+
+    [RelayCommand]
+    private void ResetBackgroundTuning()
+    {
+        // 只把"调过的东西"归零，**不动用户选的那张背景** —— 调节窗里的这颗按钮是"我调坏了，
+        // 回到没调过的样子"，不是"换回默认壁纸"。后者在设置页的「背景」那一行，是另一回事。
+        BgBlur = 0;
+        BgBrightness = 0;
+        BgPanX = 0;
+        BgPanY = 0;
+        BgZoom = 100;
+        BgContrast = 0;
+        BgSaturation = 0;
+        BgHue = 0;
+    }
 
     [RelayCommand]
     private void ResetBackground()
@@ -413,7 +744,13 @@ public partial class MainWindowViewModel : ViewModelBase
         CustomBackgroundPath = null;
         BgBlur = 0;
         BgBrightness = 0;
-        IsBgPopOpen = false;
+        BgPanX = 0;
+        BgPanY = 0;
+        BgZoom = 100;
+        BgContrast = 0;
+        BgSaturation = 0;
+        BgHue = 0;
+        // 不关窗：恢复默认之后用户要看见"回到原样了"，窗口正好就是那面镜子。
     }
 
     // ==========================================================
@@ -1613,6 +1950,15 @@ public partial class MainWindowViewModel : ViewModelBase
 
             BgBlur = settings.BackgroundBlur;
             BgBrightness = settings.BackgroundBrightness;
+            BgPanX = settings.BackgroundPanX;
+            BgPanY = settings.BackgroundPanY;
+            BgZoom = settings.BackgroundZoom;
+            BgContrast = settings.BackgroundContrast;
+            BgSaturation = settings.BackgroundSaturation;
+            BgHue = settings.BackgroundHue;
+            BgTuningLeft = settings.BackgroundTuningLeft;
+            BgTuningX = settings.BackgroundTuningX;
+            BgTuningY = settings.BackgroundTuningY;
             VideoBackgroundSound = settings.VideoBackgroundSound;
             VideoBackgroundVolume = settings.VideoBackgroundVolume;
         }
@@ -1647,6 +1993,15 @@ public partial class MainWindowViewModel : ViewModelBase
         settings.VideoBackgroundPath = VideoBackgroundPath;
         settings.BackgroundBlur = BgBlur;
         settings.BackgroundBrightness = BgBrightness;
+        settings.BackgroundPanX = BgPanX;
+        settings.BackgroundPanY = BgPanY;
+        settings.BackgroundZoom = BgZoom;
+        settings.BackgroundContrast = BgContrast;
+        settings.BackgroundSaturation = BgSaturation;
+        settings.BackgroundHue = BgHue;
+        settings.BackgroundTuningLeft = BgTuningLeft;
+        settings.BackgroundTuningX = BgTuningX;
+        settings.BackgroundTuningY = BgTuningY;
         settings.VideoBackgroundSound = VideoBackgroundSound;
         settings.VideoBackgroundVolume = VideoBackgroundVolume;
 
