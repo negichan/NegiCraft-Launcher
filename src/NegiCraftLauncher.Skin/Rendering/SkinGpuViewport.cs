@@ -83,6 +83,9 @@ public sealed class SkinGpuViewport
             _topEnabled = renderer.EnableTop;
         }
 
+        // 躯干是逐顶点变形的，矩阵换不出来 —— 每帧先把那份网格重写一遍。
+        renderer.UpdateSpine();
+
         // mvp = self(部件) × model × view × proj（行向量顺序）。
         // 把 model 并进部件矩阵，相机就只需要 view / proj，省得依赖"父级 Transform 会下传"。
         var model = renderer.MatrixOf(ModelPartType.Model);

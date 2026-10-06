@@ -39,6 +39,16 @@ public sealed class SkinRenderGpu : SkinRenderBase
     private int _textureHeight = 64;
     private bool _modelBuilt;
 
+    // 躯干那份网格的"静止位置"顶点表，按网格对象存（本体层和第二层各一份，键不能是部件类型 ——
+    // 两层都叫 Body，但外套层的盒子是放大的，顶点不一样）。
+    private readonly Dictionary<MeshGeometry3D, Point3DCollection> _restPositions = [];
+    private Vector3 _lastSpine;
+    private LimbDeform _lastLeftArmDeform;
+    private LimbDeform _lastRightArmDeform;
+    private LimbDeform _lastLeftLegDeform;
+    private LimbDeform _lastRightLegDeform;
+    private bool _deformSynced;
+
     /// <summary>
     /// 贴图的最近邻预放大倍数。
     ///
@@ -124,20 +134,108 @@ public sealed class SkinRenderGpu : SkinRenderBase
 
         _baseLayer.Clear();
         _topLayer.Clear();
+        _restPositions.Clear();
+        _deformSynced = false;
 
-        foreach (var part in SkinModel.Build(_skinType, top: false))
+        var spineSegs = SpineFlexible ? SpineSegments : 1;
+        var limbSegs = LimbFlexible ? LimbSegments : 1;
+
+        foreach (var part in SkinModel.Build(_skinType, top: false, LimbJoints, spineSegs, limbSegs))
         {
             // 披风用的是另一张贴图，这里没有 —— 不跳过会在身后糊一块棕色板子。
             if (part.Type == ModelPartType.Cape) continue;
             _baseLayer.Add((part.Type, BuildMesh(part)));
         }
 
-        foreach (var part in SkinModel.Build(_skinType, top: true))
+        foreach (var part in SkinModel.Build(_skinType, top: true, LimbJoints, spineSegs, limbSegs))
         {
             _topLayer.Add((part.Type, BuildMesh(part)));
         }
 
         _modelBuilt = true;
+    }
+
+    /// <summary>
+    /// 把躯干和四肢的顶点按当前的脊椎与四肢自由形变重写一遍。
+    ///
+    /// <para>GPU 这条路里每个部件是一个静态 <see cref="MeshGeometry3D"/> + 每帧一个矩阵；
+    /// 逐顶点变形没法用矩阵表达，所以可形变部件那份<b>不能 Freeze</b>，位置得每帧换。</para>
+    ///
+    /// <para>角度没变就直接返回 —— 桌宠静止时根本不出帧（静止停渲染），动的时候也只是一次
+    /// 数百点的重写，比重新光栅化整帧便宜得多。</para>
+    /// </summary>
+    public void UpdateSpine()
+    {
+        if (!SpineFlexible && !LimbFlexible) return;
+        if (_deformSynced &&
+            (!SpineFlexible || SpineDeform == _lastSpine) &&
+            (!LimbFlexible || (LeftArmDeform == _lastLeftArmDeform &&
+                               RightArmDeform == _lastRightArmDeform &&
+                               LeftLegDeform == _lastLeftLegDeform &&
+                               RightLegDeform == _lastRightLegDeform))) return;
+
+        _lastSpine = SpineDeform;
+        _lastLeftArmDeform = LeftArmDeform;
+        _lastRightArmDeform = RightArmDeform;
+        _lastLeftLegDeform = LeftLegDeform;
+        _lastRightLegDeform = RightLegDeform;
+        _deformSynced = true;
+
+        foreach (var layer in new[] { _baseLayer, _topLayer })
+        {
+            foreach (var (part, mesh) in layer)
+            {
+                if (!_restPositions.TryGetValue(mesh, out var rest)) continue;
+
+                if (part == ModelPartType.Body && SpineFlexible)
+                {
+                    var pts = new Point3DCollection(rest.Count);
+                    foreach (var p in rest)
+                    {
+                        var d = SpinePoint(new Vector3((float)p.X, (float)p.Y, (float)p.Z));
+                        pts.Add(new Point3D(d.X, d.Y, d.Z));
+                    }
+
+                    mesh.Positions = pts;
+                }
+                else if (LimbFlexible && (part == ModelPartType.LeftArm || part == ModelPartType.RightArm ||
+                                          part == ModelPartType.LeftLeg || part == ModelPartType.RightLeg))
+                {
+                    var pts = new Point3DCollection(rest.Count);
+                    foreach (var p in rest)
+                    {
+                        var d = LimbPoint(part, new Vector3((float)p.X, (float)p.Y, (float)p.Z));
+                        pts.Add(new Point3D(d.X, d.Y, d.Z));
+                    }
+
+                    mesh.Positions = pts;
+                }
+            }
+        }
+    }
+
+    /// <summary>
+    /// 分段开关动了就把网格缓存作废，并让 <see cref="ModelVersion"/> 走一格 ——
+    /// 视图层只认版本号和 <see cref="SkinRenderBase.EnableTop"/>，不看基类的 <c>_switchModel</c>。
+    /// </summary>
+    protected override void OnLimbJointsChanged()
+    {
+        _modelBuilt = false;
+        ModelVersion++;
+    }
+
+    /// <summary>四肢自由形变开关动了同理：网格结构变了，缓存全部作废重建。</summary>
+    protected override void OnLimbFlexibleChanged()
+    {
+        _modelBuilt = false;
+        ModelVersion++;
+    }
+
+    /// <summary>躯干切不切分段同理：网格结构变了，缓存全部作废重建。</summary>
+    protected override void OnSpineChanged()
+    {
+        _modelBuilt = false;
+        ModelVersion++;
     }
 
     /// <summary>
@@ -154,7 +252,7 @@ public sealed class SkinRenderGpu : SkinRenderBase
     /// 所以索引要反着发（<c>0,2,1</c> / <c>0,3,2</c>）—— 发错的表现是模型里外翻转：
     /// 看到的是盒子远端那一面、左右镜像，而且第二层永远被本体挡住。</para>
     /// </summary>
-    private static MeshGeometry3D BuildMesh(SkinPart part)
+    private MeshGeometry3D BuildMesh(SkinPart part)
     {
         var quads = new List<SkinQuad>(6);
         SkinModel.AppendQuads(part, quads);
@@ -188,7 +286,24 @@ public sealed class SkinRenderGpu : SkinRenderBase
             TextureCoordinates = texCoords,
             TriangleIndices = indices,
         };
-        mesh.Freeze();
+
+        // 躯干和四肢在开启自由形变时要逐顶点改写，所以不能 Freeze（冻结过的集合改不动）。
+        // 其它部件照旧冻结 —— 它们每帧只换一个矩阵。
+        var isDeformable = (part.Type == ModelPartType.Body && SpineFlexible) ||
+                           (LimbFlexible && (part.Type == ModelPartType.LeftArm || part.Type == ModelPartType.RightArm ||
+                                             part.Type == ModelPartType.LeftLeg || part.Type == ModelPartType.RightLeg));
+
+        if (isDeformable)
+        {
+            var rest = new Point3DCollection(positions.Count);
+            foreach (var p in positions) rest.Add(p);
+            _restPositions[mesh] = rest;
+        }
+        else
+        {
+            mesh.Freeze();
+        }
+
         return mesh;
     }
 

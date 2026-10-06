@@ -49,80 +49,202 @@
           ContextMenuOpening="OnRootContextMenuOpening">
         <Grid.ContextMenu>
             <ContextMenu x:Name="PetContextMenu">
-                <MenuItem Header="置顶显示" x:Name="MenuTopmost" Click="OnToggleTopmostClick">
+                <!-- 1. 动作与舞蹈 -->
+                <MenuItem Header="动作与舞蹈">
                     <MenuItem.Icon>
-                        <materialIcons:MaterialIcon Kind="Check" Width="16" Height="16" />
+                        <materialIcons:MaterialIcon Kind="HumanHandsup" Width="16" Height="16" />
                     </MenuItem.Icon>
-                </MenuItem>
-                <MenuItem Header="大小比例">
-                    <MenuItem Header="小 (75%)" Click="OnScale75Click" />
-                    <MenuItem Header="标准 (100%)" Click="OnScale100Click" />
-                    <MenuItem Header="大 (125%)" Click="OnScale125Click" />
-                    <MenuItem Header="特大 (150%)" Click="OnScale150Click" />
-                </MenuItem>
-                <MenuItem Header="GPU 渲染（硬件加速）" x:Name="MenuGpuRender" Click="OnToggleGpuRenderClick">
-                    <MenuItem.Icon>
-                        <materialIcons:MaterialIcon x:Name="MenuGpuRenderIcon" Kind="Check" Width="16" Height="16"
-                                                    Visibility="Collapsed" />
-                    </MenuItem.Icon>
-                </MenuItem>
-                <MenuItem Header="潜行动作" x:Name="MenuSneak" Click="OnToggleSneakClick">
-                    <MenuItem.Icon>
-                        <materialIcons:MaterialIcon x:Name="MenuSneakIcon" Kind="Check" Width="16" Height="16"
-                                                    Visibility="Collapsed" />
-                    </MenuItem.Icon>
-                </MenuItem>
-                <Separator />
-                <MenuItem Header="自由待机模式" x:Name="MenuFreeMode" Click="OnSelectFreeModeClick">
-                    <MenuItem.Icon>
-                        <materialIcons:MaterialIcon x:Name="MenuFreeModeIcon" Kind="Check" Width="16" Height="16" />
-                    </MenuItem.Icon>
-                </MenuItem>
-                <MenuItem Header="操控模式 (WASD+空格)" x:Name="MenuControlMode" Click="OnToggleControlModeClick">
-                    <MenuItem.Icon>
-                        <materialIcons:MaterialIcon x:Name="MenuControlModeIcon" Kind="Check" Width="16" Height="16"
-                                                    Visibility="Collapsed" />
-                    </MenuItem.Icon>
-                </MenuItem>
-                <MenuItem Header="鼠标跟随模式" x:Name="MenuFollowMouse" Click="OnToggleFollowMouseClick">
-                    <MenuItem.Icon>
-                        <materialIcons:MaterialIcon x:Name="MenuFollowMouseIcon" Kind="Check" Width="16" Height="16"
-                                                    Visibility="Collapsed" />
-                    </MenuItem.Icon>
-                </MenuItem>
-                <MenuItem Header="前往指定坐标…" x:Name="MenuCoordMode" Click="OnPickCoordClick" />
-                <MenuItem Header="交互模式" x:Name="MenuInteractMode" Click="OnToggleInteractModeClick">
-                    <MenuItem.Icon>
-                        <materialIcons:MaterialIcon x:Name="MenuInteractModeIcon" Kind="Check" Width="16" Height="16"
-                                                    Visibility="Collapsed" />
-                    </MenuItem.Icon>
-                </MenuItem>
-                <MenuItem Header="拦截模式（左Alt+CapsLock切换）" x:Name="MenuInteractSwallow"
-                          Click="OnToggleInteractSwallowClick" IsEnabled="False">
-                    <MenuItem.Icon>
-                        <materialIcons:MaterialIcon x:Name="MenuInteractSwallowIcon" Kind="Check" Width="16" Height="16" />
-                    </MenuItem.Icon>
-                </MenuItem>
-                <Separator />
-                <MenuItem Header="重置朝向" Click="OnResetRotationClick" />
-                <Separator />
-                <MenuItem Header="修改桌宠名字…" Click="OnChangeNameClick" />
-                <MenuItem Header="恢复继承首页名字" x:Name="MenuResetName" Click="OnResetNameToInheritedClick" />
-                <Separator />
-                <MenuItem Header="更换皮肤" x:Name="MenuAccountsParent">
-                    <MenuItem Header="从本地文件加载…" Click="OnPickSkinFileClick" />
+                    <MenuItem Header="扭胯摆动" x:Name="MenuSway" Click="OnToggleSwayClick">
+                        <MenuItem.Icon>
+                            <materialIcons:MaterialIcon x:Name="MenuSwayIcon" Kind="Check" Width="16" Height="16"
+                                                        Visibility="Collapsed" />
+                        </MenuItem.Icon>
+                    </MenuItem>
+                    <MenuItem Header="双手叉腰" x:Name="MenuHips" Click="OnToggleHipsClick">
+                        <MenuItem.Icon>
+                            <materialIcons:MaterialIcon x:Name="MenuHipsIcon" Kind="Check" Width="16" Height="16"
+                                                        Visibility="Collapsed" />
+                        </MenuItem.Icon>
+                    </MenuItem>
+                    <MenuItem Header="潜行动作" x:Name="MenuSneak" Click="OnToggleSneakClick">
+                        <MenuItem.Icon>
+                            <materialIcons:MaterialIcon x:Name="MenuSneakIcon" Kind="Check" Width="16" Height="16"
+                                                        Visibility="Collapsed" />
+                        </MenuItem.Icon>
+                    </MenuItem>
+                    <MenuItem Header="触发挥击" Click="OnTriggerAttackClick">
+                        <MenuItem.Icon>
+                            <materialIcons:MaterialIcon Kind="HandBackRight" Width="16" Height="16" />
+                        </MenuItem.Icon>
+                    </MenuItem>
                     <Separator />
+                    <MenuItem Header="载入 MMD 动作 (.vmd)…" x:Name="MenuLoadVmd" Click="OnLoadVmdClick">
+                        <MenuItem.Icon>
+                            <materialIcons:MaterialIcon Kind="FolderOpenOutline" Width="16" Height="16" />
+                        </MenuItem.Icon>
+                    </MenuItem>
+                    <MenuItem Header="停止 MMD 动作" x:Name="MenuStopVmd" Click="OnStopVmdClick" IsEnabled="False">
+                        <MenuItem.Icon>
+                            <materialIcons:MaterialIcon Kind="StopCircleOutline" Width="16" Height="16" />
+                        </MenuItem.Icon>
+                    </MenuItem>
                 </MenuItem>
+
+                <!-- 2. 行为与操控 -->
+                <MenuItem Header="行为与操控">
+                    <MenuItem.Icon>
+                        <materialIcons:MaterialIcon Kind="ControllerClassicOutline" Width="16" Height="16" />
+                    </MenuItem.Icon>
+                    <MenuItem Header="视线跟随鼠标" x:Name="MenuLookAtMouse" Click="OnToggleLookAtMouseClick">
+                        <MenuItem.Icon>
+                            <materialIcons:MaterialIcon x:Name="MenuLookAtMouseIcon" Kind="Check" Width="16" Height="16" />
+                        </MenuItem.Icon>
+                    </MenuItem>
+                    <Separator />
+                    <MenuItem Header="自由待机模式" x:Name="MenuFreeMode" Click="OnSelectFreeModeClick">
+                        <MenuItem.Icon>
+                            <materialIcons:MaterialIcon x:Name="MenuFreeModeIcon" Kind="Check" Width="16" Height="16" />
+                        </MenuItem.Icon>
+                    </MenuItem>
+                    <MenuItem Header="操控模式 (WASD+空格)" x:Name="MenuControlMode" Click="OnToggleControlModeClick">
+                        <MenuItem.Icon>
+                            <materialIcons:MaterialIcon x:Name="MenuControlModeIcon" Kind="Check" Width="16" Height="16"
+                                                        Visibility="Collapsed" />
+                        </MenuItem.Icon>
+                    </MenuItem>
+                    <MenuItem Header="鼠标跟随模式" x:Name="MenuFollowMouse" Click="OnToggleFollowMouseClick">
+                        <MenuItem.Icon>
+                            <materialIcons:MaterialIcon x:Name="MenuFollowMouseIcon" Kind="Check" Width="16" Height="16"
+                                                        Visibility="Collapsed" />
+                        </MenuItem.Icon>
+                    </MenuItem>
+                    <MenuItem Header="前往指定坐标…" x:Name="MenuCoordMode" Click="OnPickCoordClick">
+                        <MenuItem.Icon>
+                            <materialIcons:MaterialIcon Kind="CrosshairsGps" Width="16" Height="16" />
+                        </MenuItem.Icon>
+                    </MenuItem>
+                    <Separator />
+                    <MenuItem Header="交互模式" x:Name="MenuInteractMode" Click="OnToggleInteractModeClick">
+                        <MenuItem.Icon>
+                            <materialIcons:MaterialIcon x:Name="MenuInteractModeIcon" Kind="Check" Width="16" Height="16"
+                                                        Visibility="Collapsed" />
+                        </MenuItem.Icon>
+                    </MenuItem>
+                    <MenuItem Header="拦截模式（左Alt+CapsLock切换）" x:Name="MenuInteractSwallow"
+                              Click="OnToggleInteractSwallowClick" IsEnabled="False">
+                        <MenuItem.Icon>
+                            <materialIcons:MaterialIcon x:Name="MenuInteractSwallowIcon" Kind="Check" Width="16" Height="16" />
+                        </MenuItem.Icon>
+                    </MenuItem>
+                </MenuItem>
+
+                <!-- 3. 外观与个性化 -->
+                <MenuItem Header="外观与个性化">
+                    <MenuItem.Icon>
+                        <materialIcons:MaterialIcon Kind="Palette" Width="16" Height="16" />
+                    </MenuItem.Icon>
+                    <MenuItem Header="更换皮肤" x:Name="MenuAccountsParent">
+                        <MenuItem.Icon>
+                            <materialIcons:MaterialIcon Kind="AccountOutline" Width="16" Height="16" />
+                        </MenuItem.Icon>
+                        <MenuItem Header="从本地文件加载…" Click="OnPickSkinFileClick">
+                            <MenuItem.Icon>
+                                <materialIcons:MaterialIcon Kind="FolderOpenOutline" Width="16" Height="16" />
+                            </MenuItem.Icon>
+                        </MenuItem>
+                        <Separator />
+                    </MenuItem>
+                    <MenuItem Header="大小比例">
+                        <MenuItem.Icon>
+                            <materialIcons:MaterialIcon Kind="ArrowExpandAll" Width="16" Height="16" />
+                        </MenuItem.Icon>
+                        <MenuItem Header="小 (75%)" Click="OnScale75Click" />
+                        <MenuItem Header="标准 (100%)" Click="OnScale100Click" />
+                        <MenuItem Header="大 (125%)" Click="OnScale125Click" />
+                        <MenuItem Header="特大 (150%)" Click="OnScale150Click" />
+                    </MenuItem>
+                    <MenuItem Header="重置朝向" Click="OnResetRotationClick">
+                        <MenuItem.Icon>
+                            <materialIcons:MaterialIcon Kind="Restore" Width="16" Height="16" />
+                        </MenuItem.Icon>
+                    </MenuItem>
+                    <Separator />
+                    <MenuItem Header="修改桌宠名字…" Click="OnChangeNameClick">
+                        <MenuItem.Icon>
+                            <materialIcons:MaterialIcon Kind="RenameBox" Width="16" Height="16" />
+                        </MenuItem.Icon>
+                    </MenuItem>
+                    <MenuItem Header="恢复继承首页名字" x:Name="MenuResetName" Click="OnResetNameToInheritedClick" />
+                </MenuItem>
+
+                <!-- 4. 系统设置 -->
+                <MenuItem Header="系统设置">
+                    <MenuItem.Icon>
+                        <materialIcons:MaterialIcon Kind="CogOutline" Width="16" Height="16" />
+                    </MenuItem.Icon>
+                    <MenuItem Header="桌宠详细设置…" x:Name="MenuOpenSettings" Click="OnOpenSettingsClick">
+                        <MenuItem.Icon>
+                            <materialIcons:MaterialIcon Kind="Tune" Width="16" Height="16" />
+                        </MenuItem.Icon>
+                    </MenuItem>
+                    <Separator />
+                    <MenuItem Header="置顶显示" x:Name="MenuTopmost" Click="OnToggleTopmostClick">
+                        <MenuItem.Icon>
+                            <materialIcons:MaterialIcon Kind="Check" Width="16" Height="16" />
+                        </MenuItem.Icon>
+                    </MenuItem>
+                    <MenuItem Header="GPU 渲染（硬件加速）" x:Name="MenuGpuRender" Click="OnToggleGpuRenderClick">
+                        <MenuItem.Icon>
+                            <materialIcons:MaterialIcon x:Name="MenuGpuRenderIcon" Kind="Check" Width="16" Height="16"
+                                                        Visibility="Collapsed" />
+                        </MenuItem.Icon>
+                    </MenuItem>
+                </MenuItem>
+
                 <Separator />
-                <MenuItem Header="打开启动器" x:Name="MenuOpenLauncher" Click="OnOpenLauncherClick" />
-                <MenuItem Header="关闭桌宠" Click="OnClosePetClick" />
+
+                <!-- 5. 底部快捷项 -->
+                <MenuItem Header="打开启动器" x:Name="MenuOpenLauncher" Click="OnOpenLauncherClick">
+                    <MenuItem.Icon>
+                        <materialIcons:MaterialIcon Kind="RocketLaunchOutline" Width="16" Height="16" />
+                    </MenuItem.Icon>
+                </MenuItem>
+                <MenuItem Header="关闭桌宠" Click="OnClosePetClick">
+                    <MenuItem.Icon>
+                        <materialIcons:MaterialIcon Kind="Close" Width="16" Height="16" />
+                    </MenuItem.Icon>
+                </MenuItem>
             </ContextMenu>
         </Grid.ContextMenu>
+
+        <!-- 独立桌宠（NegiPet.exe）的托盘菜单宿主。
+             为什么挂在这儿而不是 App.xaml 的资源里：这份 XAML 上面已经踩过一次并写了注释 ——
+             ContextMenu 必须**内联**声明才有逻辑树父级。放进 ResourceDictionary 的菜单没有继承上下文，
+             实测两个症状：弹出来是透明的（什么都不画），而且一开就被自己关掉。
+             这里给它一个专属的 0 尺寸宿主元素，是为了不跟桌宠自己的右键菜单抢同一个 ContextMenu 槽位；
+             启动器内嵌的那份桌宠不会去碰它。菜单项的 Click 由 StandalonePetTray 按 Tag 在代码里接，
+             所以共用的 PetWindow.xaml.cs 里没有任何只有独立版才该做的事。 -->
+        <FrameworkElement x:Name="TrayMenuHost"
+                          Width="0" Height="0"
+                          HorizontalAlignment="Left" VerticalAlignment="Top">
+            <FrameworkElement.ContextMenu>
+                <ContextMenu x:Name="TrayMenu">
+                    <MenuItem Header="显示桌宠" Tag="toggle" />
+                    <MenuItem Header="桌宠设置…" Tag="settings" />
+                    <Separator />
+                    <MenuItem Header="退出桌宠" Tag="exit" />
+                </ContextMenu>
+            </FrameworkElement.ContextMenu>
+        </FrameworkElement>
+
         <Viewbox Stretch="Uniform">
             <skin:SkinPreviewControl x:Name="PetPreview"
                                      Width="160" Height="320"
                                      StageOffsetY="75"
                                      CanDragRotate="False"
+                                     LimbJoints="False"
+                                     LimbFlexible="True"
+                                     SpineFlexible="True"
                                      HeadFollowsHostMouse="False" />
         </Viewbox>
     </Grid>

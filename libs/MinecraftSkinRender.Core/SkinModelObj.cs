@@ -21,6 +21,13 @@ public record SteveModelObj
     public CubeModelItemObj LeftLeg;
     public CubeModelItemObj RightLeg;
     public CubeModelItemObj Cape;
+
+    // Lower limb segments. Null unless the model was built with jointed: true, which is what
+    // lets the OpenGL backend keep drawing the single-piece limbs it knows how to draw.
+    public CubeModelItemObj? LeftForeArm;
+    public CubeModelItemObj? RightForeArm;
+    public CubeModelItemObj? LeftLowerLeg;
+    public CubeModelItemObj? RightLowerLeg;
 }
 
 /// <summary>
@@ -35,4 +42,9 @@ public record SteveTextureObj
     public float[] LeftLeg;
     public float[] RightLeg;
     public float[] Cape;
+
+    public float[]? LeftForeArm;
+    public float[]? RightForeArm;
+    public float[]? LeftLowerLeg;
+    public float[]? RightLowerLeg;
 }

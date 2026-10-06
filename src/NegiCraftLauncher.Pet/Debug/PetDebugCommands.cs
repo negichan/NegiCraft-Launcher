@@ -2,9 +2,12 @@ using System.IO;
 using System.Runtime.InteropServices;
 using System.Text;
 using System.Windows;
+using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
 using System.Windows.Interop;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
+using MinecraftSkinRender;
 using NegiCraftLauncher.Skin.Controls;
 
 namespace NegiCraftLauncher.Pet.Debug;
@@ -133,6 +136,112 @@ public static class PetDebugCommands
                     preview.TriggerAttack();
                     return "OK played";
                 });
+            case "pet-joints":
+                // 四肢切不切两段。关掉时几何和以前逐字节一样，所以这是"两段式有没有把画面弄坏"的开关。
+                return PetDebugMailbox.Ui(() =>
+                {
+                    if (Preview(pet) is not { } preview) return "ERR no pet preview";
+                    preview.LimbJoints = Truthy(arg);
+                    return "OK " + preview.LimbJoints;
+                });
+            case "pet-hips":
+                return PetDebugMailbox.Ui(() =>
+                {
+                    if (Preview(pet) is not { } preview) return "ERR no pet preview";
+                    preview.HandsOnHips = Truthy(arg);
+                    return $"OK hips={preview.HandsOnHips} joints={preview.LimbJoints}";
+                });
+            case "pet-sway":
+                // pet-sway on|off 或 pet-sway <0..1>（定格在特定相位拍照）
+                return PetDebugMailbox.Ui(() =>
+                {
+                    if (Preview(pet) is not { } preview) return "ERR no pet preview";
+                    if (double.TryParse(arg, out var phase))
+                    {
+                        preview.ParkSway(phase);
+                        return $"OK sway parked {phase}";
+                    }
+                    if (arg == "unpark")
+                    {
+                        preview.ParkSway(null);
+                        return "OK sway unparked";
+                    }
+                    preview.ParkSway(null);
+                    preview.Swaying = Truthy(arg);
+                    return $"OK sway={preview.Swaying} hips={preview.HandsOnHips} joints={preview.LimbJoints}";
+                });
+            case "pet-look-mouse":
+                return PetDebugMailbox.Ui(() =>
+                {
+                    if (arg == "on" || arg == "true" || arg == "1") pet.LookAtMouse = true;
+                    else if (arg == "off" || arg == "false" || arg == "0") pet.LookAtMouse = false;
+                    else if (arg == "toggle") pet.LookAtMouse = !pet.LookAtMouse;
+                    return "OK look_at_mouse=" + pet.LookAtMouse;
+                });
+            case "pet-vmd":
+                return PetDebugMailbox.Ui(() =>
+                {
+                    if (Preview(pet) is not { } preview) return "ERR no pet preview";
+                    if (arg == "stop")
+                    {
+                        preview.StopMotion();
+                        return "OK stopped";
+                    }
+                    if (File.Exists(arg))
+                    {
+                        var clip = NegiCraftLauncher.Raster.Animation.VmdMotionClip.Load(arg);
+                        preview.PlayMotion(clip, loop: true);
+                        return $"OK playing clip={clip.Name} duration={clip.DurationSeconds:F2}s";
+                    }
+                    return "ERR file not found: " + arg;
+                });
+            case "pet-vmd-frame":
+                // pet-vmd-frame <帧号|run>。MMD 固定 30 帧/秒，所以帧号 ÷ 30 = 秒。
+                // 舞蹈是连续动作，边播边截图永远抓不到想看的相位 —— 和 pet-sway 的定格同一个理由。
+                return PetDebugMailbox.Ui(() =>
+                {
+                    if (Preview(pet) is not { } preview) return "ERR no pet preview";
+                    if (!preview.IsPlayingMotion) return "ERR no clip loaded";
+
+                    var what = arg.Trim();
+                    if (what == "run")
+                    {
+                        preview.ResumeMotion();
+                        return "OK running";
+                    }
+                    if (!int.TryParse(what, out var frame))
+                        return $"ERR usage: pet-vmd-frame <frame|run>, got '{arg}'";
+
+                    preview.ParkMotionAt(frame / 30.0);
+                    return $"OK parked frame={frame} time={preview.MotionTime:F3}s clip={preview.CurrentMotionName}";
+                });
+            case "pet-vmd-probe":
+                // 下半身重定向的解算中间量。表现是"腿不对"时，先分清是采样采错了帧、
+                // 骨盆搬错了、还是连杆真的解歪了。
+                return PetDebugMailbox.Ui(() =>
+                {
+                    if (Preview(pet) is not { } preview) return "ERR no pet preview";
+                    if (preview.ActiveMotion is not { } clip) return "ERR no clip loaded";
+
+                    return $"t={preview.MotionTime:F3}s hip[{clip.HipSolve}] L[{clip.LeftLegSolve}] R[{clip.RightLegSolve}]";
+                });
+            case "pet-joint":
+                // pet-joint <部位> <外摆> <前后> <竖转>，单位是**度**，加在当前姿势上（不是覆盖）。
+                // 骨架角那组数只能这么调 —— 轴是跟着父段转的，纸面上算不出来。
+                return PetDebugMailbox.Ui(() =>
+                {
+                    if (Preview(pet) is not { } preview) return "ERR no pet preview";
+
+                    var parts = arg.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+                    if (parts.Length < 2) return "ERR usage: pet-joint <larm|rarm|lelbow|relbow|lleg|rleg|lknee|rknee> <x> <y> <z>";
+                    if (JointPart(parts[0]) is not { } part) return "ERR unknown part " + parts[0];
+
+                    float Axis(int i) =>
+                        i < parts.Length && float.TryParse(parts[i], out var v) ? v : 0f;
+
+                    preview.TweakJoint(part, Axis(1), Axis(2), Axis(3));
+                    return $"OK {parts[0]} += ({Axis(1)}, {Axis(2)}, {Axis(3)})deg";
+                });
             case "pet-coord":
                 return PetDebugMailbox.Ui(() =>
                 {
@@ -179,10 +288,92 @@ public static class PetDebugCommands
                     else pet.OpenPetContextMenu();
                     return "OK IsOpen=" + pet.IsPetContextMenuOpen;
                 });
+            case "pet-menu-click":
+                return PetDebugMailbox.Ui(() =>
+                {
+                    var parts = arg.Split(new[] { ' ', ',' }, StringSplitOptions.RemoveEmptyEntries);
+                    if (parts.Length >= 2 && int.TryParse(parts[0], out int cx) && int.TryParse(parts[1], out int cy))
+                    {
+                        bool outside = pet.TestMenuClick(cx, cy);
+                        return $"OK outside={outside} IsOpen={pet.IsPetContextMenuOpen}";
+                    }
+                    return "ERR invalid coords";
+                });
+            case "pet-menu-pos":
+                return PetDebugMailbox.Ui(() =>
+                {
+                    var r = pet.GetMenuScreenRect();
+                    return $"OK rect=({r.X:F0},{r.Y:F0},{r.Width:F0},{r.Height:F0})";
+                });
+            case "shot-menu":
+                return PetDebugMailbox.Ui(() =>
+                {
+                    if (!pet.PetContextMenu.IsOpen) return "ERR menu not open";
+                    pet.PetContextMenu.UpdateLayout();
+                    var w = (int)Math.Ceiling(pet.PetContextMenu.ActualWidth);
+                    var h = (int)Math.Ceiling(pet.PetContextMenu.ActualHeight);
+                    if (w <= 0 || h <= 0) return "ERR menu size zero";
+                    var rtb = new RenderTargetBitmap(w, h, 96, 96, PixelFormats.Pbgra32);
+                    rtb.Render(pet.PetContextMenu);
+                    var enc = new PngBitmapEncoder();
+                    enc.Frames.Add(BitmapFrame.Create(rtb));
+                    using var s = File.Create(arg);
+                    enc.Save(s);
+                    return "OK " + arg;
+                });
+            case "shot-submenu":
+                return PetDebugMailbox.Ui(() =>
+                {
+                    if (!pet.PetContextMenu.IsOpen) return "ERR menu not open";
+                    var firstSpace = arg.IndexOf(' ');
+                    if (firstSpace <= 0 || !int.TryParse(arg[..firstSpace], out int idx))
+                        return $"ERR usage: shot-submenu <idx> <path>, raw arg='{arg}'";
+                    var path = arg[(firstSpace + 1)..].Trim();
+                    if (string.IsNullOrWhiteSpace(path))
+                        return $"ERR path is empty, raw arg='{arg}'";
+
+                    if (idx < 0 || idx >= pet.PetContextMenu.Items.Count) return "ERR index out of range";
+                    if (pet.PetContextMenu.Items[idx] is not MenuItem item) return "ERR item not MenuItem";
+
+                    foreach (var mi in pet.PetContextMenu.Items.OfType<MenuItem>()) mi.IsSubmenuOpen = false;
+                    item.IsSubmenuOpen = true;
+                    item.UpdateLayout();
+
+                    if (item.Template.FindName("PART_Popup", item) is System.Windows.Controls.Primitives.Popup popup &&
+                        popup.Child is FrameworkElement child)
+                    {
+                        child.UpdateLayout();
+                        var w = (int)Math.Ceiling(child.ActualWidth);
+                        var h = (int)Math.Ceiling(child.ActualHeight);
+                        if (w > 0 && h > 0)
+                        {
+                            var rtb = new RenderTargetBitmap(w, h, 96, 96, PixelFormats.Pbgra32);
+                            rtb.Render(child);
+                            var enc = new PngBitmapEncoder();
+                            enc.Frames.Add(BitmapFrame.Create(rtb));
+                            using var s = File.Create(path);
+                            enc.Save(s);
+                            return "OK " + path;
+                        }
+                    }
+                    return "ERR popup child not found";
+                });
+            case "pet-click-root":
+                return PetDebugMailbox.Ui(() =>
+                {
+                    var isLeft = arg != "right";
+                    var btn = isLeft ? System.Windows.Input.MouseButton.Left : System.Windows.Input.MouseButton.Right;
+                    var ev = new System.Windows.Input.MouseButtonEventArgs(System.Windows.Input.Mouse.PrimaryDevice, 0, btn)
+                    {
+                        RoutedEvent = isLeft ? UIElement.MouseLeftButtonDownEvent : UIElement.MouseRightButtonDownEvent
+                    };
+                    pet.RootPanel.RaiseEvent(ev);
+                    return $"OK IsOpen={pet.IsPetContextMenuOpen}";
+                });
             case "pet-dialog":
                 // 两个"只能靠点菜单才出得来"的窗口：改名对话框与全屏选点遮罩。
                 // 不加这个动词就只能靠人手动点，回归时覆盖不到。
-                // 用法：pet-dialog <name|coord|close> [png 绝对路径]
+                // 用法：pet-dialog <name|coord|settings|settings-save|settings-cancel|close> [png 绝对路径]
                 // 给了路径就把那个窗口的内容离屏渲染成 PNG（窗口本身照旧留在屏幕上）。
                 return PetDebugMailbox.Ui(() =>
                 {
@@ -198,6 +389,23 @@ public static class PetDebugCommands
                         case "coord":
                             pet.OpenCoordPickForDebug(shot);
                             return "OK dialog=coord";
+                        case "settings":
+                            var settingsArgs = (shot ?? "").Split(' ', 2, StringSplitOptions.RemoveEmptyEntries);
+                            bool isSetup = settingsArgs.Length > 0 && settingsArgs[0].Equals("setup", StringComparison.OrdinalIgnoreCase);
+                            string? savePath = isSetup
+                                ? (settingsArgs.Length > 1 ? settingsArgs[1].Trim() : null)
+                                : shot;
+                            pet.OpenSettingsWindow(savePath, isSetup);
+                            return "OK dialog=settings";
+                        case "settings-save" or "settings-cancel":
+                        {
+                            // 这两个按钮就是崩溃复发点：设置窗是非模态 Show() 出来的，
+                            // 而按钮里曾经直接设 DialogResult，一点就带走整个进程。
+                            var dlg = pet.OpenSettingsWindow();
+                            var btn = which == "settings-save" ? dlg.BtnSave : dlg.BtnCancel;
+                            btn.RaiseEvent(new RoutedEventArgs(ButtonBase.ClickEvent));
+                            return $"OK dialog={which} visible={dlg.IsVisible} result={dlg.CloseResult}";
+                        }
                         case "close":
                             pet.CloseDebugDialogs();
                             return "OK dialog=closed";
@@ -331,6 +539,21 @@ public static class PetDebugCommands
         verb.StartsWith("pet-", StringComparison.Ordinal) || verb == "shot-pet";
 
     private static bool Truthy(string arg) => arg == "on" || arg == "true" || arg == "1";
+
+    /// <summary>pet-joint 的部位名 → 部件。认不出来返回 null，让调用方报 usage。</summary>
+    private static ModelPartType? JointPart(string name) => name switch
+    {
+        "larm" => ModelPartType.LeftArm,
+        "rarm" => ModelPartType.RightArm,
+        "lelbow" or "lforearm" => ModelPartType.LeftForeArm,
+        "relbow" or "rforearm" => ModelPartType.RightForeArm,
+        "lleg" => ModelPartType.LeftLeg,
+        "rleg" => ModelPartType.RightLeg,
+        "body" or "spine" => ModelPartType.Body,
+        "lknee" or "llowerleg" => ModelPartType.LeftLowerLeg,
+        "rknee" or "rlowerleg" => ModelPartType.RightLowerLeg,
+        _ => null
+    };
 
     /// <summary>
     /// WPF 桌宠把预览控件暴露成属性（<see cref="PetWindow.Preview"/>），
