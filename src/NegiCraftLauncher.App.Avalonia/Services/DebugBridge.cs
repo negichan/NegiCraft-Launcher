@@ -1,4 +1,5 @@
 using System;
+using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Text;
@@ -9,6 +10,7 @@ using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Media.Imaging;
 using Avalonia.VisualTree;
 using NegiCraftLauncher.ViewModels;
+using NegiCraftLauncher.Raster;
 using NegiCraftLauncher.App.Avalonia.Views;
 using NegiCraftLauncher.Pet.Avalonia.Debug;
 using NegiCraftLauncher.Skin.Avalonia.Controls;
@@ -90,7 +92,9 @@ public sealed class DebugBridge
                         _vm.IsAccPopOpen = arg == "acc";
                         _vm.IsInstPopOpen = arg == "inst";
                         _vm.IsDlPopOpen = arg == "dl";
-                        _vm.IsBgPopOpen = arg == "bg";
+                        // `pop bg` 现在开的是**独立那扇**调节窗（弹层整个搬走了）。
+                        // 动词名留着不改，是为了 design/ 里那批抓图脚本不用跟着改。
+                        _vm.IsBgTuningOpen = arg == "bg";
                         if (arg == "cfg" && _vm.Instances.FirstOrDefault() is { } inst)
                         {
                             _vm.OpenInstanceConfigCommand.Execute(inst);
@@ -114,6 +118,48 @@ public sealed class DebugBridge
                                 _vm.ConfigInstCustomMemory = true;
                             }
                         }
+                    });
+                    return "OK";
+                case "bgimage":
+                    // 自选图片壁纸：`bgimage <绝对路径>` 挂上，`bgimage none` 卸掉。
+                    // 与 WPF 侧同名动词同一套语义，这样"两端同色"才量得出来（走真命令，含校验）。
+                    await PetDebugMailbox.Ui(() =>
+                    {
+                        if (arg.Length == 0 || arg.Equals("none", StringComparison.OrdinalIgnoreCase))
+                        {
+                            _vm.CustomBackgroundPath = null;
+                        }
+                        else
+                        {
+                            _vm.SetBackgroundCommand.Execute(arg);
+                        }
+                    });
+                    return "OK";
+                case "bgsnap":
+                    // 把自选壁纸**当前上屏的那份像素**原样写成 PNG，不经过任何视图。
+                    // 与 WPF 侧同名动词配对：跨端要比的是"解码+调色出来的字节"，
+                    // 而截图里还叠着各自合成器的重采样，量不到这一步。
+                    if (_vm.BgCustomArt is not { } art) return "no bg art";
+                    File.WriteAllBytes(arg, PngCodec.Encode(art));
+                    return $"OK {art.Width}x{art.Height}";
+                case "bgframe":
+                    // 取景：`bgframe <panX> <panY> <zoom>`。写的是和滑块/拖动同一组 VM 属性。
+                    await PetDebugMailbox.Ui(() =>
+                    {
+                        var nums = arg.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+                        if (nums.Length > 0) _vm.BgPanX = double.Parse(nums[0], CultureInfo.InvariantCulture);
+                        if (nums.Length > 1) _vm.BgPanY = double.Parse(nums[1], CultureInfo.InvariantCulture);
+                        if (nums.Length > 2) _vm.BgZoom = double.Parse(nums[2], CultureInfo.InvariantCulture);
+                    });
+                    return "OK";
+                case "bggrade":
+                    // 调色：`bggrade <contrast> <saturation> <hue>`。像素在后台算，发完等一下再抓图。
+                    await PetDebugMailbox.Ui(() =>
+                    {
+                        var nums = arg.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+                        if (nums.Length > 0) _vm.BgContrast = double.Parse(nums[0], CultureInfo.InvariantCulture);
+                        if (nums.Length > 1) _vm.BgSaturation = double.Parse(nums[1], CultureInfo.InvariantCulture);
+                        if (nums.Length > 2) _vm.BgHue = double.Parse(nums[2], CultureInfo.InvariantCulture);
                     });
                     return "OK";
                 case "pet":
@@ -163,6 +209,19 @@ public sealed class DebugBridge
                     });
                 case "shot":
                     return await PetDebugMailbox.Ui(() => Shot(arg));
+                case "bgtuningshot":
+                    // 背景调节是主窗口**外面**的一扇窗，`shot` 抓不到它，所以单开一个动词。
+                    return await PetDebugMailbox.Ui(() =>
+                    {
+                        if (_window is not Views.MainWindow host) return "ERR not main window";
+                        if (host.BackgroundTuningWindowForDebug is not { } win) return "ERR tuning window closed";
+                        // 报** DIP **位置，不是 win.Position 的原值：Avalonia 的 Position 带它自己那套
+                        // 缩放单位（本机 96dpi 下仍报 1.5×，实测 GetWindowRect 1878 而 Position 2817），
+                        // 直接打出来会和 WPF 侧差 1.5 倍，看着像摆错边。
+                        var s = host.DesktopScaling;
+                        return ShotWindow(win, arg)
+                            + $" @({win.Position.X / s:0.#},{win.Position.Y / s:0.#}) side={(win.Position.X / s < host.Position.X / s + host.Bounds.Width / 2 ? "left" : "right")}";
+                    });
                 case "tray-right":
                     return await PetDebugMailbox.Ui(() =>
                     {
@@ -233,8 +292,17 @@ public sealed class DebugBridge
     {
         var sb = new StringBuilder();
         sb.Append($"page={_vm.CurrentPage} tab={_vm.CurrentSettingsTab} petActive={_vm.IsPetActive} ");
-        sb.Append($"pops=[acc={_vm.IsAccPopOpen} inst={_vm.IsInstPopOpen} dl={_vm.IsDlPopOpen} bg={_vm.IsBgPopOpen}] ");
+        sb.Append($"pops=[acc={_vm.IsAccPopOpen} inst={_vm.IsInstPopOpen} dl={_vm.IsDlPopOpen} bg={_vm.IsBgTuningOpen}] ");
         sb.Append($"threads={_vm.DownloadThreads} ");
+        sb.Append($"bg=[brightness={_vm.BgBrightness} blur={_vm.BgBlur}] ");
+        sb.Append($"bgframe=[pan={_vm.BgPanX:0.#},{_vm.BgPanY:0.#} zoom={_vm.BgZoom:0.#}] ");
+        sb.Append($"bggrade=[con={_vm.BgContrast:0.#} sat={_vm.BgSaturation:0.#} hue={_vm.BgHue:0.#}] ");
+        // 自选壁纸真正上屏的那份像素 + 为什么没上屏（解码失败是静默回落的，这里是第一现场）。
+        sb.Append($"bgart={(_vm.BgCustomArt is { } art ? $"{art.Width}x{art.Height}" : "n/a")} ");
+        sb.Append($"bgwhy=[{_vm.BackgroundDecodeState}] ");
+        // chip 画出来的几何：两端读同一个数，才谈得上"一致"（截图里卡片半透，壁纸在漏，量不出来）。
+        if (_window is Views.MainWindow mw) sb.Append($"bgchip=[{mw.CoverageDebug}] ");
+        sb.Append($"bgimage={_vm.CustomBackgroundPath ?? "n/a"} ");
 
         var preview = _window.GetVisualDescendants().OfType<MinecraftSkinPreview>().FirstOrDefault();
         sb.Append($"player={preview?.PlayerName ?? "n/a"} user={preview?.CurrentLoadedUser ?? "n/a"} ");
@@ -250,9 +318,15 @@ public sealed class DebugBridge
     }
 
     /// <summary>Renders the live visual tree offscreen; no window visibility or focus required.</summary>
-    private string Shot(string path)
+    private string Shot(string path) => ShotWindow(_window, path);
+
+    /// <summary>
+    /// Render any window's content to a PNG. 背景调节搬出主窗口之后它是**另一扇窗**，
+    /// 抓主窗口看不见它，所以抓图要能指名道姓（与 WPF 侧同名同语义）。
+    /// </summary>
+    private static string ShotWindow(Window window, string path)
     {
-        if (_window.Content is not Visual content) return "ERR no content";
+        if (window.Content is not Visual content) return "ERR no content";
 
         // Render 1:1 in the visual's own DIP units; pre-scaling here made the offscreen pass
         // re-arrange the tree at a different available size than the live window.
