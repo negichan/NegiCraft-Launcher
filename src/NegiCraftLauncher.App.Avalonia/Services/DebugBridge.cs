@@ -176,6 +176,40 @@ public sealed class DebugBridge
                 case "threads":
                     await PetDebugMailbox.Ui(() => _vm.DownloadThreads = int.Parse(arg));
                     return "OK";
+                case "home-skin":
+                {
+                    // 首页 3D 模型的开关与位置（与 WPF 侧同一条动词）：不搬鼠标也能把"拖出来的位置
+                    // 对不对、记不记得住"验出来。drag 喂一对 DIP 增量，走左键拖动的同一条路。
+                    if (_window is not MainWindow host) return "ERR not main window";
+                    var words = arg.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+                    if (words.Length == 0) return "ERR usage: home-skin on|off|reset|drag <dx> <dy>|state";
+
+                    return await PetDebugMailbox.Ui(() =>
+                    {
+                        switch (words[0])
+                        {
+                            case "on": _vm.HomeSkinModelVisible = true; break;
+                            case "off": _vm.HomeSkinModelVisible = false; break;
+                            case "reset": _vm.ResetHomeSkinModelPositionCommand.Execute(null); break;
+                            case "drag":
+                                if (words.Length < 3) return "ERR usage: home-skin drag <dx> <dy>";
+                                host.DragHomeSkinPreviewForDebug(
+                                    double.Parse(words[1], CultureInfo.InvariantCulture),
+                                    double.Parse(words[2], CultureInfo.InvariantCulture));
+                                break;
+                        }
+
+                        static string Num(double? value) =>
+                            value?.ToString("0.####", CultureInfo.InvariantCulture) ?? "null";
+
+                        return $"OK visible={_vm.HomeSkinModelVisible} " +
+                               $"frac=({Num(_vm.HomeSkinModelX)},{Num(_vm.HomeSkinModelY)}) " +
+                               $"canvas=({Canvas.GetLeft(host.SkinPreview):0.#}," +
+                               $"{Canvas.GetTop(host.SkinPreview):0.#}) page=" +
+                               $"{host.PageHome.Bounds.Width:0}x{host.PageHome.Bounds.Height:0} " +
+                               host.HomeSkinKeepOutForDebug;
+                    });
+                }
                 case "demo":
                     // Sample rows so the task-row template (buttons, bar, states) can be checked
                     // without waiting on a real multi-hundred-MB download.
