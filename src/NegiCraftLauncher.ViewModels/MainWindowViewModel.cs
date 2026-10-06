@@ -197,26 +197,33 @@ public partial class MainWindowViewModel : ViewModelBase
     }
 
     /// <summary>
-    /// 视频壁纸是否出声。<b>默认关（静音）</b> —— 背景视频是我们替用户放着的，不是他主动点开播的，
-    /// 突然出声很唐突。想要声音的用户自己打开（右上角的喇叭，或外观浮层里那行复选框）。
+    /// 是否出声 —— <b>就是"音量不为 0"</b>，不是第二个开关。
+    ///
+    /// <para>名字留着是因为两端都绑着它（WPF 的喇叭图标、两边那行"出声"复选框），
+    /// 绑的还是同一个 bool，只是它现在跟着音量走。设 <c>true</c> 会把音量回成上一次那个非 0 值，
+    /// 设 <c>false</c> 就是音量归 0。</para>
+    ///
+    /// <para>⚠️ 以前这是一个独立的布尔，和音量各管各的：拖到 0 会顺手关掉它，把音量拖回去却没人
+    /// 把它打开，于是"音量 40 了还是没声"。一个状态两份记录就一定会分叉 —— 现在只有音量这一份。</para>
     ///
     /// <para>和 <see cref="VideoBackgroundPath"/> 一样，VM 只存值、不碰播放器 ——
     /// 真正把它应用到 <c>MediaPlayer</c> 的是视图侧的 <c>VideoBackgroundController</c>。</para>
     /// </summary>
-    [ObservableProperty]
-    private bool _videoBackgroundSound;
-
-    partial void OnVideoBackgroundSoundChanged(bool value) => PersistSettings();
+    public bool VideoBackgroundSound
+    {
+        get => VideoBackgroundVolume > 0;
+        set => VideoBackgroundVolume = value ? _lastAudibleVolume : 0;
+    }
 
     /// <summary>
-    /// 视频壁纸出声时的音量，0–100，默认 100。
-    ///
-    /// <para>和 <see cref="VideoBackgroundSound"/> 分工明确：那个是静音开关，这个是"出声时多大声"。
-    /// 但拖到 <c>0</c> 会顺手把开关也关掉 —— 否则喇叭图标显示"开着"却一点声音没有，
-    /// 用户只会以为是坏了。</para>
+    /// 视频壁纸的音量，0–100。<b>0 就是静音</b>（默认 0：背景视频是替用户放着的，
+    /// 突然出声很唐突，想要声音的用户自己把音量拉起来）。
     /// </summary>
     [ObservableProperty]
-    private int _videoBackgroundVolume = 100;
+    private int _videoBackgroundVolume;
+
+    /// <summary>上一次非 0 的音量；点喇叭"取消静音"回到这一格，而不是硬回 100。</summary>
+    private int _lastAudibleVolume = 100;
 
     partial void OnVideoBackgroundVolumeChanged(int value)
     {
@@ -228,7 +235,10 @@ public partial class MainWindowViewModel : ViewModelBase
             return;
         }
 
-        if (clamped == 0 && VideoBackgroundSound) VideoBackgroundSound = false;
+        if (clamped > 0) _lastAudibleVolume = clamped;
+        // 喇叭图标和那行复选框绑的是 VideoBackgroundSound：它没有自己的 setter 了，
+        // 音量一动就得替它喊一声，否则图标会停在上一态。
+        OnPropertyChanged(nameof(VideoBackgroundSound));
         PersistSettings();
     }
 
@@ -739,8 +749,9 @@ public partial class MainWindowViewModel : ViewModelBase
     {
         BgArt = PixelArt.CreateBackground(IsDark);
         VideoBackgroundPath = null;
-        VideoBackgroundSound = false;
-        VideoBackgroundVolume = 100;
+        // 复位到"静音"就是音量 0；顺手把"上一次非 0"记回 100，免得点喇叭又回到某个陈年刻度。
+        _lastAudibleVolume = 100;
+        VideoBackgroundVolume = 0;
         CustomBackgroundPath = null;
         BgBlur = 0;
         BgBrightness = 0;
@@ -1959,8 +1970,11 @@ public partial class MainWindowViewModel : ViewModelBase
             BgTuningLeft = settings.BackgroundTuningLeft;
             BgTuningX = settings.BackgroundTuningX;
             BgTuningY = settings.BackgroundTuningY;
-            VideoBackgroundSound = settings.VideoBackgroundSound;
-            VideoBackgroundVolume = settings.VideoBackgroundVolume;
+            // 老配置里"静音"是一个独立布尔（默认 false）。第一次读进来要照它的意思把音量压成 0，
+            // 否则更新完第一次放背景视频就是满音量糊脸。存回去时两个字段自洽，之后就恒等了。
+            var storedVolume = Math.Clamp(settings.VideoBackgroundVolume, 0, 100);
+            if (storedVolume > 0) _lastAudibleVolume = storedVolume;
+            VideoBackgroundVolume = settings.VideoBackgroundSound ? storedVolume : 0;
         }
         finally
         {
@@ -2002,6 +2016,8 @@ public partial class MainWindowViewModel : ViewModelBase
         settings.BackgroundTuningLeft = BgTuningLeft;
         settings.BackgroundTuningX = BgTuningX;
         settings.BackgroundTuningY = BgTuningY;
+        // 这个布尔现在只是"音量 > 0"的别名：留着写是为了让旧版本读到的还是对的意思，
+        // 也是新配置第一次读入时那个"照它压一次音量"的迁移依据。
         settings.VideoBackgroundSound = VideoBackgroundSound;
         settings.VideoBackgroundVolume = VideoBackgroundVolume;
 
