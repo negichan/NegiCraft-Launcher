@@ -323,19 +323,11 @@ public partial class PetSettingsWindow : Window
     private void OnPoseStandClick(object sender, RoutedEventArgs e)
     {
         StagePreview.Swaying = false;
-        StagePreview.HandsOnHips = false;
     }
 
     private void OnPoseSwayClick(object sender, RoutedEventArgs e)
     {
-        StagePreview.Swaying = true;
-        StagePreview.HandsOnHips = false;
-    }
-
-    private void OnPoseArmsClick(object sender, RoutedEventArgs e)
-    {
-        StagePreview.Swaying = false;
-        StagePreview.HandsOnHips = true;
+        StagePreview.Swaying = !StagePreview.Swaying;
     }
 
     private void OnScaleValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)

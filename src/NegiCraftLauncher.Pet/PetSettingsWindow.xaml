@@ -98,12 +98,9 @@
                                 <Button x:Name="BtnPoseStand" Content="站姿" Height="26" Padding="8,0"
                                         FontSize="11" Background="#26262B" Foreground="#FAFAFA" BorderThickness="0"
                                         Cursor="Hand" Click="OnPoseStandClick" Margin="0,0,4,0" />
-                                <Button x:Name="BtnPoseSway" Content="摆动" Height="26" Padding="8,0"
+                                <Button x:Name="BtnPoseSway" Content="叉腰扭胯" Height="26" Padding="8,0"
                                         FontSize="11" Background="#26262B" Foreground="#FAFAFA" BorderThickness="0"
-                                        Cursor="Hand" Click="OnPoseSwayClick" Margin="0,0,4,0" />
-                                <Button x:Name="BtnPoseArms" Content="叉腰" Height="26" Padding="8,0"
-                                        FontSize="11" Background="#26262B" Foreground="#FAFAFA" BorderThickness="0"
-                                        Cursor="Hand" Click="OnPoseArmsClick" />
+                                        Cursor="Hand" Click="OnPoseSwayClick" />
                             </StackPanel>
                         </StackPanel>
 
