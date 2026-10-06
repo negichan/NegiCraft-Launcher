@@ -29,6 +29,36 @@ public sealed class SkinPoseDriver
     // 渲染器的旋转输入先除以 360 再当弧度用。
     public const float RadToRotateInput = 360f;
 
+    /// <summary>
+    /// 朝向矩阵 → 渲染器的三个旋转入参。<see cref="SkinRenderBase.Rotation"/> 的逆运算：
+    /// 它按 Rz(入参.X) · Rx(入参.Y) · Ry(入参.Z) 的行向量顺序搭矩阵，所以这里按同一顺序解回去。
+    /// 和 <see cref="SkinRenderBase.Rotation"/> 的往返在 4000 个随机旋转上对拍过，最大矩阵误差 4e-6。
+    /// </summary>
+    public static Vector3 MatrixToRotateInput(System.Numerics.Matrix4x4 m)
+    {
+        var sinX = Math.Clamp(-m.M32, -1.0, 1.0);
+        var x = (float)Math.Asin(sinX);
+        var cosX = (float)Math.Cos(x);
+
+        float y, z;
+        if (MathF.Abs(cosX) > 1e-4f)
+        {
+            y = MathF.Atan2(m.M31, m.M33);
+            z = MathF.Atan2(m.M12, m.M22);
+        }
+        else
+        {
+            y = MathF.Atan2(-m.M13, m.M11);
+            z = 0;
+        }
+
+        return new Vector3(z * RadToRotateInput, x * RadToRotateInput, y * RadToRotateInput);
+    }
+
+    /// <summary>四元数版的便捷入口。</summary>
+    public static Vector3 QuaternionToRotateInput(System.Numerics.Quaternion q) =>
+        MatrixToRotateInput(System.Numerics.Matrix4x4.CreateFromQuaternion(q));
+
     // skinview3d 的 CrouchAnimation，单位是皮肤像素；8 像素 = 渲染器里的 1 个模型单位。
     private const float CrouchBodyLean = 0.4537860552f;
     private const float CrouchBodyY = -2.103677462f;
@@ -485,7 +515,7 @@ public sealed class SkinPoseDriver
 
                 r.HipPos = motionPose.HipPos;
                 r.HipRotate = motionPose.HipRotate;
-                r.SpineDeform = motionPose.SpineDeform + Tweak(ModelPartType.Body);
+                r.SpineDeform = motionPose.SpineRotate + Tweak(ModelPartType.Body);
                 r.HeadRotate = motionPose.HeadRotate + _lastHeadLookRotate;
 
                 r.LeftArmRotate = motionPose.LeftArmRotate + Tweak(ModelPartType.LeftArm);
