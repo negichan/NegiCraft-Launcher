@@ -45,6 +45,7 @@ public sealed class SkinPreviewControl : Grid
     private const double ModelWidth = 110;
     private const double ModelHeight = 171;
     private const double ShadowTop = 160;
+    private const double ShadowHeight = 9;
     private const double ModelTop = 14;
     private const double NametagTop = 6;
 
@@ -234,12 +235,86 @@ public sealed class SkinPreviewControl : Grid
             typeof(SkinPreviewControl),
             new PropertyMetadata(true));
 
-    /// <summary>左键拖动是否绕竖轴旋转。桌宠要 false —— 那边左键是"拎起来"。</summary>
+    /// <summary>用 <see cref="RotateButton"/> 拖动是否绕竖轴旋转。桌宠要 false —— 那边拖拽是整窗位移。</summary>
     public bool CanDragRotate
     {
         get => (bool)GetValue(CanDragRotateProperty);
         set => SetValue(CanDragRotateProperty, value);
     }
+
+    public static readonly DependencyProperty RotateButtonProperty =
+        DependencyProperty.Register(
+            nameof(RotateButton),
+            typeof(MouseButton),
+            typeof(SkinPreviewControl),
+            new PropertyMetadata(MouseButton.Left));
+
+    /// <summary>
+    /// 哪只键负责旋转。默认左键 —— 桌宠设置窗那个预览一直是这么握的。
+    /// 主页把它设成右键，好把左键腾给 <see cref="CanDragPosition"/>。
+    /// </summary>
+    public MouseButton RotateButton
+    {
+        get => (MouseButton)GetValue(RotateButtonProperty);
+        set => SetValue(RotateButtonProperty, value);
+    }
+
+    public static readonly DependencyProperty CanDragPositionProperty =
+        DependencyProperty.Register(
+            nameof(CanDragPosition),
+            typeof(bool),
+            typeof(SkinPreviewControl),
+            new PropertyMetadata(false));
+
+    /// <summary>
+    /// 左键是否改用来挪位置：控件本身不动，只把每一段位移（DIP）从
+    /// <see cref="PositionDragged"/> 报给宿主 —— 摆在哪、怎么存是宿主的事
+    /// （主页存的是首页可用区的比例）。
+    ///
+    /// <para>默认 false：桌宠那边左键是"拎起来"，位移归 <c>PetWindow</c> 自己算，
+    /// 这里插一脚就成打架了。</para>
+    /// </summary>
+    public bool CanDragPosition
+    {
+        get => (bool)GetValue(CanDragPositionProperty);
+        set => SetValue(CanDragPositionProperty, value);
+    }
+
+    public static readonly DependencyProperty HitFootprintOnlyProperty =
+        DependencyProperty.Register(
+            nameof(HitFootprintOnly),
+            typeof(bool),
+            typeof(SkinPreviewControl),
+            new PropertyMetadata(false, OnHitFootprintOnlyChanged));
+
+    /// <summary>
+    /// 命中区是否只留身体那一块（<see cref="Footprint"/>）。默认 false —— 整块舞台都吃点击，
+    /// 桌宠那 160×320 的舞台就靠它拎起来。
+    ///
+    /// <para>启动器主页要 true：小人脚下白留 81 DIP，那块要是还能吃点击，摆位绕开「启动游戏」
+    /// 就只是**看着**没压住 —— 按钮其实被那块透明的空档盖着，点下去没反应。</para>
+    /// </summary>
+    public bool HitFootprintOnly
+    {
+        get => (bool)GetValue(HitFootprintOnlyProperty);
+        set => SetValue(HitFootprintOnlyProperty, value);
+    }
+
+    private static void OnHitFootprintOnlyChanged(DependencyObject d, DependencyPropertyChangedEventArgs e) =>
+        ((SkinPreviewControl)d).ApplyHitArea();
+
+    /// <summary>
+    /// 身体在舞台里真正占的那一块：名牌顶（6）到阴影底（160+9），横向就是渲染视口那 110。
+    /// 舞台另外那些是空的 —— 摆位夹取与命中区都按这块算，不按整块舞台。
+    /// </summary>
+    public Rect Footprint => new(
+        (StageWidth - ModelWidth) / 2,
+        NametagTop + StageOffsetY,
+        ModelWidth,
+        ShadowTop + ShadowHeight - NametagTop);
+
+    /// <summary>位置拖动中的增量，单位 DIP（见 <see cref="CanDragPosition"/>）。</summary>
+    public event Action<double, double>? PositionDragged;
 
     public static readonly DependencyProperty HeadFollowsHostMouseProperty =
         DependencyProperty.Register(
@@ -326,6 +401,17 @@ public sealed class SkinPreviewControl : Grid
     private readonly Border _nametag;
     private readonly TextBlock _nameText;
 
+    /// <summary>
+    /// 唯一那块"能点着"的面板，尺寸 = <see cref="Footprint"/>。只在
+    /// <see cref="HitFootprintOnly"/> 开着时亮着（见 <see cref="ApplyHitArea"/>）。
+    /// </summary>
+    private readonly Rectangle _hitArea = new()
+    {
+        Fill = Brushes.Transparent,
+        HorizontalAlignment = HorizontalAlignment.Left,
+        VerticalAlignment = VerticalAlignment.Top,
+    };
+
     private readonly TranslateTransform _modelShift = new();
     private readonly TranslateTransform _nametagShift = new();
     private readonly TranslateTransform _shadowShift = new();
@@ -342,7 +428,14 @@ public sealed class SkinPreviewControl : Grid
     private double _lastFrameMs;
     private bool _loopAttached;
     private bool _dragging;
+    private bool _moving;
     private Point _lastMouse;
+
+    /// <summary>
+    /// 位置拖动的坐标参考窗口。必须拿窗口坐标算增量：拿控件自身坐标的话，控件被拖着走时
+    /// 光标相对它的距离会跟着缩，位移喂不饱、手感像掉速。
+    /// </summary>
+    private Window? _dragRef;
     private Window? _hostWindow;
     private string _loadedUser = string.Empty;
 
@@ -373,7 +466,7 @@ public sealed class SkinPreviewControl : Grid
         _shadow = new Ellipse
         {
             Width = 56,
-            Height = 9,
+            Height = ShadowHeight,
             HorizontalAlignment = HorizontalAlignment.Center,
             VerticalAlignment = VerticalAlignment.Top,
             Margin = new Thickness(0, ShadowTop, 0, 0),
@@ -432,12 +525,30 @@ public sealed class SkinPreviewControl : Grid
             Child = _nameText,
         };
 
+        Children.Add(_hitArea);
         Children.Add(_shadow);
         Children.Add(_model);
         Children.Add(_nametag);
 
+        ApplyHitArea();
+
         Loaded += OnLoaded;
         Unloaded += OnUnloaded;
+    }
+
+    /// <summary>
+    /// 把命中面摆到身体那一块。开着 <see cref="HitFootprintOnly"/> 就把整块舞台的
+    /// <c>Background</c> 撤掉 —— 透明的 <c>Background</c> 才是 WPF 里"这块元素能被点着"的开关，
+    /// 撤掉之后只剩那块矩形吃点击，桌宠那边不动它、握法照旧。
+    /// </summary>
+    private void ApplyHitArea()
+    {
+        var f = Footprint;
+        _hitArea.Width = f.Width;
+        _hitArea.Height = f.Height;
+        _hitArea.Margin = new Thickness(f.X, f.Y, 0, 0);
+        _hitArea.Visibility = HitFootprintOnly ? Visibility.Visible : Visibility.Collapsed;
+        Background = HitFootprintOnly ? null : Brushes.Transparent;
     }
 
     /// <summary>当前正在渲染的玩家名（诊断用）。</summary>
@@ -660,6 +771,8 @@ public sealed class SkinPreviewControl : Grid
         {
             _viewport.View.Margin = new Thickness(0, ModelTop + _stageOffsetY, 0, 0);
         }
+
+        ApplyHitArea();   // 身体跟着偏移量往下走，命中面得跟着挪
     }
 
     // ==========================================================
@@ -943,7 +1056,7 @@ public sealed class SkinPreviewControl : Grid
 
     private void OnHostMouseMove(object sender, MouseEventArgs e)
     {
-        if (_dragging || _hostWindow is null) return;
+        if (_dragging || _moving || _hostWindow is null) return;
         if (!HeadFollowsHostMouse) return;
         if (_pose.Walking) return;
 
@@ -968,52 +1081,89 @@ public sealed class SkinPreviewControl : Grid
     }
 
     // ==========================================================
-    // 拖动旋转
+    // 拖动：旋转（<see cref="RotateButton"/>）与挪位置（左键，见 <see cref="CanDragPosition"/>）
     // ==========================================================
+
+    private void BeginDrag(MouseButton button, MouseEventArgs e)
+    {
+        // 旋转先判：万一宿主把 RotateButton 也设成左键、又开了挪位置，转的要赢 ——
+        // 那是所有既有宿主一直的握法，挪位置是主页新加的那一路。
+        var rotates = CanDragRotate && button == RotateButton;
+        var moves = !rotates && CanDragPosition && button == MouseButton.Left;
+        if (!rotates && !moves) return;
+
+        _dragging = rotates;
+        _moving = moves;
+        _dragRef = Window.GetWindow(this);
+        _lastMouse = moves ? e.GetPosition(_dragRef) : e.GetPosition(this);
+        Cursor = rotates ? Cursors.SizeWE : Cursors.SizeAll;
+        CaptureMouse();
+    }
+
+    private bool EndDrag()
+    {
+        if (!_dragging && !_moving) return false;
+
+        _dragging = false;
+        _moving = false;
+        _dragRef = null;
+        Cursor = Cursors.Hand;
+        ReleaseMouseCapture();
+        return true;
+    }
 
     protected override void OnMouseLeftButtonDown(MouseButtonEventArgs e)
     {
         base.OnMouseLeftButtonDown(e);
-        if (!CanDragRotate) return;
+        BeginDrag(MouseButton.Left, e);
+        if (_dragging || _moving) e.Handled = true;
+    }
 
-        _dragging = true;
-        _lastMouse = e.GetPosition(this);
-        Cursor = Cursors.SizeWE;
-        CaptureMouse();
-        e.Handled = true;
+    protected override void OnMouseRightButtonDown(MouseButtonEventArgs e)
+    {
+        base.OnMouseRightButtonDown(e);
+        BeginDrag(MouseButton.Right, e);
+        if (_dragging || _moving) e.Handled = true;
     }
 
     protected override void OnMouseMove(MouseEventArgs e)
     {
         base.OnMouseMove(e);
-        if (!_dragging) return;
+        if (!_dragging && !_moving) return;
 
-        var pos = e.GetPosition(this);
+        var pos = _moving ? e.GetPosition(_dragRef) : e.GetPosition(this);
         var dx = pos.X - _lastMouse.X;
+        var dy = pos.Y - _lastMouse.Y;
         _lastMouse = pos;
 
-        // 只绕竖直轴转（yaw）：rotY += dx * 0.6 度。
-        _pose.RotateModel((float)(dx * 0.6));
+        if (_dragging)
+        {
+            // 只绕竖直轴转（yaw）：rotY += dx * 0.6 度。
+            _pose.RotateModel((float)(dx * 0.6));
+        }
+        else
+        {
+            PositionDragged?.Invoke(dx, dy);
+        }
+
         e.Handled = true;
     }
 
     protected override void OnMouseLeftButtonUp(MouseButtonEventArgs e)
     {
         base.OnMouseLeftButtonUp(e);
-        if (!_dragging) return;
+        if (EndDrag()) e.Handled = true;
+    }
 
-        _dragging = false;
-        Cursor = Cursors.Hand;
-        ReleaseMouseCapture();
-        e.Handled = true;
+    protected override void OnMouseRightButtonUp(MouseButtonEventArgs e)
+    {
+        base.OnMouseRightButtonUp(e);
+        if (EndDrag()) e.Handled = true;
     }
 
     protected override void OnLostMouseCapture(MouseEventArgs e)
     {
         base.OnLostMouseCapture(e);
-        if (!_dragging) return;
-
-        _dragging = false;
-        Cursor = Cursors.Hand;
+        EndDrag();
     }
 }

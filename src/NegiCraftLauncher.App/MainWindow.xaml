@@ -785,7 +785,8 @@
             <!-- ========================================== -->
             <!-- 4. 浮动侧栏（60px，圆角 18，边距 12）        -->
             <!-- ========================================== -->
-            <Border Style="{StaticResource SidebarStyle}"
+            <Border x:Name="Sidebar"
+                    Style="{StaticResource SidebarStyle}"
                     neg:Negi.OnHome="{Binding IsOnHome}"
                     HorizontalAlignment="Left" VerticalAlignment="Stretch"
                     Margin="12" Width="60"
@@ -865,10 +866,17 @@
                 <!-- 页 1：首页 -->
                 <Grid x:Name="PageHome" Visibility="{Binding IsOnHome, Converter={StaticResource BoolToVis}}" Margin="-100,-22,-28,-22">
                     <!-- .stage：top 44 / left 92 / 160x250 -->
-                    <Canvas Visibility="{Binding HasAccount, Converter={StaticResource BoolToVis}}">
-                        <!-- 启动器内的 3D 皮肤模型：有账号就一直显示 -->
+                    <Canvas Visibility="{Binding ShowHomeSkinModel, Converter={StaticResource BoolToVis}}">
+                        <!-- 启动器内的 3D 皮肤模型：有账号才有人可画，外观设置里可以关掉（默认开）。
+                             左键拖位置（按首页比例存，见 MainWindow.xaml.cs 的 LayoutHomeSkinPreview），
+                             右键绕竖轴转 —— 这两个键的分工只给主页，别的宿主握法照旧。
+                             HitFootprintOnly：命中区剪到身体那一块，脚下那 81 DIP 空档不再
+                             替小人吃掉「启动游戏」的点击。 -->
                         <skin:SkinPreviewControl x:Name="SkinPreview"
                                                  Canvas.Left="92" Canvas.Top="44"
+                                                 CanDragPosition="True"
+                                                 RotateButton="Right"
+                                                 HitFootprintOnly="True"
                                                  PlayerName="{Binding CurrentAccount.Name}" />
                     </Canvas>
 
@@ -1418,6 +1426,23 @@
                                                         <TextBlock Text="切换深浅色" VerticalAlignment="Center" />
                                                     </neg:NegiStackPanel>
                                                 </Button>
+                                            </neg:NegiGrid>
+                                        </Border>
+
+                                        <Border Height="58" BorderBrush="#26262b" BorderThickness="0,0,0,1">
+                                            <neg:NegiGrid Columns="* Auto">
+                                                <neg:NegiStackPanel VerticalAlignment="Center" Spacing="2" Margin="0,0,16,0">
+                                                    <TextBlock Text="首页 3D 模型" FontWeight="Medium" Foreground="#fafafa" />
+                                                    <TextBlock Text="左键拖它的位置（会记住），右键转角度。关掉它会把拖过的位置一起清掉，重开回到默认站位。"
+                                                               FontSize="12" Foreground="#71717a" TextWrapping="Wrap" />
+                                                </neg:NegiStackPanel>
+                                                <neg:NegiStackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                                                    <!-- 只清位置、不动开关：拖乱了想回原点，不该顺手把模型也关掉 -->
+                                                    <Button Style="{StaticResource BtnSmOutlineStyle}" Content="复位位置"
+                                                            Command="{Binding ResetHomeSkinModelPositionCommand}"
+                                                            Visibility="{Binding HasHomeSkinModelPosition, Converter={StaticResource BoolToVis}}" />
+                                                    <CheckBox IsChecked="{Binding HomeSkinModelVisible}" />
+                                                </neg:NegiStackPanel>
                                             </neg:NegiGrid>
                                         </Border>
 

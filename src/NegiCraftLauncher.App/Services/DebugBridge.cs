@@ -156,6 +156,42 @@ public sealed class DebugBridge
                 case "threads":
                     await PetDebugMailbox.Ui(() => _vm.DownloadThreads = int.Parse(arg));
                     return "OK";
+                case "home-skin":
+                {
+                    // 首页 3D 模型的开关与位置。和其它动词一个理由：不搬鼠标也要能把"拖出来的位置
+                    // 对不对、记不记得住"验出来。
+                    //   home-skin on / off      走外观卡那个开关
+                    //   home-skin drag <dx> <dy> 喂一对 DIP 增量，走左键拖动的同一条代码路径
+                    //   home-skin reset         走「复位位置」那颗按钮的命令
+                    //   home-skin state         报当前比例 + 实际摆到的 Canvas 坐标
+                    if (_window is not MainWindow host) return "ERR not main window";
+                    var words = arg.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+                    if (words.Length == 0) return "ERR usage: home-skin on|off|reset|drag <dx> <dy>|state";
+
+                    return await PetDebugMailbox.Ui(() =>
+                    {
+                        switch (words[0])
+                        {
+                            case "on": _vm.HomeSkinModelVisible = true; break;
+                            case "off": _vm.HomeSkinModelVisible = false; break;
+                            case "reset": _vm.ResetHomeSkinModelPositionCommand.Execute(null); break;
+                            case "drag":
+                                if (words.Length < 3) return "ERR usage: home-skin drag <dx> <dy>";
+                                host.DragHomeSkinPreviewForDebug(
+                                    double.Parse(words[1], CultureInfo.InvariantCulture),
+                                    double.Parse(words[2], CultureInfo.InvariantCulture));
+                                break;
+                        }
+
+                        static string Num(double? value) =>
+                            value?.ToString("0.####", CultureInfo.InvariantCulture) ?? "null";
+
+                        return $"OK visible={_vm.HomeSkinModelVisible} " +
+                               $"frac=({Num(_vm.HomeSkinModelX)},{Num(_vm.HomeSkinModelY)}) " +
+                               $"canvas=({System.Windows.Controls.Canvas.GetLeft(host.SkinPreview):0.#}," +
+                               $"{System.Windows.Controls.Canvas.GetTop(host.SkinPreview):0.#})";
+                    });
+                }
                 case "bg":
                     // 背景亮度/模糊：`bg <brightness> [blur]`。用来验这两个值是否真的落盘 ——
                     // 走的是和滑杆完全相同的 VM 属性，所以能复现"调了但没保存"。
