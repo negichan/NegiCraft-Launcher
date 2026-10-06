@@ -2,6 +2,7 @@ using System.Numerics;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
+using System.Windows.Media.Imaging;
 using System.Windows.Media.Media3D;
 using MinecraftSkinRender;
 
@@ -160,20 +161,58 @@ public sealed class SkinGpuViewport
     /// <para><c>TileMode.Tile</c> 是为了跟软件后端对齐：软件采样时对纹素下标取了模
     /// （插值可能让 UV 略微越界），这里也让它在 UV 平面上平铺，行为一致。</para>
     /// </summary>
-    private static ImageBrush BuildTextureBrush(ImageSource texture)
+    private static ImageBrush BuildTextureBrush(ImageSource texture) => new(BakeNearest(texture))
     {
-        var brush = new ImageBrush(texture)
-        {
-            ViewportUnits = BrushMappingMode.Absolute,
-            Viewport = new Rect(0, 0, 1, 1),
-            Stretch = Stretch.Fill,
-            TileMode = TileMode.Tile,
-        };
+        ViewportUnits = BrushMappingMode.Absolute,
+        Viewport = new Rect(0, 0, 1, 1),
+        Stretch = Stretch.Fill,
+        TileMode = TileMode.Tile,
+    };
 
-        // 不设这句就是 WPF 默认的 Linear：64x64 的皮肤被双线性抹开，整只桌宠看着就是糊的
-        // （软件后端是 (int)(u * 宽) 直接取纹素 = 最近邻，两条后端必须一样）。
-        RenderOptions.SetBitmapScalingMode(brush, BitmapScalingMode.NearestNeighbor);
-        return brush;
+    /// <summary>
+    /// 皮肤贴图先按整数倍**最近邻**烘一遍，再交给 3D 材质。
+    ///
+    /// <para>WPF 的 3D 贴图采样固定是双线性，而且 <c>RenderOptions.BitmapScalingMode</c> 只管
+    /// 2D 画刷，管不到 Media3D 那条路（实测：硬件渲染的抓屏里只有 5.6% 的像素颜色等于皮肤原色，
+    /// 软件光栅是 71.2%）。后果有两个：整只桌宠像糊了一层；方块交界处还有一条细线 —— 插值会采到
+    /// UV 边界外半个纹素，把图集里挨着那块的颜色带进来。</para>
+    ///
+    /// <para>把纹素放大到远大于一个屏幕像素，双线性就来不及在一块颜色里抹出中间色；越界的那半个
+    /// 纹素也缩到不足一个像素，细线跟着没了。UV 是 0..1 归一化的，整张图等比放大 ⇒ 每个面的
+    /// 采样位置一个都没动。</para>
+    ///
+    /// <para>得自己搬字节：<c>TransformedBitmap</c> 没有插值模式可设，它只是记一个变换，真正
+    /// 重采样仍然发生在绘制期（按画刷的缩放模式）—— 用它就等于没烘。</para>
+    /// </summary>
+    private static ImageSource BakeNearest(ImageSource texture)
+    {
+        if (texture is not BitmapSource source) return texture;
+
+        const int bake = 8;                       // 64x64 → 512x512，1 MB，可以忽略
+        int w = source.PixelWidth, h = source.PixelHeight;
+        if (w * bake > 1024) return texture;      // 高清皮肤本来就够大，别烘出 4K 贴图
+
+        var format = source.Format;
+        int bpp = format.BitsPerPixel / 8;
+        var src = new byte[w * h * bpp];
+        source.CopyPixels(System.Windows.Int32Rect.Empty, src, src.Length, w * bpp);
+
+        int dw = w * bake;
+        var dst = new byte[dw * h * bake * bpp];
+        for (var y = 0; y < h; y++)
+            for (var x = 0; x < w; x++)
+            {
+                var from = (y * w + x) * bpp;
+                for (var dy = 0; dy < bake; dy++)
+                {
+                    var row = ((y * bake + dy) * dw + x * bake) * bpp;
+                    for (var dx = 0; dx < bake * bpp; dx++) dst[row + dx] = src[from + dx % bpp];
+                }
+            }
+
+        var baked = BitmapSource.Create(dw, h * bake, 96, 96, format, null, dst, dw * bpp);
+        baked.Freeze();
+        return baked;
     }
 
     private static Matrix3D ToMatrix3D(in Matrix4x4 m) => new(
