@@ -45,6 +45,9 @@ public sealed class PetSettings
     /// <summary>细分脊椎与四肢自由弯曲形变。</summary>
     public bool SpineFlexible { get; set; } = true;
 
+    /// <summary>是否开启扭胯跟随桌面音频律动。</summary>
+    public bool SwayWithAudio { get; set; }
+
     /// <summary>是否保持窗口置顶。</summary>
     public bool Topmost { get; set; } = true;
 

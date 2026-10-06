@@ -1,4 +1,4 @@
-﻿using System.IO;
+using System.IO;
 using System.Runtime.InteropServices;
 using System.Text;
 using System.Windows;
@@ -171,6 +171,15 @@ public static class PetDebugCommands
                     preview.ParkSway(null);
                     preview.Swaying = Truthy(arg);
                     return $"OK sway={preview.Swaying} joints={preview.LimbJoints}";
+                });
+            case "pet-sway-audio":
+                return PetDebugMailbox.Ui(() =>
+                {
+                    if (arg == "on" || arg == "true" || arg == "1") pet.SwayWithAudio = true;
+                    else if (arg == "off" || arg == "false" || arg == "0") pet.SwayWithAudio = false;
+                    else if (arg == "toggle") pet.SwayWithAudio = !pet.SwayWithAudio;
+                    var meter = pet.AudioMeter;
+                    return $"OK swayAudio={pet.SwayWithAudio} running={meter?.Running == true} energy={meter?.Energy ?? 0:F3} beatHz={meter?.BeatHz ?? 0:F2} bpm={meter?.Bpm ?? 0:F1} fault={meter?.Fault ?? "none"}";
                 });
             case "pet-look-mouse":
                 return PetDebugMailbox.Ui(() =>
@@ -475,9 +484,11 @@ public static class PetDebugCommands
                     var preview = Preview(pet);
                     var host = pet.Host;
                     var accounts = host is null ? "" : string.Join(",", host.AccountNames);
+                    var meter = pet.AudioMeter;
                     return $"petActive={isActive} petPlayerName={preview?.PlayerName ?? "n/a"} " +
                            $"effectiveName={host?.EffectiveName ?? "<null>"} customName={host?.CustomName ?? "<null>"} " +
                            $"mode={pet.CurrentMode} topmost={pet.Topmost} " +
+                           $"swayAudio={pet.SwayWithAudio} energy={(meter?.Energy ?? 0):F2} beatHz={(meter?.BeatHz ?? 0):F2} bpm={(meter?.Bpm ?? 0):F1} " +
                            $"menuOpen={pet.IsPetContextMenuOpen} accounts=[{accounts}] " +
                            $"render={preview?.RenderStats ?? "n/a"}";
                 });
