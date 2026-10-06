@@ -425,17 +425,23 @@ public sealed class SkinPoseDriver
 
     private void UpdatePose()
     {
+        var dk = (float)_dangleK;
+
+        // 被拎起来时这几套都得让位（各乘 1-dk）：拖拽姿势本身是"乱蹬 + 举胳膊 + 摇头"，
+        // 再叠一份蹲下 / 叉腰 / 扭胯就是两套动作互相打勾。走路、起跳、挥击早就是这么处理的
+        // （wk / jk / attackBodyYaw），蹲下和叉腰和扭胯是漏网的。
+        var hang = 1.0f - dk;
+
         // 蹲下用 |sin(k·π/2)| 过渡。
-        var e = (float)Math.Sin(_sneakK * Math.PI / 2);
+        var e = (float)Math.Sin(_sneakK * Math.PI / 2) * hang;
         var px = e / 8f;
 
-        var dk = (float)_dangleK;
         var wk = (float)_walkK * (1.0f - dk);
         var jk = (float)_jumpK * (1.0f - dk);
 
         // 扭胯：基于视频与关键帧拆解的顶胯动作：
         // 骨盆横向平移与侧倾 + 2倍频下沉起伏 + 脊椎C型反向补偿 + 双腿纯被动接地跟随
-        var sk = (float)_swayK;
+        var sk = (float)_swayK * hang;
         System.Numerics.Vector3 hipRot = default, hipPos = default, spineBend = default, headLevel = default;
         System.Numerics.Vector3 ikThighL = default, ikThighR = default;
         float armSwayRoll = 0f, armSwayElbow = 0f, sSnap = 0f;
@@ -566,7 +572,7 @@ public sealed class SkinPoseDriver
         // 叉腰：把上面那套（呼吸外摆 + 走路摆臂）往"折起来"的目标上插值。hk=1 时目标是个定值，
         // 所以走路摆动自然被压干净，不用另外加"叉腰时不许摆臂"的特判。
         // 四个关节（两条上臂 + 两条小臂）都按同一个 hk 过渡，不然肘会"啪"地一下弹到位。
-        var hk = (float)_hipsK;
+        var hk = (float)_hipsK * hang;
 
         if (hk > 0)
         {
