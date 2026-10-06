@@ -1,4 +1,4 @@
-using System.IO;
+﻿using System.IO;
 using System.Runtime.InteropServices;
 using System.Text;
 using System.Windows;
@@ -177,53 +177,6 @@ public static class PetDebugCommands
                     else if (arg == "off" || arg == "false" || arg == "0") pet.LookAtMouse = false;
                     else if (arg == "toggle") pet.LookAtMouse = !pet.LookAtMouse;
                     return "OK look_at_mouse=" + pet.LookAtMouse;
-                });
-            case "pet-vmd":
-                return PetDebugMailbox.Ui(() =>
-                {
-                    if (Preview(pet) is not { } preview) return "ERR no pet preview";
-                    if (arg == "stop")
-                    {
-                        preview.StopMotion();
-                        return "OK stopped";
-                    }
-                    if (File.Exists(arg))
-                    {
-                        var clip = NegiCraftLauncher.Raster.Animation.VmdMotionClip.Load(arg);
-                        preview.PlayMotion(clip, loop: true);
-                        return $"OK playing clip={clip.Name} duration={clip.DurationSeconds:F2}s";
-                    }
-                    return "ERR file not found: " + arg;
-                });
-            case "pet-vmd-frame":
-                // pet-vmd-frame <帧号|run>。MMD 固定 30 帧/秒，所以帧号 ÷ 30 = 秒。
-                // 舞蹈是连续动作，边播边截图永远抓不到想看的相位 —— 和 pet-sway 的定格同一个理由。
-                return PetDebugMailbox.Ui(() =>
-                {
-                    if (Preview(pet) is not { } preview) return "ERR no pet preview";
-                    if (!preview.IsPlayingMotion) return "ERR no clip loaded";
-
-                    var what = arg.Trim();
-                    if (what == "run")
-                    {
-                        preview.ResumeMotion();
-                        return "OK running";
-                    }
-                    if (!int.TryParse(what, out var frame))
-                        return $"ERR usage: pet-vmd-frame <frame|run>, got '{arg}'";
-
-                    preview.ParkMotionAt(frame / 30.0);
-                    return $"OK parked frame={frame} time={preview.MotionTime:F3}s clip={preview.CurrentMotionName}";
-                });
-            case "pet-vmd-probe":
-                // 下半身重定向的解算中间量。表现是"腿不对"时，先分清是采样采错了帧、
-                // 骨盆搬错了、还是连杆真的解歪了。
-                return PetDebugMailbox.Ui(() =>
-                {
-                    if (Preview(pet) is not { } preview) return "ERR no pet preview";
-                    if (preview.ActiveMotion is not { } clip) return "ERR no clip loaded";
-
-                    return $"t={preview.MotionTime:F3}s hip[{clip.HipSolve}] L[{clip.LeftLegSolve}] R[{clip.RightLegSolve}]";
                 });
             case "pet-joint":
                 // pet-joint <部位> <外摆> <前后> <竖转>，单位是**度**，加在当前姿势上（不是覆盖）。

@@ -1,7 +1,6 @@
-using System;
+﻿using System;
 using System.Numerics;
 using MinecraftSkinRender;
-using NegiCraftLauncher.Raster.Animation;
 
 namespace NegiCraftLauncher.Raster.Rendering;
 
@@ -136,10 +135,6 @@ public sealed class SkinPoseDriver
     private double _attackT = 1.0;
     private bool _attackParked;
 
-    private VmdMotionClip? _activeMotion;
-    private double _motionClock;
-    private bool _motionLoop = true;
-    private double? _motionParkTime;
     private System.Numerics.Vector3 _lastHeadLookRotate;
 
     // 调试用（pet-joint）：往单个关节上加一份角度，用来把上面那组叉腰数一点一点调对 ——
@@ -235,61 +230,6 @@ public sealed class SkinPoseDriver
     /// </summary>
     public bool NeedsRepaint => _dirty || IsAnimating;
 
-    /// <summary>当前是否正在播放 MMD 动作动画。</summary>
-    public bool IsPlayingMotion => _activeMotion != null;
-
-    /// <summary>当前正在播放的 MMD 动作名称。</summary>
-    public string? CurrentMotionName => _activeMotion?.Name;
-
-    /// <summary>
-    /// 正在播的剪辑本体。调试动词要从它身上读解算中间量（<see cref="VmdMotionClip.LeftLegSolve"/> 等），
-    /// 好把"腿解错了"和"采样的帧不对"分开。
-    /// </summary>
-    public VmdMotionClip? ActiveMotion => _activeMotion;
-
-    /// <summary>播放指定的 MMD 动作剪辑。</summary>
-    public void PlayMotion(VmdMotionClip clip, bool loop = true)
-    {
-        _activeMotion = clip ?? throw new ArgumentNullException(nameof(clip));
-        _motionLoop = loop;
-        _motionClock = 0;
-        _motionParkTime = null;
-        _dirty = true;
-    }
-
-    /// <summary>停止当前正在播放的 MMD 动作，恢复正常姿态。</summary>
-    public void StopMotion()
-    {
-        if (_activeMotion == null) return;
-        _activeMotion = null;
-        _motionClock = 0;
-        _motionParkTime = null;
-        _dirty = true;
-        Reset();
-    }
-
-    /// <summary>当前动作时钟（秒）。定格时就是定格位置，没定格就是走出来的时间。</summary>
-    public double MotionTime => _motionParkTime ?? _motionClock;
-
-    /// <summary>
-    /// 调试用：把动作时钟钉在某一秒不动，让 <see cref="Update"/> 只重算姿势不推进时间。
-    /// 舞蹈是正弦+关键帧抽样的，边播边截图抓不到想要的相位 —— 和 <see cref="ParkSway"/> 同一个理由。
-    /// </summary>
-    public void ParkMotionAt(double seconds)
-    {
-        if (_activeMotion == null) return;
-        _motionParkTime = Math.Clamp(seconds, 0, _activeMotion.DurationSeconds);
-        _dirty = true;
-    }
-
-    /// <summary>解除定格，从定格位置接着走。</summary>
-    public void ResumeMotion()
-    {
-        if (_motionParkTime is { } parked) _motionClock = parked;
-        _motionParkTime = null;
-        _dirty = true;
-    }
-
     /// <summary>启动一次挥臂；传 <paramref name="parkAt"/> 则把动画定格在那个进度（0-1）。</summary>
     public void TriggerAttack(double? parkAt = null)
     {
@@ -343,10 +283,6 @@ public sealed class SkinPoseDriver
     /// <summary>把模型摆回初始姿态：位置归零、朝向复位。</summary>
     public void Reset()
     {
-        _activeMotion = null;
-        _motionClock = 0;
-        _motionParkTime = null;
-
         foreach (var r in _renderers)
         {
             r.ResetPos();
@@ -398,15 +334,6 @@ public sealed class SkinPoseDriver
     {
         _idleClock += dt;
 
-        if (_activeMotion != null && _motionParkTime is null)
-        {
-            _motionClock += dt;
-            if (!_motionLoop && _motionClock >= _activeMotion.DurationSeconds)
-            {
-                StopMotion();
-            }
-        }
-
         _sneakK = Math.Clamp(_sneakK + ((Sneaking ? 1 : -1) * dt / SneakTransition), 0, 1);
         _dangleK = Math.Clamp(_dangleK + ((Dangling ? 1 : -1) * dt / DangleTransition), 0, 1);
         _walkK = Math.Clamp(_walkK + ((Walking ? 1 : -1) * dt / WalkTransition), 0, 1);
@@ -450,7 +377,6 @@ public sealed class SkinPoseDriver
     /// 这也是为什么 <see cref="NeedsRepaint"/> 要另外记一份 <c>_dirty</c>。</para>
     /// </summary>
     public bool IsAnimating =>
-        _activeMotion != null ||
         _dangleK > 0 || Dangling ||
         (_sneakK > 0 && _sneakK < 1) ||
         (_hipsK > 0 && _hipsK < 1) ||
@@ -494,42 +420,6 @@ public sealed class SkinPoseDriver
 
     private void UpdatePose()
     {
-        if (_activeMotion != null)
-        {
-            // 定格时不循环：钉在某一秒就该画那一秒，loop 取模会被送回开头。
-            var motionPose = _activeMotion.Sample(MotionTime, _motionParkTime is null && _motionLoop);
-            foreach (var r in _renderers)
-            {
-                r.LimbJoints = false;
-                r.LimbFlexible = true;
-                r.SpineFlexible = true;
-
-                r.SetPos(0, 0.3f);
-                r.BodyRotate = System.Numerics.Vector3.Zero;
-                r.BodyPos = System.Numerics.Vector3.Zero;
-                r.HeadPos = System.Numerics.Vector3.Zero;
-                r.LeftArmPos = System.Numerics.Vector3.Zero;
-                r.RightArmPos = System.Numerics.Vector3.Zero;
-                r.LeftLegPos = System.Numerics.Vector3.Zero;
-                r.RightLegPos = System.Numerics.Vector3.Zero;
-
-                r.HipPos = motionPose.HipPos;
-                r.HipRotate = motionPose.HipRotate;
-                r.SpineDeform = motionPose.SpineRotate + Tweak(ModelPartType.Body);
-                r.HeadRotate = motionPose.HeadRotate + _lastHeadLookRotate;
-
-                r.LeftArmRotate = motionPose.LeftArmRotate + Tweak(ModelPartType.LeftArm);
-                r.RightArmRotate = motionPose.RightArmRotate + Tweak(ModelPartType.RightArm);
-                r.LeftArmDeform = motionPose.LeftArmDeform;
-                r.RightArmDeform = motionPose.RightArmDeform;
-
-                r.LeftLegRotate = motionPose.LeftLegRotate + Tweak(ModelPartType.LeftLeg);
-                r.RightLegRotate = motionPose.RightLegRotate + Tweak(ModelPartType.RightLeg);
-                r.LeftLegDeform = motionPose.LeftLegDeform;
-                r.RightLegDeform = motionPose.RightLegDeform;
-            }
-            return;
-        }
         // 蹲下用 |sin(k·π/2)| 过渡。
         var e = (float)Math.Sin(_sneakK * Math.PI / 2);
         var px = e / 8f;

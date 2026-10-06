@@ -1,4 +1,4 @@
-using System.Numerics;
+﻿using System.Numerics;
 
 namespace NegiCraftLauncher.Raster.Rendering;
 
@@ -7,8 +7,10 @@ namespace NegiCraftLauncher.Raster.Rendering;
 ///
 /// <para>这是**与动作格式无关**的一块。MMD 的脚部 IK、我们自己的扭胯、以后可能的手调关键帧，
 /// 要的都是同一件事：骨盆怎么动、脚不许动 —— 于是腿必须自己找角度。以前这件事在
-/// <c>SkinPoseDriver</c>（扭胯那 60 行手算钉脚）和 <c>VmdMotion</c>（腿部 IK）各写了一遍，
-/// 两份的近似程度还不一样，所以收到这里只留一份。</para>
+/// 各自算过一遍、近似程度还不一样，所以收到这里只留一份。</para>
+///
+/// <para>MMD 动作那条线现在放在 <c>spike/mmd-vmd-motion</c> 分支上备用；这个求解器和
+/// <see cref="MotionPose"/> 留在主干，是为了那条线合回来时只是一份增量。</para>
 ///
 /// <para><b>坐标口径</b>：模型空间，即骨盆施加之后的那一层 —— +X 是角色自身左侧、+Y 朝上、
 /// +Z 朝镜头。髋当原点，踝目标是从髋量过去的向量。大腿朝向减掉骨盆这一步在这里做，

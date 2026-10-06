@@ -1,4 +1,4 @@
-<Window x:Class="NegiCraftLauncher.Pet.PetWindow"
+﻿<Window x:Class="NegiCraftLauncher.Pet.PetWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:skin="clr-namespace:NegiCraftLauncher.Skin.Controls;assembly=NegiCraftLauncher.Skin"
@@ -75,17 +75,6 @@
                     <MenuItem Header="触发挥击" Click="OnTriggerAttackClick">
                         <MenuItem.Icon>
                             <materialIcons:MaterialIcon Kind="HandBackRight" Width="16" Height="16" />
-                        </MenuItem.Icon>
-                    </MenuItem>
-                    <Separator />
-                    <MenuItem Header="载入 MMD 动作 (.vmd)…" x:Name="MenuLoadVmd" Click="OnLoadVmdClick">
-                        <MenuItem.Icon>
-                            <materialIcons:MaterialIcon Kind="FolderOpenOutline" Width="16" Height="16" />
-                        </MenuItem.Icon>
-                    </MenuItem>
-                    <MenuItem Header="停止 MMD 动作" x:Name="MenuStopVmd" Click="OnStopVmdClick" IsEnabled="False">
-                        <MenuItem.Icon>
-                            <materialIcons:MaterialIcon Kind="StopCircleOutline" Width="16" Height="16" />
                         </MenuItem.Icon>
                     </MenuItem>
                 </MenuItem>

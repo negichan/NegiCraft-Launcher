@@ -1,4 +1,4 @@
-using System.IO;
+﻿using System.IO;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
@@ -7,7 +7,6 @@ using System.Windows.Media.Imaging;
 using System.Windows.Shapes;
 using MinecraftSkinRender;
 using NegiCraftLauncher.Raster;
-using NegiCraftLauncher.Raster.Animation;
 using NegiCraftLauncher.Raster.Rendering;
 using NegiCraftLauncher.Skin.Rendering;
 
@@ -474,46 +473,6 @@ public sealed class SkinPreviewControl : Grid
     public void SetHeadLookAt(float pitchDeg, float yawDeg) => _pose.SetHeadLookAt(pitchDeg, yawDeg);
 
     public void TriggerAttack(double? parkAt = null) => _pose.TriggerAttack(parkAt);
-
-    /// <summary>播放指定的 MMD 动作剪辑。</summary>
-    public void PlayMotion(VmdMotionClip clip, bool loop = true)
-    {
-        _pose.PlayMotion(clip, loop);
-        _viewDirty = true;
-    }
-
-    /// <summary>停止播放当前的 MMD 动作剪辑。</summary>
-    public void StopMotion()
-    {
-        _pose.StopMotion();
-        _viewDirty = true;
-    }
-
-    /// <summary>当前是否正在播放 MMD 动作动画。</summary>
-    public bool IsPlayingMotion => _pose.IsPlayingMotion;
-
-    /// <summary>当前正在播放的 MMD 动作名称。</summary>
-    public string? CurrentMotionName => _pose.CurrentMotionName;
-
-    /// <summary>正在播的剪辑本体（调试动词读解算中间量用）。</summary>
-    public VmdMotionClip? ActiveMotion => _pose.ActiveMotion;
-
-    /// <summary>当前动作时钟（秒）。</summary>
-    public double MotionTime => _pose.MotionTime;
-
-    /// <summary>调试用：把动作时钟钉在某一秒。</summary>
-    public void ParkMotionAt(double seconds)
-    {
-        _pose.ParkMotionAt(seconds);
-        _viewDirty = true;
-    }
-
-    /// <summary>调试用：解除定格，从定格位置接着走。</summary>
-    public void ResumeMotion()
-    {
-        _pose.ResumeMotion();
-        _viewDirty = true;
-    }
 
     /// <summary>调试用：把扭胯动画定格在某个进度相位（0..1）。传 null 解除定格恢复正常播放。</summary>
     public void ParkSway(double? phase = null)
