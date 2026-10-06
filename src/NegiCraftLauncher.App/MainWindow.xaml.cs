@@ -71,6 +71,10 @@ public partial class MainWindow : Window
         _videoBackground.Opened += UpdateBackgroundShot;
         IsVisibleChanged += (_, _) => UpdateVideoPlayback();
 
+        // 音量浮层是"喇叭中心 − 浮层宽/2"算出来的，窗口一改尺寸那个中心就变了。
+        // 只在鼠标进喇叭时算一次的话，改过窗口宽度后再悬停，箭头会指到别处去。
+        SizeChanged += (_, _) => RepositionVolumePanel();
+
         // 背景调节窗跟着主窗口的可见性走：主窗口最小化或收进托盘时它不能一个人留在桌面上，
         // 还原时又得自己回来。挂在事件上而不是挂在 OnMinimizeClick / OnCloseClick 里 ——
         // "启动后隐藏启动器"那条路是 VM 直接调 Hide() 的，只盯按钮会漏。
@@ -390,18 +394,24 @@ public partial class MainWindow : Window
         get
         {
             var w = VolumePanel.ActualWidth;
-            // 面板中心直接按布局算（HorizontalAlignment=Right + Margin.Right），
-            // 不走 TransformToVisual —— Pop 动画期间 RenderTransform 会把结果带偏。
-            var panelCx = ActualWidth - VolumePanel.Margin.Right - w / 2;
-            var btnCx = VideoSoundButton.ActualWidth > 0
-                ? VideoSoundButton.TransformToVisual(this)
+
+            // ⚠️ 两个中心必须在**同一个坐标系**里比，而且要比的那件事得和 RepositionVolumePanel
+            //   用的是同一套：浮层的 Margin 是相对它的父容器（Shell 里那层 Grid）的，所以这里也
+            //   换算到父容器。之前这里用窗口的 ActualWidth 去减一个父容器口径的右边距，读出来的
+            //   "偏 60px" 是假的 —— 浮层其实早就对齐了，是这条诊断在骗我。
+            var host = VisualTreeHelper.GetParent(VolumePanel) as FrameworkElement;
+            var hostW = host?.ActualWidth ?? double.NaN;
+            var panelCx = host is null ? double.NaN : hostW - VolumePanel.Margin.Right - w / 2;
+            var btnCx = VideoSoundButton.ActualWidth > 0 && host is not null
+                ? VideoSoundButton.TransformToVisual(host)
                     .Transform(new Point(VideoSoundButton.ActualWidth / 2, 0)).X
                 : double.NaN;
 
             return $"visible={VideoSoundButton.IsVisible} pop={_vm?.IsVolumePopOpen} " +
                    $"btnHover={VideoSoundButton.IsMouseOver} panelHover={VolumePanel.IsMouseOver} " +
                    $"panel={w:0.#}x{VolumePanel.ActualHeight:0.#} " +
-                   $"cx={panelCx:0.#}/{btnCx:0.#} slider={VideoVolumeSlider.Value:0.#}";
+                   $"cx={panelCx:0.#}/{btnCx:0.#} 差={panelCx - btnCx:0.#} slider={VideoVolumeSlider.Value:0.#} " +
+                   $"算式={_volumeReposition}";
         }
     }
 
@@ -580,24 +590,45 @@ public partial class MainWindow : Window
     /// 把浮层横向摆到"喇叭正下方"。
     ///
     /// <para><b>为什么不在 XAML 里写死右边距</b>：浮层靠 <c>HorizontalAlignment="Right"</c> +
-    /// 右边距定位，而浮层宽度是内容决定的（轨道宽度、百分比文字的宽度都会影响）。
-    /// 写死一个数字，改了里面任何一处尺寸箭头就偏了。所以每次开之前按
-    /// "喇叭中心 − 浮层宽/2" 现算。</para>
+    /// 右边距定位，而喇叭在右上角那一排里的位置取决于它右边有几个按钮、间距多少 —— 写死一个数字，
+    /// 改那一排任何一处就偏了。所以每次开之前按"喇叭中心 − 浮层宽/2"现算。</para>
+    ///
+    /// <para><b>两个数必须在同一个坐标系里比</b>：浮层的 <c>Margin</c> 是相对它那个父容器算的，
+    /// 而父容器在 <c>Shell</c> 那 1px 描边<b>里面</b>。之前拿窗口的 <c>ActualWidth</c> 去除，
+    /// 正好差那 1px 的 inset，箭头永远对不齐喇叭 —— 而且浮层宽度已经写死（见 XAML 那条注释），
+    /// 不会再被百分比文字的宽度带着飘。</para>
     /// </summary>
     private void RepositionVolumePanel()
     {
+        if (VisualTreeHelper.GetParent(VolumePanel) is not FrameworkElement host)
+        {
+            _volumeReposition = "父容器不是 FrameworkElement";
+            return;
+        }
+
         // 浮层在可视树里（只是 Opacity=0），正常早就量过了；保险起见补一次布局。
-        if (VolumePanel.ActualWidth < 1) UpdateLayout();
-
         var w = VolumePanel.ActualWidth;
-        if (w < 1) return;
+        if (w < 1)
+        {
+            UpdateLayout();
+            w = VolumePanel.ActualWidth;
+        }
+        if (w < 1)
+        {
+            _volumeReposition = "浮层还没量出宽度";
+            return;
+        }
 
-        var center = VideoSoundButton.TransformToVisual(this)
+        var center = VideoSoundButton.TransformToVisual(host)
             .Transform(new Point(VideoSoundButton.ActualWidth / 2, 0)).X;
 
-        VolumePanel.Margin = new Thickness(0, VolumePanel.Margin.Top,
-            Math.Max(0, ActualWidth - center - w / 2), 0);
+        var right = Math.Max(0, host.ActualWidth - center - w / 2);
+        VolumePanel.Margin = new Thickness(0, VolumePanel.Margin.Top, right, 0);
+        _volumeReposition = $"host={host.ActualWidth:0.#} 喇叭中心={center:0.#} 宽={w:0.#} → 右边距={right:0.#}";
     }
+
+    /// <summary>最近一次横向定位的算式（<c>state</c> 的 speaker= 段里能看到）。没跑过就是"还没算过"。</summary>
+    private string _volumeReposition = "还没算过";
 
     private void CheckVolumeHover()
     {
@@ -614,11 +645,21 @@ public partial class MainWindow : Window
     }
 
     /// <summary>
-    /// 背景只在首页可见，所以离开首页或窗口收进托盘时就暂停 ——
-    /// 否则切到设置页还在后台解码 4K，白烧 CPU。
+    /// 播放器该不该在跑。
+    ///
+    /// <para><b>声音开着就不能因为切页而停</b>：背景画面只在首页露出，但音频是一整条 ——
+    /// 之前一律按 <c>IsOnHome</c> 暂停，切到设置页音乐就断了。所以这里分开两件事：
+    /// 画面要不要画，和播放器要不要跑。</para>
+    ///
+    /// <para>代价是"不在首页 + 声音开着"时解码器继续跑（不是白烧：那正是声音的来源）。
+    /// 窗口收进托盘时仍然暂停 —— 那时候没人看也没人听。</para>
     /// </summary>
-    private void UpdateVideoPlayback() =>
-        _videoBackground.SetActive(IsVisible && (_vm?.IsOnHome ?? false));
+    private void UpdateVideoPlayback()
+    {
+        // 在首页要画面，开着声音要音频；两者都没有才值得暂停。
+        var wanted = _vm is { IsOnHome: true } || _vm is { VideoBackgroundSound: true };
+        _videoBackground.SetActive(IsVisible && wanted);
+    }
 
     private void OnVideoBackgroundFailed(string message) =>
         _vm?.ReportVideoBackgroundFailure(message);
@@ -814,9 +855,11 @@ public partial class MainWindow : Window
         }
 
         // 声音开关：只改播放器的静音状态，不用重新换片。
+        // 但它也决定"离开首页要不要继续播"，所以播放门控要跟着重算一遍。
         if (e.PropertyName == nameof(MainWindowViewModel.VideoBackgroundSound))
         {
             _videoBackground.Sound = _vm?.VideoBackgroundSound ?? false;
+            UpdateVideoPlayback();
             return;
         }
 
@@ -833,6 +876,14 @@ public partial class MainWindow : Window
             UpdateVideoPlayback();
             // 背景可见性刚变，图标色要立刻跟上，不能等下一个 600ms 的采样节拍。
             UpdateWindowButtonTone();
+            return;
+        }
+
+        // 音量浮层每次**开**都要重新对一次喇叭：它横向位置是算出来的，而"算"这件事不能只挂在
+        // 鼠标进入那一下 —— 从别的路径打开（调试动词、以后加快捷键）就会停在右边框上。
+        if (e.PropertyName == nameof(MainWindowViewModel.IsVolumePopOpen) && _vm.IsVolumePopOpen)
+        {
+            RepositionVolumePanel();
             return;
         }
 

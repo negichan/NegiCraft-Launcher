@@ -111,6 +111,9 @@ public sealed class DebugBridge
                         _vm.IsAccPopOpen = arg == "acc";
                         _vm.IsInstPopOpen = arg == "inst";
                         _vm.IsDlPopOpen = arg == "dl";
+                        // `pop vol` 开音量浮层：它平时是**悬停即出**的，脚本没法在不抢鼠标的前提下
+                        // 让它亮着，而"对不对得齐喇叭"恰恰只能靠看图判。
+                        _vm.IsVolumePopOpen = arg == "vol";
                         // `pop bg` 现在开的是**独立那扇**调节窗（弹层整个搬走了）。
                         // 动词名留着不改，是为了 design/ 里那批抓图脚本不用跟着改。
                         _vm.IsBgTuningOpen = arg == "bg";
