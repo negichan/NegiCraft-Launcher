@@ -71,6 +71,26 @@ public sealed class LauncherSettings
     public double BackgroundHue { get; set; }
 
     /// <summary>
+    ///     主页那块 3D 皮肤模型是否出现。<b>默认 <c>true</c></b> —— 它本来就一直站在主页上，
+    ///     这个开关给的是"今天不想看见它"的出口，不是要改默认长相。
+    ///
+    ///     <para>关掉时 <see cref="HomeSkinModelX" /> / <see cref="HomeSkinModelY" /> 一起清成
+    ///     <c>null</c>：看不见的时候留着一份偏移没有意义，重新打开要回到设计锚点。</para>
+    /// </summary>
+    public bool HomeSkinModelVisible { get; set; } = true;
+
+    /// <summary>
+    ///     用户把主页的 3D 模型拖到了哪儿。<b>单位是首页可用区宽高的比例</b>（0..1），不是像素 ——
+    ///     主窗口可缩放（<c>MinWidth=1080</c>），存绝对坐标的话换个窗口大小或换个系统缩放，
+    ///     小人就会压到右下停靠卡上或者跑出画面。
+    ///
+    ///     <para><c>null</c> ＝ "没拖过"，视图走设计锚点 <c>92,44</c>。主页预览有像素回归基准钉在
+    ///     那个锚点上，所以 null 这条路一个像素都不许动。</para>
+    /// </summary>
+    public double? HomeSkinModelX { get; set; }
+    public double? HomeSkinModelY { get; set; }
+
+    /// <summary>
     ///     背景调节窗口的位置。
     ///
     ///     <para><see cref="BackgroundTuningX" /> / <see cref="BackgroundTuningY" /> 是屏幕坐标，
@@ -183,6 +203,8 @@ public sealed class LauncherSettings
         BackgroundHue = Finite(BackgroundHue, -180, 180, 0);
         BackgroundTuningX = FiniteOrNull(BackgroundTuningX);
         BackgroundTuningY = FiniteOrNull(BackgroundTuningY);
+        HomeSkinModelX = FractionOrNull(HomeSkinModelX);
+        HomeSkinModelY = FractionOrNull(HomeSkinModelY);
     }
 
     /// <summary>
@@ -191,6 +213,13 @@ public sealed class LauncherSettings
     /// </summary>
     private static double? FiniteOrNull(double? value) =>
         value is { } v && double.IsFinite(v) ? v : null;
+
+    /// <summary>
+    /// 主页模型的位置比例：非有限值退回 <c>null</c>（＝"没拖过"，走设计锚点），有限值夹进 0..1 ——
+    /// 夹在范围外的手改配置会把小人甩到首页外面，再也拖不回来。
+    /// </summary>
+    private static double? FractionOrNull(double? value) =>
+        value is { } v && double.IsFinite(v) ? Math.Clamp(v, 0.0, 1.0) : null;
 
     /// <summary>
     /// 背景这几个键会直接喂给变换矩阵和像素内核：<c>Math.Clamp(NaN,…)</c> 原样返回 NaN，
