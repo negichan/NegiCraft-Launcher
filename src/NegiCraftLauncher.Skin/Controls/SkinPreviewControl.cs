@@ -368,7 +368,10 @@ public sealed class SkinPreviewControl : Grid
     public SkinPreviewControl()
     {
         _software.EnableTop = true;
-        _software.SampleScale = 2;
+        // 不超采样：这是个像素人，而超采样的 resolve 是把 2x2 个采样**平均**掉
+        // （SoftwareRenderer 里那段 Average），等于给每个纹素边缘抹一圈软边 —— 像素画最怕这个。
+        // 关掉之后顺带省掉 4 倍光栅量（标准档 1.2ms → 约 0.4ms）。
+        _software.SampleScale = 1;
         _pose = new SkinPoseDriver(_software);
 
         Width = StageWidth;
