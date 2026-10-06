@@ -1,0 +1,300 @@
+<Window x:Class="NegiCraftLauncher.Pet.PetSettingsWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:materialIcons="clr-namespace:NegiCraftLauncher.Icons;assembly=NegiCraftLauncher.Icons"
+        xmlns:skin="clr-namespace:NegiCraftLauncher.Skin.Controls;assembly=NegiCraftLauncher.Skin"
+        xmlns:theme="clr-namespace:NegiCraftLauncher.Theme;assembly=NegiCraftLauncher.Theme"
+        mc:Ignorable="d"
+        Title="桌宠设置"
+        Width="750" Height="740"
+        WindowStartupLocation="CenterScreen"
+        WindowStyle="None"
+        AllowsTransparency="True"
+        Background="Transparent"
+        ResizeMode="NoResize"
+        ShowInTaskbar="True">
+
+    <Border Background="#111114"
+            BorderBrush="#26262B"
+            BorderThickness="1"
+            CornerRadius="16"
+            ClipToBounds="True">
+        <Border.Effect>
+            <DropShadowEffect BlurRadius="36" ShadowDepth="0" Opacity="0.75" Color="Black" />
+        </Border.Effect>
+
+        <Grid>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="56" />   <!-- 标题栏 -->
+                <RowDefinition Height="*" />    <!-- 主体区域 -->
+                <RowDefinition Height="56" />   <!-- 底部按钮栏 -->
+            </Grid.RowDefinitions>
+
+            <!-- 1. 标题栏（可拖拽） -->
+            <Border Grid.Row="0" Background="#16161A" BorderBrush="#26262B" BorderThickness="0,0,0,1"
+                    MouseDown="OnHeaderMouseDown">
+                <Grid Margin="18,0,14,0">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+
+                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                        <materialIcons:MaterialIcon Kind="Tune" Width="20" Height="20" Foreground="#FAFAFA" Margin="0,0,10,0" />
+                        <TextBlock x:Name="TxtTitle" Text="桌宠设置" FontSize="15" FontWeight="SemiBold" Foreground="#FAFAFA" VerticalAlignment="Center" />
+                        <TextBlock x:Name="TxtSubtitle" Text="个性化桌面宠物的形象、皮肤、外观与行为" FontSize="12" Foreground="#A1A1AA" Margin="14,2,0,0" VerticalAlignment="Center" />
+                    </StackPanel>
+
+                    <Button Grid.Column="1" x:Name="BtnClose" Width="30" Height="30"
+                            Background="Transparent" BorderThickness="0" Cursor="Hand"
+                            Click="OnCloseClick" VerticalAlignment="Center">
+                        <materialIcons:MaterialIcon Kind="Close" Width="16" Height="16" Foreground="#A1A1AA" />
+                    </Button>
+                </Grid>
+            </Border>
+
+            <!-- 2. 主体内容（左右分栏） -->
+            <Grid Grid.Row="1" Margin="18,14,18,10">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="250" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+
+                <!-- 左栏：3D 舞台与小人实时交互预览 -->
+                <Border Grid.Column="0" Background="#16161A" BorderBrush="#26262B" BorderThickness="1"
+                        CornerRadius="12" Padding="12,10" Margin="0,0,12,0">
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="*" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                        </Grid.RowDefinitions>
+
+                        <StackPanel Grid.Row="0" Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,0,0,6">
+                            <materialIcons:MaterialIcon Kind="CubeOutline" Width="16" Height="16" Foreground="#A1A1AA" Margin="0,0,6,0" VerticalAlignment="Center" />
+                            <TextBlock Text="3D 舞台实时预览" FontSize="12" FontWeight="SemiBold" Foreground="#A1A1AA" VerticalAlignment="Center" />
+                        </StackPanel>
+
+                        <!-- 3D 预览控件（支持鼠标左键拖动 360° 旋转视角） -->
+                        <Viewbox Grid.Row="1" Stretch="Uniform" Margin="0,4">
+                            <skin:SkinPreviewControl x:Name="StagePreview"
+                                                     Width="180" Height="280"
+                                                     StageOffsetY="48"
+                                                     CanDragRotate="True"
+                                                     SpineFlexible="True"
+                                                     LimbFlexible="True"
+                                                     HeadFollowsHostMouse="True" />
+                        </Viewbox>
+
+                        <!-- 视角与姿势测试按钮组 -->
+                        <StackPanel Grid.Row="2" Orientation="Vertical" Margin="0,6,0,0">
+                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,0,0,6">
+                                <Button x:Name="BtnResetRotation" Content="重置视角" Height="26" Padding="8,0"
+                                        FontSize="11" Background="#26262B" Foreground="#FAFAFA" BorderThickness="0"
+                                        Cursor="Hand" Click="OnResetRotationClick" Margin="0,0,6,0" />
+                                <Button x:Name="BtnPoseStand" Content="站姿" Height="26" Padding="8,0"
+                                        FontSize="11" Background="#26262B" Foreground="#FAFAFA" BorderThickness="0"
+                                        Cursor="Hand" Click="OnPoseStandClick" Margin="0,0,4,0" />
+                                <Button x:Name="BtnPoseSway" Content="摆动" Height="26" Padding="8,0"
+                                        FontSize="11" Background="#26262B" Foreground="#FAFAFA" BorderThickness="0"
+                                        Cursor="Hand" Click="OnPoseSwayClick" Margin="0,0,4,0" />
+                                <Button x:Name="BtnPoseArms" Content="叉腰" Height="26" Padding="8,0"
+                                        FontSize="11" Background="#26262B" Foreground="#FAFAFA" BorderThickness="0"
+                                        Cursor="Hand" Click="OnPoseArmsClick" />
+                            </StackPanel>
+                        </StackPanel>
+
+                        <TextBlock Grid.Row="3" Text="💡 按住左键拖拽可 360° 旋转小人"
+                                   FontSize="11" Foreground="#71717A" HorizontalAlignment="Center" Margin="0,2,0,0" />
+                    </Grid>
+                </Border>
+
+                <!-- 右栏：配置选项卡片列表 -->
+                <ScrollViewer Grid.Column="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                    <StackPanel Orientation="Vertical" Margin="4,0,4,0">
+
+                        <!-- 卡片 1: 身份与昵称 -->
+                        <Border Background="#16161A" BorderBrush="#26262B" BorderThickness="1" CornerRadius="10" Padding="14" Margin="0,0,0,10">
+                            <StackPanel>
+                                <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+                                    <materialIcons:MaterialIcon Kind="AccountOutline" Width="16" Height="16" Foreground="#FAFAFA" Margin="0,0,6,0" VerticalAlignment="Center" />
+                                    <TextBlock Text="桌宠昵称" FontWeight="SemiBold" FontSize="13" Foreground="#FAFAFA" VerticalAlignment="Center" />
+                                </StackPanel>
+
+                                <Grid Margin="0,0,0,4">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBox x:Name="TxtPetName" Height="32" Background="#1C1C21" Foreground="#FAFAFA"
+                                             BorderBrush="#26262B" BorderThickness="1" Padding="8,0"
+                                             VerticalContentAlignment="Center" TextChanged="OnPetNameChanged" />
+                                </Grid>
+                                <TextBlock Text="显示在桌宠头顶的名牌（支持中英文，随时可修改）" FontSize="11" Foreground="#71717A" />
+                            </StackPanel>
+                        </Border>
+
+                        <!-- 卡片 2: 皮肤外观 -->
+                        <Border Background="#16161A" BorderBrush="#26262B" BorderThickness="1" CornerRadius="10" Padding="14" Margin="0,0,0,10">
+                            <StackPanel>
+                                <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
+                                    <materialIcons:MaterialIcon Kind="PaletteOutline" Width="16" Height="16" Foreground="#FAFAFA" Margin="0,0,6,0" VerticalAlignment="Center" />
+                                    <TextBlock Text="皮肤外观" FontWeight="SemiBold" FontSize="13" Foreground="#FAFAFA" VerticalAlignment="Center" />
+                                </StackPanel>
+
+                                <!-- 皮肤来源切换 -->
+                                <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
+                                    <RadioButton x:Name="RbSkinOnline" Content="正版在线皮肤 (玩家 ID)"
+                                                 GroupName="SkinSourceGroup" Foreground="#FAFAFA" IsChecked="True"
+                                                 Checked="OnSkinSourceChanged" Margin="0,0,16,0" VerticalAlignment="Center" />
+                                    <RadioButton x:Name="RbSkinLocal" Content="本地皮肤文件 (.png)"
+                                                 GroupName="SkinSourceGroup" Foreground="#FAFAFA"
+                                                 Checked="OnSkinSourceChanged" VerticalAlignment="Center" />
+                                </StackPanel>
+
+                                <!-- 在线获取 -->
+                                <Grid x:Name="PanelSkinOnline" Margin="0,0,0,6">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBox x:Name="TxtOnlineUsername" Height="32" Background="#1C1C21" Foreground="#FAFAFA"
+                                             BorderBrush="#26262B" BorderThickness="1" Padding="8,0"
+                                             VerticalContentAlignment="Center" Margin="0,0,8,0" />
+                                    <Button Grid.Column="1" x:Name="BtnFetchOnline" Content="获取并应用" Height="32" Padding="12,0"
+                                            Background="#26262B" Foreground="#FAFAFA" BorderThickness="0"
+                                            Cursor="Hand" Click="OnFetchOnlineSkinClick" />
+                                </Grid>
+
+                                <!-- 本地文件选择 -->
+                                <Grid x:Name="PanelSkinLocal" Margin="0,0,0,6" Visibility="Collapsed">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBox x:Name="TxtLocalSkinPath" Height="32" Background="#1C1C21" Foreground="#FAFAFA"
+                                             BorderBrush="#26262B" BorderThickness="1" Padding="8,0"
+                                             IsReadOnly="True" VerticalContentAlignment="Center" Margin="0,0,8,0" />
+                                    <Button Grid.Column="1" x:Name="BtnBrowseSkin" Content="浏览文件…" Height="32" Padding="12,0"
+                                            Background="#26262B" Foreground="#FAFAFA" BorderThickness="0"
+                                            Cursor="Hand" Click="OnBrowseLocalSkinClick" />
+                                </Grid>
+
+                                <!-- 快捷预设皮肤 -->
+                                <StackPanel Orientation="Horizontal" Margin="0,6,0,0" VerticalAlignment="Center">
+                                    <TextBlock Text="快捷预设：" FontSize="11" Foreground="#A1A1AA" VerticalAlignment="Center" Margin="0,0,6,0" />
+                                    <Button Content="Steve (经典)" Height="24" Padding="8,0" FontSize="11" Background="#26262B"
+                                            Foreground="#FAFAFA" BorderThickness="0" Cursor="Hand" Click="OnPresetSteveClick" Margin="0,0,6,0" />
+                                    <Button Content="Alex (纤细)" Height="24" Padding="8,0" FontSize="11" Background="#26262B"
+                                            Foreground="#FAFAFA" BorderThickness="0" Cursor="Hand" Click="OnPresetAlexClick" Margin="0,0,6,0" />
+                                    <Button Content="Miku (初音)" Height="24" Padding="8,0" FontSize="11" Background="#26262B"
+                                            Foreground="#FAFAFA" BorderThickness="0" Cursor="Hand" Click="OnPresetMikuClick" />
+                                </StackPanel>
+                            </StackPanel>
+                        </Border>
+
+                        <!-- 卡片 3: 尺寸与动态表现 -->
+                        <Border Background="#16161A" BorderBrush="#26262B" BorderThickness="1" CornerRadius="10" Padding="14" Margin="0,0,0,10">
+                            <StackPanel>
+                                <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+                                    <materialIcons:MaterialIcon Kind="ArrowExpandAll" Width="16" Height="16" Foreground="#FAFAFA" Margin="0,0,6,0" VerticalAlignment="Center" />
+                                    <TextBlock Text="尺寸与动态表现" FontWeight="SemiBold" FontSize="13" Foreground="#FAFAFA" VerticalAlignment="Center" />
+                                </StackPanel>
+
+                                <!-- 缩放比例 -->
+                                <Grid Margin="0,2,0,8">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="45" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Text="显示比例：" FontSize="12" Foreground="#A1A1AA" VerticalAlignment="Center" Margin="0,0,8,0" />
+                                    <Slider Grid.Column="1" x:Name="SliderScale" Minimum="0.5" Maximum="2.0" Value="1.0"
+                                            TickFrequency="0.25" IsSnapToTickEnabled="False"
+                                            ValueChanged="OnScaleValueChanged" VerticalAlignment="Center" />
+                                    <TextBlock Grid.Column="2" x:Name="TxtScaleValue" Text="100%" FontSize="12"
+                                               Foreground="#FAFAFA" HorizontalAlignment="Right" VerticalAlignment="Center" />
+                                </Grid>
+
+                                <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
+                                    <Button Content="75%" Height="24" Padding="8,0" FontSize="11" Background="#26262B"
+                                            Foreground="#FAFAFA" BorderThickness="0" Cursor="Hand" Click="OnScaleQuick75Click" Margin="0,0,6,0" />
+                                    <Button Content="100%" Height="24" Padding="8,0" FontSize="11" Background="#26262B"
+                                            Foreground="#FAFAFA" BorderThickness="0" Cursor="Hand" Click="OnScaleQuick100Click" Margin="0,0,6,0" />
+                                    <Button Content="125%" Height="24" Padding="8,0" FontSize="11" Background="#26262B"
+                                            Foreground="#FAFAFA" BorderThickness="0" Cursor="Hand" Click="OnScaleQuick125Click" Margin="0,0,6,0" />
+                                    <Button Content="150%" Height="24" Padding="8,0" FontSize="11" Background="#26262B"
+                                            Foreground="#FAFAFA" BorderThickness="0" Cursor="Hand" Click="OnScaleQuick150Click" />
+                                </StackPanel>
+
+                                <CheckBox x:Name="ChkLookAtMouse" Content="视线跟随鼠标 (光标在屏幕移动时头部注视追踪)"
+                                          Foreground="#FAFAFA" IsChecked="True" Margin="0,0,0,8" />
+                                <CheckBox x:Name="ChkSpineFlexible" Content="细分脊椎与四肢自由弯曲形变 (扭胯、折肘连续自然)"
+                                          Foreground="#FAFAFA" IsChecked="True" />
+                            </StackPanel>
+                        </Border>
+
+                        <!-- 卡片 4: 渲染与系统行为 -->
+                        <Border Background="#16161A" BorderBrush="#26262B" BorderThickness="1" CornerRadius="10" Padding="14" Margin="0,0,0,10">
+                            <StackPanel>
+                                <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+                                    <materialIcons:MaterialIcon Kind="CogOutline" Width="16" Height="16" Foreground="#FAFAFA" Margin="0,0,6,0" VerticalAlignment="Center" />
+                                    <TextBlock Text="渲染与系统" FontWeight="SemiBold" FontSize="13" Foreground="#FAFAFA" VerticalAlignment="Center" />
+                                </StackPanel>
+
+                                <CheckBox x:Name="ChkUseGpu" Content="启用 GPU 硬件加速渲染 (Viewport3D，降低高刷屏幕 CPU 开销)"
+                                          Foreground="#FAFAFA" Margin="0,0,0,8" />
+                                <CheckBox x:Name="ChkTopmost" Content="窗口始终置顶显示"
+                                          Foreground="#FAFAFA" IsChecked="True" Margin="0,0,0,8" />
+
+                                <StackPanel Orientation="Horizontal" Margin="0,4,0,0">
+                                    <TextBlock Text="默认行为模式：" FontSize="12" Foreground="#A1A1AA" VerticalAlignment="Center" Margin="0,0,10,0" />
+                                    <RadioButton x:Name="RbModeFree" Content="自由待机" GroupName="ModeGroup"
+                                                 Foreground="#FAFAFA" IsChecked="True" Margin="0,0,14,0" VerticalAlignment="Center" />
+                                    <RadioButton x:Name="RbModeControl" Content="操控模式 (WASD)" GroupName="ModeGroup"
+                                                 Foreground="#FAFAFA" Margin="0,0,14,0" VerticalAlignment="Center" />
+                                    <RadioButton x:Name="RbModeFollow" Content="鼠标跟随" GroupName="ModeGroup"
+                                                 Foreground="#FAFAFA" VerticalAlignment="Center" />
+                                </StackPanel>
+                            </StackPanel>
+                        </Border>
+
+                    </StackPanel>
+                </ScrollViewer>
+            </Grid>
+
+            <!-- 3. 底部操作栏 -->
+            <Border Grid.Row="2" Background="#16161A" BorderBrush="#26262B" BorderThickness="0,1,0,0">
+                <Grid Margin="18,0,18,0">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+
+                    <TextBlock x:Name="TxtFooterHint" Text="配置将自动保存至 %APPDATA%\NCL\pet.json"
+                               FontSize="11" Foreground="#71717A" VerticalAlignment="Center" />
+
+                    <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                        <Button x:Name="BtnCancel" Content="取消" Height="32" Padding="16,0"
+                                Background="#26262B" Foreground="#A1A1AA" BorderThickness="0"
+                                Cursor="Hand" Click="OnCancelClick" Margin="0,0,10,0">
+                            <theme:Negi.CornerRadius>
+                                <CornerRadius>8</CornerRadius>
+                            </theme:Negi.CornerRadius>
+                        </Button>
+                        <Button x:Name="BtnSave" Content="保存并应用" Height="32" Padding="20,0"
+                                Background="#FAFAFA" Foreground="#18181B" FontWeight="Medium" BorderThickness="0"
+                                Cursor="Hand" Click="OnSaveClick">
+                            <theme:Negi.CornerRadius>
+                                <CornerRadius>8</CornerRadius>
+                            </theme:Negi.CornerRadius>
+                        </Button>
+                    </StackPanel>
+                </Grid>
+            </Border>
+        </Grid>
+    </Border>
+</Window>

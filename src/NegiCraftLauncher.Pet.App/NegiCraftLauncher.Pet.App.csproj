@@ -17,7 +17,22 @@
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <ApplicationIcon>Assets\NegiPet.ico</ApplicationIcon>
     <EnableWindowsTargeting>true</EnableWindowsTargeting>
+    <!-- 托盘图标走 WinForms 的 NotifyIcon：WPF 自己没有托盘 API，而 System.Windows.Forms
+         本来就随 Microsoft.WindowsDesktop.App 一起发布，框架依赖模式下不增加体积。
+         与启动器 NegiCraftLauncher.App 同一个做法。 -->
+    <UseWindowsForms>true</UseWindowsForms>
+    <!-- WFO0003 是 WinForms 分析器在劝人别用 manifest 配 DPI。我们只借 NotifyIcon，
+         界面全是 WPF，而 WPF 正是靠 manifest 的 dpiAware 声明工作的，所以这条关掉。 -->
+    <NoWarn>$(NoWarn);WFO0003</NoWarn>
   </PropertyGroup>
+
+  <ItemGroup>
+    <!-- UseWindowsForms 会顺手把 System.Windows.Forms / System.Drawing 塞进隐式 using，
+         于是 App / Application / Icon / Point / Image 全部二义。摘掉，只在托盘那一个文件里
+         用 Forms 别名显式引用。 -->
+    <Using Remove="System.Windows.Forms" />
+    <Using Remove="System.Drawing" />
+  </ItemGroup>
 
   <ItemGroup>
     <PackageReference Include="Material.Icons.WPF" Version="3.0.2" />
