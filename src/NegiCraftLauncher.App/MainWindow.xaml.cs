@@ -630,6 +630,92 @@ public partial class MainWindow : Window
     /// <summary>最近一次横向定位的算式（<c>state</c> 的 speaker= 段里能看到）。没跑过就是"还没算过"。</summary>
     private string _volumeReposition = "还没算过";
 
+    /// <summary>
+    /// 音量条"点哪儿就跳到哪儿"。
+    ///
+    /// <para><b>为什么要自己算</b>：WPF 的 <see cref="Track"/> 上<b>没有</b> IsMoveToPointEnabled
+    /// （那是 Avalonia / WinUI 的属性，写在这儿连编译都过不去），而模板里那两根 RepeatButton
+    /// 又没绑 LargeChange 命令 —— 所以点轨道本来是一点反应都没有，只有那个小圆钮能拖。</para>
+    ///
+    /// <para><b>按在钮上必须让路</b>：Preview 那一下是从外向里传的，在这里抢先 Handle 会把钮自己的
+    /// 拖拽掐死。所以先顺着可视树从 OriginalSource 往上认，落在 <see cref="Thumb"/> 里就什么都不做。</para>
+    /// </summary>
+    private void OnVolumeBarMouseDown(object sender, MouseButtonEventArgs e)
+    {
+        if (e.LeftButton != MouseButtonState.Pressed) return;
+        if (SetVolumeFromPoint(e)) e.Handled = true;
+    }
+
+    /// <summary>
+    /// 按着之后在条里拖，值跟着走。
+    /// 故意<b>不抓鼠标</b>：一 Capture，<c>IsMouseOver</c> 就不跟指针了，那台收合看门狗会当场把浮层关掉。
+    /// </summary>
+    private void OnVolumeBarMouseMove(object sender, MouseEventArgs e)
+    {
+        if (e.LeftButton == MouseButtonState.Pressed) SetVolumeFromPoint(e);
+    }
+
+    private bool SetVolumeFromPoint(MouseEventArgs e)
+    {
+        for (var v = e.OriginalSource as DependencyObject; v is not null && v != VideoVolumeSlider; v = VisualTreeHelper.GetParent(v))
+        {
+            if (v is Thumb) return false;
+        }
+
+        if (VideoVolumeSlider.Template?.FindName("PART_Track", VideoVolumeSlider) is not Track track) return false;
+        var value = ValueAtY(e.GetPosition(track).Y);
+        if (double.IsNaN(value)) return false;
+        VideoVolumeSlider.Value = value;
+        return true;
+    }
+
+    /// <summary>
+    /// 轨道内某个纵向位置（<b>相对 Track、Y 向下为正</b>）对应多少音量；量还没排出来回 NaN。
+    ///
+    /// <para>钮中心的活动区间是「轨道长 − 钮长」，两端各让半个钮，所以两端都点得到 0 和 100。
+    /// 轨道没写 IsDirectionReversed：0 在底下、往上长（见 VolumeBarStyle 那段实测说明）。</para>
+    /// </summary>
+    private double ValueAtY(double y)
+    {
+        if (VideoVolumeSlider.Template?.FindName("PART_Track", VideoVolumeSlider) is not Track track
+            || track.Thumb is not { } thumb) return double.NaN;
+
+        var travel = track.ActualHeight - thumb.ActualHeight;
+        if (travel <= 0) return double.NaN;
+
+        var ratio = Math.Clamp((track.ActualHeight - thumb.ActualHeight / 2 - y) / travel, 0.0, 1.0);
+        // 程序改 Value 不过 IsSnapToTickEnabled 那道 snapping，这里自己按 TickFrequency 取整；
+        // 设置里存的本来就是 int。
+        return Math.Round(VideoVolumeSlider.Minimum + ratio * (VideoVolumeSlider.Maximum - VideoVolumeSlider.Minimum));
+    }
+
+    /// <summary>
+    /// 点击算式的自检，出现在 <c>state</c> 的 volbar= 段。
+    ///
+    /// <para>判据不是"我觉得公式对"，而是拿 WPF **真实排出来的**钮中心去反查：在钮已经停着的那个 Y 上
+    /// 点一下，应当原样落回当前音量（否则用户一点，音量就无声地飘一格）。顺带列出点顶/中/底会跳到几。</para>
+    /// </summary>
+    public string VolumeBarDebug
+    {
+        get
+        {
+            if (VideoVolumeSlider.Template?.FindName("PART_Track", VideoVolumeSlider) is not Track track
+                || track.Thumb is not { } thumb) return "没有 PART_Track";
+
+            var travel = track.ActualHeight - thumb.ActualHeight;
+            if (travel <= 0) return $"track={track.ActualHeight:0.#} 钮={thumb.ActualHeight:0.#} 行程不够";
+
+            var cy = thumb.TransformToVisual(track)
+                .Transform(new Point(thumb.ActualWidth / 2, thumb.ActualHeight / 2)).Y;
+            var span = VideoVolumeSlider.Maximum - VideoVolumeSlider.Minimum;
+            var predicted = track.ActualHeight - ((VideoVolumeSlider.Value - VideoVolumeSlider.Minimum) / span * travel + thumb.ActualHeight / 2);
+
+            return $"track={track.ActualHeight:0.#} 钮={thumb.ActualHeight:0.#} 行程={travel:0.#} " +
+                   $"v={VideoVolumeSlider.Value:0.#} 钮中心 实测={cy:0.#} 预测={predicted:0.#} 差={cy - predicted:0.##} " +
+                   $"实测回读={ValueAtY(cy):0.#} 点顶/中/底={ValueAtY(0):0}/{ValueAtY(track.ActualHeight / 2):0}/{ValueAtY(track.ActualHeight):0}";
+        }
+    }
+
     private void CheckVolumeHover()
     {
         if (_vm is null || !_vm.IsVolumePopOpen)
