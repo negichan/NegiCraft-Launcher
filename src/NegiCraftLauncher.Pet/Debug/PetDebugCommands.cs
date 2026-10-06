@@ -86,6 +86,15 @@ public static class PetDebugCommands
                     else if (arg == "toggle") pet.IsControlMode = !pet.IsControlMode;
                     return "OK " + pet.IsControlMode;
                 });
+            case "pet-scale":
+                // 桌宠缩放只是把窗口 DIP 尺寸改掉、让 Viewbox 去拉伸那块位图 ——
+                // 要验"位图按最终设备像素出图"，就得能不点菜单把桌宠拉到任意倍。
+                return PetDebugMailbox.Ui(() =>
+                {
+                    if (!double.TryParse(arg, out var s) || s < 0.25 || s > 4) return "ERR usage: pet-scale <0.25..4>";
+                    pet.SetScale(s);
+                    return $"OK scale={pet.CurrentScale:F2} window={pet.Width:F0}x{pet.Height:F0}";
+                });
             case "pet-key":
                 return PetDebugMailbox.Ui(() =>
                 {
@@ -424,7 +433,7 @@ public static class PetDebugCommands
                     var area = pet.CurrentWorkArea;
                     var win = pet.CurrentWindow;
                     return $"OK work=({area.X:F0},{area.Y:F0},{area.Width:F0},{area.Height:F0}) " +
-                           $"window=({win.X:F0},{win.Y:F0})";
+                           $"window=({win.X:F0},{win.Y:F0}) src={pet.WorkAreaSource}";
                 });
             case "pet-mouse":
                 return PetDebugMailbox.Ui(() =>
