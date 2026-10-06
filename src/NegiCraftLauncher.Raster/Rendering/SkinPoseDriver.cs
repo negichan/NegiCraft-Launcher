@@ -280,9 +280,14 @@ public sealed class SkinPoseDriver
         System.Numerics.Vector3 a, System.Numerics.Vector3 b, float k) =>
         a + (b - a) * k;
 
-    /// <summary>把模型摆回初始姿态：位置归零、朝向复位。</summary>
+    /// <summary>把模型摆回初始姿态：位置归零、朝向复位，动画进度也一并退回中立。</summary>
     public void Reset()
     {
+        // 定格的挥击要在这里放掉。<see cref="TriggerAttack"/> 传了 parkAt 就不自己走完（_attackParked），
+        // 而换皮肤 / 重建驱动都会走 Reset —— 不清的话那份躯干扭转会漏给之后所有姿势，且再也解不开。
+        _attackT = 1.0;
+        _attackParked = false;
+
         foreach (var r in _renderers)
         {
             r.ResetPos();
