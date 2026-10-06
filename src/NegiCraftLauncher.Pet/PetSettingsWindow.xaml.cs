@@ -102,6 +102,7 @@ public partial class PetSettingsWindow : Window
 
         ChkLookAtMouse.IsChecked = _petWindow?.LookAtMouse ?? _settings.LookAtMouse;
         ChkSpineFlexible.IsChecked = _petWindow?.SpineFlexible ?? _settings.SpineFlexible;
+        ChkSwayWithAudio.IsChecked = _petWindow?.SwayWithAudio ?? _settings.SwayWithAudio;
 
         // 4. 渲染与系统
         ChkUseGpu.IsChecked = _petWindow?.Preview.UseGpu ?? _settings.UseGpu;
@@ -355,6 +356,7 @@ public partial class PetSettingsWindow : Window
         _settings.Scale = SliderScale.Value;
         _settings.LookAtMouse = ChkLookAtMouse.IsChecked == true;
         _settings.SpineFlexible = ChkSpineFlexible.IsChecked == true;
+        _settings.SwayWithAudio = ChkSwayWithAudio.IsChecked == true;
         _settings.UseGpu = ChkUseGpu.IsChecked == true;
         _settings.Topmost = ChkTopmost.IsChecked == true;
 

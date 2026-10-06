@@ -1,4 +1,4 @@
-﻿using System.ComponentModel;
+using System.ComponentModel;
 using System.IO;
 using System.Runtime.InteropServices;
 using System.Windows;
@@ -7,6 +7,7 @@ using System.Windows.Input;
 using System.Windows.Interop;
 using System.Windows.Media;
 using NegiCraftLauncher.Icons;
+using NegiCraftLauncher.Pet.Audio;
 using NegiCraftLauncher.Pet.Services;
 using NegiCraftLauncher.Raster;
 using NegiCraftLauncher.Skin.Controls;
@@ -135,6 +136,46 @@ public partial class PetWindow : Window
                 PetPreview.SetHeadLookAt(0, 0);
             }
             MenuLookAtMouseIcon.Visibility = Vis(_lookAtMouse);
+        }
+    }
+
+    private DesktopAudioMeter? _audioMeter;
+    private bool _swayWithAudio;
+
+    /// <summary>当前音频计（调试动词可读它）。</summary>
+    public DesktopAudioMeter? AudioMeter => _audioMeter;
+
+    /// <summary>是否开启扭胯跟随桌面音频律动。</summary>
+    public bool SwayWithAudio
+    {
+        get => _swayWithAudio;
+        set
+        {
+            if (_swayWithAudio == value) return;
+            _swayWithAudio = value;
+            UpdateSwayAudioState();
+        }
+    }
+
+    private void UpdateSwayAudioState()
+    {
+        if (_swayWithAudio)
+        {
+            if (_audioMeter == null)
+            {
+                _audioMeter = new DesktopAudioMeter();
+                _audioMeter.Start();
+            }
+            PetPreview.Swaying = true;
+            if (MenuSwayIcon != null) MenuSwayIcon.Visibility = Visibility.Visible;
+            if (MenuSwayAudioIcon != null) MenuSwayAudioIcon.Visibility = Visibility.Visible;
+        }
+        else
+        {
+            _audioMeter?.Dispose();
+            _audioMeter = null;
+            PetPreview.DriveSwayFromAudio(null, null);
+            if (MenuSwayAudioIcon != null) MenuSwayAudioIcon.Visibility = Visibility.Collapsed;
         }
     }
 
@@ -347,6 +388,8 @@ public partial class PetWindow : Window
             StopShiftMonitoring();
             StopKeyboardHook();
             DropInteractHook();
+            _audioMeter?.Dispose();
+            _audioMeter = null;
             if (_host != null)
             {
                 _host.PropertyChanged -= OnHostPropertyChanged;
@@ -611,6 +654,11 @@ public partial class PetWindow : Window
         if (_motion.PositionDirty) MoveWindowTo(_motion.GroundX, _motion.GroundY);
 
         MenuSneakIcon.Visibility = Vis(_motion.ManualSneakToggle);
+
+        if (_swayWithAudio && _audioMeter is { Running: true } meter)
+        {
+            PetPreview.DriveSwayFromAudio(meter.Energy, meter.BeatHz);
+        }
     }
 
     /// <summary>诊断串，<c>pet-track</c> 动词读它。物理每帧往里写，宿主也会写（启动标记 / 异常）。</summary>
@@ -981,6 +1029,15 @@ public partial class PetWindow : Window
     {
         PetPreview.Swaying = !PetPreview.Swaying;
         MenuSwayIcon.Visibility = Vis(PetPreview.Swaying);
+        if (!PetPreview.Swaying && _swayWithAudio)
+        {
+            SwayWithAudio = false;
+        }
+    }
+
+    private void OnToggleSwayAudioClick(object sender, RoutedEventArgs e)
+    {
+        SwayWithAudio = !SwayWithAudio;
     }
 
     private void OnToggleLookAtMouseClick(object sender, RoutedEventArgs e)
@@ -1186,6 +1243,7 @@ public partial class PetWindow : Window
 
         LookAtMouse = settings.LookAtMouse;
         PetPreview.SpineFlexible = settings.SpineFlexible;
+        SwayWithAudio = settings.SwayWithAudio;
         Topmost = settings.Topmost;
         if (MenuTopmost != null)
         {

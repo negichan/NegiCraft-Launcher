@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Numerics;
 using MinecraftSkinRender;
 
@@ -212,6 +212,26 @@ public sealed class SkinPoseDriver
     private bool _swaying;
 
     /// <summary>
+    /// 音频驱动：宿主每帧喂进来音频能量（0..1），摆动的<b>幅度</b>跟着它走。
+    /// null = 不驱动，幅度照旧满值。
+    ///
+    /// <para>留了 <see cref="SwayIdleFloor"/> 底限：声音掉到零时整个人僵住很难看，
+    /// 剩一点小摆至少还是"活着在打拍子"。</para>
+    /// </summary>
+    public double? SwayEnergy { get; set; }
+
+    /// <summary>音频估出来的节拍率（Hz），驱动摆动的<b>快慢</b>。认不出节拍（0 / null）就退回固定频率。</summary>
+    public double? SwayBeatHz { get; set; }
+
+    /// <summary>音频节拍锁相环相位（0..1，0 代表当前处于拍点极值）。用于平滑软锁相消除相位漂移。</summary>
+    public double? SwayBeatPhase { get; set; }
+
+    /// <summary>兼容保留：低频底鼓能量。</summary>
+    public double? SwayKickEnergy { get; set; }
+
+    private const double SwayIdleFloor = 0.25;
+
+    /// <summary>
     /// 这一帧需不需要重画？—— 动画还在跑（<see cref="IsAnimating"/>），或者姿势 / 朝向被外部改过
     /// （旋转、转头、蹲/走/跳/跑开关、挥击、被拎起来）。
     ///
@@ -341,7 +361,14 @@ public sealed class SkinPoseDriver
 
             // 相位只在还有摆动（含收尾）的时候走；完全归零后把时钟也清掉，
             // 下次打开是从中立位起摆，而不是接着上一回的相位。
-            if (_swayK > 0) _swayClock += dt * SwayFrequency;
+            // 最初版本：音频驱动时快慢跟着鼓点节拍走，认不出节拍就退回固定频率。
+            // 比最初版本放慢一点点（* 0.80），自然舒缓不急促。
+            if (_swayK > 0)
+            {
+                var baseFreq = (SwayBeatHz is > 0.2 and < 4.0 ? SwayBeatHz.Value : SwayFrequency);
+                var freq = baseFreq * 0.80;
+                _swayClock += dt * freq;
+            }
             else _swayClock = 0;
         }
 
@@ -432,7 +459,10 @@ public sealed class SkinPoseDriver
 
         // 扭胯：基于视频与关键帧拆解的顶胯动作：
         // 骨盆横向平移与侧倾 + 2倍频下沉起伏 + 脊椎C型反向补偿 + 双腿纯被动接地跟随
-        var sk = (float)_swayK * hang;
+        var sk = (float)_swayK * hang * (SwayEnergy is { } energy
+            ? (float)(SwayIdleFloor + (1.0 - SwayIdleFloor) * Math.Clamp(energy, 0.0, 1.0))
+            : 1f);
+
         System.Numerics.Vector3 hipRot = default, hipPos = default, spineBend = default, headLevel = default;
         System.Numerics.Vector3 ikThighL = default, ikThighR = default;
         float armSwayRoll = 0f, armSwayElbow = 0f, sSnap = 0f;

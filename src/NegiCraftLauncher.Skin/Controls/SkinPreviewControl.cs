@@ -1,4 +1,4 @@
-﻿using System.IO;
+using System.IO;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
@@ -53,10 +53,12 @@ public sealed class SkinPreviewControl : Grid
     ///
     /// <para><b>为什么必须封顶</b>：<see cref="CompositionTarget.Rendering"/> 的频率是 WPF 合成
     /// 决定的，不保证等于显示器刷新率 —— 软件合成 / 没有 DWM 的环境下实测能到 <b>~250 次/秒</b>。
-    /// 而这里每帧都要跑一遍软件光栅化，不封顶就是白烧 CPU。</para>
+    /// 不封顶除了白烧 CPU，更糟的是<b>帧节奏会乱</b>：出图比屏幕能显示的还快时，DWM 只能不规则地
+    /// 丢帧并帧，画面看着就是一顿一顿。</para>
     ///
-    /// <para><b>只对软件后端封顶</b>：GPU 模式（<see cref="UseGpu"/>）每帧只更新十几次矩阵，
-    /// 光栅化在显卡上，跟着合成器的节奏走就好，不用省。</para>
+    /// <para><b>两条后端都封</b>：GPU 模式（<see cref="UseGpu"/>）以前跳过封顶，理由是"每帧只更新
+    /// 十几次矩阵，跟着合成节奏走就好"。实测它跑 186.7 次/秒，而屏是 159Hz ⇒ 正是上面那种丢帧，
+    /// 桌宠的窗口位移很顺、人物小动作却卡。所以限速对两条后端一视同仁。</para>
     ///
     /// <para><c>dt</c> 是从墙钟算的，所以节流只改"多久画一次"，不改动画速度。
     /// 显示器刷新率更高时想跟着提，把这个常数改小即可。</para>
@@ -476,6 +478,17 @@ public sealed class SkinPreviewControl : Grid
     }
 
     /// <summary>
+    /// 音频驱动扭胯：宿主每帧喂进来音频能量（0..1）、节拍率（Hz）与连续节拍相位（0..1），分别控制摆动的幅度、速度与软锁相对齐。
+    /// 传 null 就回到自走的固定频率与满幅。
+    /// </summary>
+    public void DriveSwayFromAudio(double? energy, double? beatHz, double? beatPhase = null)
+    {
+        _pose.SwayEnergy = energy;
+        _pose.SwayBeatHz = beatHz;
+        _pose.SwayBeatPhase = beatPhase;
+    }
+
+    /// <summary>
     /// 调试用：往某个关节的角度上加一份偏移（度），用来把叉腰那组骨架角边看边调。
     /// 见 <see cref="SkinPoseDriver.TweakJoint"/>。
     /// </summary>
@@ -728,17 +741,17 @@ public sealed class SkinPreviewControl : Grid
         var now = DateTime.UtcNow;
         var dt = (now - _lastFrame).TotalSeconds;
 
-        // ★ 再封顶 60fps（见 MinFrameSeconds）。**脏标记故意不清** —— 这一帧只是"还没到时候"，
-        //   不是"不用画"；下一帧一到点就会画出来。GPU 模式不封顶。
+        // ★ 封顶 60fps（见 MinFrameSeconds）。**脏标记故意不清** —— 这一帧只是"还没到时候"，
+        //   不是"不用画"；下一帧一到点就会画出来。
         //   判据要拿"截止点"比，不能拿"距上次真出图多久"比：合成回调本身到达得并不均匀（实测
         //   间隔从 6ms 一直铺到 46ms），拿恰好等于目标周期去比就会把该画的帧判掉 —— 桌宠走路时
         //   数 frames= 只有 43fps。改成截止点每次只推进一格、踩过头的余量结转给下一格之后 58fps。
-        if (!_useGpu)
-        {
-            if (now < _nextDraw) return;
-            _nextDraw += MinFrame;
-            if (_nextDraw < now) _nextDraw = now + MinFrame;   // 久停（切页 / 卡了一下）后重新对齐，不连补几帧
-        }
+        //   GPU 后端以前故意跳过这个封顶（"每帧只更新十几次矩阵，跟着合成节奏走就好"），实测那是
+        //   错的：它跑到 186.7 次/秒，比这块屏的 159Hz 还快，DWM 只能不规则地丢帧并帧 —— 窗口位置
+        //   是顺的，人物的小动作却一顿一顿。两条后端限速到同一个节拍，节奏才是整的。
+        if (now < _nextDraw) return;
+        _nextDraw += MinFrame;
+        if (_nextDraw < now) _nextDraw = now + MinFrame;   // 久停（切页 / 卡了一下）后重新对齐，不连补几帧
 
         _lastFrame = now;
         _viewDirty = false;
