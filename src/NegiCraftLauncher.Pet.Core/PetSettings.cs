@@ -27,6 +27,38 @@ public sealed class PetSettings
     /// </summary>
     public bool UseGpu { get; set; }
 
+    /// <summary>本地皮肤文件绝对路径。如果有效且存在，启动时优先使用。</summary>
+    public string? SkinPath { get; set; }
+
+    /// <summary>用于获取皮肤的玩家名称或预设名称（如 steve, alex, miku_mew 或正版用户名）。</summary>
+    public string? SkinPlayerName { get; set; }
+
+    /// <summary>皮肤模型类型：auto, classic (4px), slim (3px)。</summary>
+    public string SkinModel { get; set; } = "auto";
+
+    /// <summary>显示缩放比例，默认 1.0 (100%)。</summary>
+    public double Scale { get; set; } = 1.0;
+
+    /// <summary>视线是否跟随鼠标。</summary>
+    public bool LookAtMouse { get; set; } = true;
+
+    /// <summary>细分脊椎与四肢自由弯曲形变。</summary>
+    public bool SpineFlexible { get; set; } = true;
+
+    /// <summary>是否保持窗口置顶。</summary>
+    public bool Topmost { get; set; } = true;
+
+    /// <summary>默认交互模式 (Free, Control, FollowMouse)。</summary>
+    public string InteractionMode { get; set; } = "Free";
+
+    /// <summary>
+    /// 检查是否已有明确配置的名字或有效皮肤。
+    /// 当没有名字或者没有皮肤时，首次启动应主动跳出设置窗口让用户配置。
+    /// </summary>
+    public bool HasConfiguredIdentity =>
+        !string.IsNullOrWhiteSpace(CustomName) &&
+        ((!string.IsNullOrWhiteSpace(SkinPath) && File.Exists(SkinPath)) || !string.IsNullOrWhiteSpace(SkinPlayerName));
+
     private static string FilePath => Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "NCL", "pet.json");
 

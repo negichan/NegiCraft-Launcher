@@ -5,7 +5,7 @@
     <!-- ShutdownMode=OnLastWindowClose 是**刻意的**：桌宠是这个进程里唯一的窗口，
          从菜单点「关闭桌宠」就该结束进程。曾经在 Avalonia 侧用过 OnExplicitShutdown，
          结果是关窗后进程还挂着 —— 没窗口、没托盘，只能去任务管理器杀。
-         本工程没有托盘，所以这里更不能改。 -->
+         托盘的「收起桌宠」走的是 Hide()，不触发这个模式，所以两者不冲突。 -->
     <Application.Resources>
         <ResourceDictionary>
             <ResourceDictionary.MergedDictionaries>
