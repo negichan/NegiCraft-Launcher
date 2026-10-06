@@ -96,6 +96,52 @@ public class MinecraftSkinPreview : Panel
         set => SetValue(CanDragRotateProperty, value);
     }
 
+    public static readonly StyledProperty<MouseButton> RotateButtonProperty =
+        AvaloniaProperty.Register<MinecraftSkinPreview, MouseButton>(nameof(RotateButton), MouseButton.Left);
+
+    /// <summary>哪只键负责旋转。默认左键（既有宿主的握法）；主页设成右键，好把左键腾给 <see cref="CanDragPosition"/>。与 WPF 侧 <c>SkinPreviewControl.RotateButton</c> 同名同义。</summary>
+    public MouseButton RotateButton
+    {
+        get => GetValue(RotateButtonProperty);
+        set => SetValue(RotateButtonProperty, value);
+    }
+
+    public static readonly StyledProperty<bool> CanDragPositionProperty =
+        AvaloniaProperty.Register<MinecraftSkinPreview, bool>(nameof(CanDragPosition), false);
+
+    /// <summary>左键是否改用来挪位置：控件不动，只把位移报给 <see cref="PositionDragged"/>，摆哪儿、怎么存由宿主定。</summary>
+    public bool CanDragPosition
+    {
+        get => GetValue(CanDragPositionProperty);
+        set => SetValue(CanDragPositionProperty, value);
+    }
+
+    /// <summary>位置拖动中的增量，单位 DIP（见 <see cref="CanDragPosition"/>）。</summary>
+    public event Action<double, double>? PositionDragged;
+
+    public static readonly StyledProperty<bool> HitFootprintOnlyProperty =
+        AvaloniaProperty.Register<MinecraftSkinPreview, bool>(nameof(HitFootprintOnly), false);
+
+    /// <summary>
+    /// 命中区是否只留身体那一块（<see cref="Footprint"/>）。默认 false —— 整块舞台都吃点击，
+    /// 桌宠那 160x320 的舞台就靠它拎起来。主页要 true：小人脚下白留 81 DIP，那块要是还能吃点击，
+    /// 摆位绕开「启动游戏」就只是看着没压住 —— 按钮其实被透明的那块盖着。与 WPF 侧同名同义。
+    /// </summary>
+    public bool HitFootprintOnly
+    {
+        get => GetValue(HitFootprintOnlyProperty);
+        set => SetValue(HitFootprintOnlyProperty, value);
+    }
+
+    /// <summary>
+    /// 身体在舞台里真正占的那一块：名牌顶（6）到阴影底（160+9），横向就是渲染视口那 110。
+    /// 摆位夹取与命中区都按这块算，不按整块舞台。
+    /// </summary>
+    public Rect Footprint => new(FootInsetLeft, 6 + StageOffsetY, 110, 163);
+
+    /// <summary>舞台左右各空 25（渲染视口只有 110 宽），脚下空 81 —— 这些都没有像素。</summary>
+    private const double FootInsetLeft = 25;
+
     public static readonly StyledProperty<double> StageOffsetYProperty =
         AvaloniaProperty.Register<MinecraftSkinPreview, double>(nameof(StageOffsetY), 0.0);
 
@@ -109,12 +155,25 @@ public class MinecraftSkinPreview : Panel
     private readonly TextBlock _nameText;
     private readonly Border _nametag;
     private readonly Ellipse _shadow;
+
+    /// <summary>唯一那块"能点着"的面板，尺寸 = <see cref="Footprint"/>，只在 <see cref="HitFootprintOnly"/> 开着时亮着。</summary>
+    private readonly Rectangle _hitArea = new()
+    {
+        Fill = Brushes.Transparent,
+        HorizontalAlignment = HorizontalAlignment.Left,
+        VerticalAlignment = VerticalAlignment.Top,
+    };
     private readonly TranslateTransform _shadowTransform = new();
     private readonly TranslateTransform _characterTransform = new();
     private readonly TranslateTransform _nametagTransform = new();
     private DispatcherTimer? _globalTrackingTimer;
     private bool _isDragging;
+    private bool _isMoving;
     private Point _lastMousePos;
+
+    /// <summary>挪位置时的坐标参考：顶层而不是控件自身 —— 控件跟着光标走时相对坐标会自己缩掉。</summary>
+    private Visual? _dragRef;
+
     private double _currentJumpOffsetY = 0.0;
 
     public MinecraftSkinPreview()
@@ -191,9 +250,27 @@ public class MinecraftSkinPreview : Panel
             Child = _nameText
         };
 
+        Children.Add(_hitArea);
         Children.Add(_shadow);
         Children.Add(_skinRender);
         Children.Add(_nametag);
+
+        ApplyHitArea();
+    }
+
+    /// <summary>
+    /// 把命中面摆到身体那一块。开着 <see cref="HitFootprintOnly"/> 就把整块舞台的
+    /// <c>Background</c> 撤掉 —— 透明的 <c>Background</c> 才是"这块元素能被点着"的开关，
+    /// 撤掉之后只剩那块矩形吃点击。
+    /// </summary>
+    private void ApplyHitArea()
+    {
+        var f = Footprint;
+        _hitArea.Width = f.Width;
+        _hitArea.Height = f.Height;
+        _hitArea.Margin = new Thickness(f.X, f.Y, 0, 0);
+        _hitArea.IsVisible = HitFootprintOnly;
+        Background = HitFootprintOnly ? null : Brushes.Transparent;
     }
 
     private TopLevel? _subscribedTopLevel;
@@ -383,14 +460,26 @@ public class MinecraftSkinPreview : Panel
     protected override void OnPointerPressed(PointerPressedEventArgs e)
     {
         base.OnPointerPressed(e);
-        if (CanDragRotate && e.GetCurrentPoint(this).Properties.IsLeftButtonPressed)
-        {
-            _isDragging = true;
-            _lastMousePos = e.GetPosition(this);
-            Cursor = new Cursor(StandardCursorType.SizeWestEast);
-            e.Pointer.Capture(this);
-            e.Handled = true;
-        }
+
+        var props = e.GetCurrentPoint(this).Properties;
+        var pressed = props.IsLeftButtonPressed ? MouseButton.Left
+                    : props.IsRightButtonPressed ? MouseButton.Right
+                    : (MouseButton?)null;
+        if (pressed is not { } button) return;
+
+        // 旋转先判：宿主把 RotateButton 也设成左键、又开了挪位置时转的要赢 —— 那是所有既有宿主
+        // 一直的握法。与 WPF 侧 SkinPreviewControl.BeginDrag 同一条规则。
+        var rotates = CanDragRotate && button == RotateButton;
+        var moves = !rotates && CanDragPosition && button == MouseButton.Left;
+        if (!rotates && !moves) return;
+
+        _isDragging = rotates;
+        _isMoving = moves;
+        _dragRef = TopLevel.GetTopLevel(this);
+        _lastMousePos = moves ? e.GetPosition(_dragRef) : e.GetPosition(this);
+        Cursor = new Cursor(rotates ? StandardCursorType.SizeWestEast : StandardCursorType.SizeAll);
+        e.Pointer.Capture(this);
+        e.Handled = true;
     }
 
     protected override void OnPointerMoved(PointerEventArgs e)
@@ -406,6 +495,13 @@ public class MinecraftSkinPreview : Panel
             _skinRender.RotateModel((float)(dx * 0.6));
             e.Handled = true;
         }
+        else if (_isMoving)
+        {
+            var pos = e.GetPosition(_dragRef);
+            PositionDragged?.Invoke(pos.X - _lastMousePos.X, pos.Y - _lastMousePos.Y);
+            _lastMousePos = pos;
+            e.Handled = true;
+        }
         else
         {
             UpdateLookAtFromPointer(e);
@@ -415,25 +511,28 @@ public class MinecraftSkinPreview : Panel
     protected override void OnPointerReleased(PointerReleasedEventArgs e)
     {
         base.OnPointerReleased(e);
-        if (_isDragging)
-        {
-            _isDragging = false;
-            Cursor = new Cursor(StandardCursorType.Hand);
-            e.Pointer.Capture(null);
-            e.Handled = true;
-        }
+        if (!_isDragging && !_isMoving) return;
+
+        _isDragging = false;
+        _isMoving = false;
+        _dragRef = null;
+        Cursor = new Cursor(StandardCursorType.Hand);
+        e.Pointer.Capture(null);
+        e.Handled = true;
     }
 
     protected override void OnPointerCaptureLost(PointerCaptureLostEventArgs e)
     {
         base.OnPointerCaptureLost(e);
         _isDragging = false;
+        _isMoving = false;
+        _dragRef = null;
         Cursor = new Cursor(StandardCursorType.Hand);
     }
 
     private void OnWindowPointerMoved(object? sender, PointerEventArgs e)
     {
-        if (!_isDragging)
+        if (!_isDragging && !_isMoving)
         {
             UpdateLookAtFromPointer(e);
         }
@@ -532,6 +631,10 @@ public class MinecraftSkinPreview : Panel
         {
             UpdateStagePositions(stageOffset);
         }
+        else if (change.Property == HitFootprintOnlyProperty)
+        {
+            ApplyHitArea();
+        }
     }
 
     private void UpdateStagePositions(double offset)
@@ -539,6 +642,8 @@ public class MinecraftSkinPreview : Panel
         if (_shadow != null) _shadow.Margin = new Thickness(0, 160 + offset, 0, 0);
         if (_skinRender != null) _skinRender.Margin = new Thickness(0, 14 + offset, 0, 0);
         if (_nametag != null) _nametag.Margin = new Thickness(0, 6 + offset, 0, 0);
+
+        ApplyHitArea();   // 身体跟着偏移量往下走，命中面得跟着挪
     }
 
     public void RequestRender() => _skinRender.RequestNextFrameRendering();

@@ -10,6 +10,7 @@ using Avalonia.Media;
 using Avalonia.Platform;
 using Avalonia.Platform.Storage;
 using Avalonia.Threading;
+using Avalonia.VisualTree;
 using NegiCraftLauncher.App.Avalonia.Converters;
 using NegiCraftLauncher.ViewModels;
 using NegiCraftLauncher.Pet;
@@ -47,7 +48,96 @@ public partial class MainWindow : Window
             if (e.Property == IsVisibleProperty) SyncBackgroundTuningVisibility();
         };
         PositionChanged += (_, _) => FollowMainWindowIfNotPlaced();
+
+        // 首页 3D 模型的位置存的是比例，所以首页每有一个新尺寸都要重摆一次；拖拽本身只报增量。
+        PageHome.PropertyChanged += (_, e) =>
+        {
+            if (e.Property == BoundsProperty) LayoutHomeSkinPreview();
+        };
+        SkinPreview.PositionDragged += OnHomeSkinPreviewDragged;
+
+        // 头几趟布局里 TranslatePoint 还给不出稳定的页内坐标（首页那圈 -100/-22 的负边距还没进到
+        // 变换链），障碍会量歪 —— 而一旦把锚点当成"压到侧栏"推开，之后就再没人把它摆回来。
+        // 排版落定之后再摆一次，落点以这一趟为准。
+        Opened += (_, _) => Dispatcher.UIThread.Post(LayoutHomeSkinPreview, DispatcherPriority.Loaded);
     }
+
+    // ==========================================================
+    // 首页 3D 模型：位置（左键拖）—— 与 App/MainWindow.xaml.cs 逐段对照
+    // ==========================================================
+
+    /// <summary>没拖过时模型站在设计稿的锚点上 —— 主页的像素回归基准钉在这里，动不得。</summary>
+    private const double HomeSkinAnchorLeft = 92;
+    private const double HomeSkinAnchorTop = 44;
+
+    /// <summary>
+    /// 把"想要的舞台落点"夹成合法落点：身体不出首页，也不压到侧栏与停靠卡上。
+    /// 数学在共享层 <c>HomeStageLayout</c> 一份，两端撞同一处会停在同一像素上。
+    /// </summary>
+    private (double X, double Y) ClampHomeSkinPlace(double wantX, double wantY)
+    {
+        var pageW = PageHome.Bounds.Width;
+        var pageH = PageHome.Bounds.Height;
+        if (pageW <= 0 || pageH <= 0) return (wantX, wantY);   // 还没排版（或在别的页）
+
+        var f = SkinPreview.Footprint;
+        return HomeStageLayout.Clamp(
+            wantX, wantY, pageW, pageH,
+            new PageBox(f.X, f.Y, f.Width, f.Height),
+            PageBoxOf(Sidebar), PageBoxOf(DockCard));
+    }
+
+    /// <summary>
+    /// 元素在首页坐标里的矩形。侧栏和停靠卡是<b>量出来的</b>，不是写死的数 ——
+    /// 它们改边距、改宽度（停靠卡的高度还跟着"启动中"那张卡变），这里的障碍跟着变。
+    /// </summary>
+    private PageBox PageBoxOf(Visual element)
+    {
+        var p = element.TranslatePoint(new Point(0, 0), PageHome) ?? default;
+        return new PageBox(p.X, p.Y, element.Bounds.Width, element.Bounds.Height);
+    }
+
+    /// <summary>按存着（或复位成 null）的比例重摆一次。比例是<b>身体左上角</b>相对首页宽高的比。</summary>
+    private void LayoutHomeSkinPreview()
+    {
+        var pageW = PageHome.Bounds.Width;
+        var pageH = PageHome.Bounds.Height;
+        if (_vm is null || pageW <= 0 || pageH <= 0) return;   // 还没排版（或在别的页），等下一次 Bounds 变化
+
+        var f = SkinPreview.Footprint;
+        var (x, y) = ClampHomeSkinPlace(
+            _vm.HomeSkinModelX is { } xf ? xf * pageW - f.X : HomeSkinAnchorLeft,
+            _vm.HomeSkinModelY is { } yf ? yf * pageH - f.Y : HomeSkinAnchorTop);
+
+        Canvas.SetLeft(SkinPreview, x);
+        Canvas.SetTop(SkinPreview, y);
+    }
+
+    /// <summary>左键拖来的增量（DIP）：就地挪，再把新位置换成比例写回 VM —— 落盘归 VM，视图不知道设置文件。</summary>
+    private void OnHomeSkinPreviewDragged(double dx, double dy)
+    {
+        var pageW = PageHome.Bounds.Width;
+        var pageH = PageHome.Bounds.Height;
+        if (_vm is null || pageW <= 0 || pageH <= 0) return;
+
+        var (x, y) = ClampHomeSkinPlace(Canvas.GetLeft(SkinPreview) + dx, Canvas.GetTop(SkinPreview) + dy);
+        Canvas.SetLeft(SkinPreview, x);
+        Canvas.SetTop(SkinPreview, y);
+
+        // 存身体的比例：窗口再怎么缩放都站在同一处，而且恒在 0..1 之内 ——
+        // 存舞台左上角的话，贴到左边缘会是个负数，读回来夹一次就和屏幕上不一致了。
+        var f = SkinPreview.Footprint;
+        _vm.HomeSkinModelX = (x + f.X) / pageW;
+        _vm.HomeSkinModelY = (y + f.Y) / pageH;
+    }
+
+    /// <summary>调试桥入口：喂一对 DIP 增量，走的正是左键拖动那条路（见 <see cref="OnHomeSkinPreviewDragged"/>）。</summary>
+    public void DragHomeSkinPreviewForDebug(double dx, double dy) => OnHomeSkinPreviewDragged(dx, dy);
+
+    /// <summary>调试桥用：撞墙验收要判"停在障碍外沿对不对"，先得看得见这两块量成了什么。</summary>
+    public string HomeSkinKeepOutForDebug =>
+        $"sidebar={PageBoxOf(Sidebar)} dock={PageBoxOf(DockCard)} " +
+        $"page=({PageHome.Bounds.X:0},{PageHome.Bounds.Y:0},{PageHome.Bounds.Width:0}x{PageHome.Bounds.Height:0})";
 
     // ==========================================================
     // 背景取景（平移 + 缩放）—— 与 App/MainWindow.xaml.cs 逐段对照
@@ -462,6 +552,7 @@ public partial class MainWindow : Window
             // 取景只改变换、不碰像素，所以单独一条事件：拖动平移时一次调色都不该发生。
             _vm.BackgroundFramingChanged += ApplyBackgroundFraming;
             ApplyCustomBackgroundImage();
+            LayoutHomeSkinPreview();
         }
 
         OnDebugSectionAttach(_vm);
@@ -555,8 +646,18 @@ public partial class MainWindow : Window
             return;
         }
 
-        if (e.PropertyName != nameof(MainWindowViewModel.IsDialogOpen) || !_vm!.IsDialogOpen) return;
+        // 位置比例变了（拖完一格 / 按「复位位置」/ 关掉开关顺带清掉），或开关本身变了：重摆一次。
+        // 开关必须跟着走 —— 清掉的是"存着的比例"，Canvas 上还留着上一次拖出来的像素，
+        // 不重摆就会看见重新打开的小人站在老地方。
+        if (e.PropertyName is nameof(MainWindowViewModel.HomeSkinModelX)
+                         or nameof(MainWindowViewModel.HomeSkinModelY)
+                         or nameof(MainWindowViewModel.ShowHomeSkinModel))
+        {
+            LayoutHomeSkinPreview();
+            return;
+        }
 
+        if (e.PropertyName != nameof(MainWindowViewModel.IsDialogOpen) || !_vm!.IsDialogOpen) return;
         // The prompt is the whole point of the dialog, so it takes focus and starts selected.
         Dispatcher.UIThread.Post(() =>
         {

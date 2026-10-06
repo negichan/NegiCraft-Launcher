@@ -455,7 +455,8 @@
             <!-- ========================================== -->
             <!-- 4. FLOATING SIDEBAR (60px, radius 18, 12px)-->
             <!-- ========================================== -->
-            <Border Classes="Sidebar"
+            <Border x:Name="Sidebar"
+                    Classes="Sidebar"
                     Classes.OnHome="{Binding IsOnHome}"
                     HorizontalAlignment="Left" VerticalAlignment="Stretch"
                     Margin="12" Width="60"
@@ -533,12 +534,17 @@
             <Panel Margin="100,22,28,22" ZIndex="10">
 
                 <!-- PAGE 1: HOME -->
-                <Panel IsVisible="{Binding IsOnHome}" Margin="-100,-22,-28,-22">
+                <Panel x:Name="PageHome" IsVisible="{Binding IsOnHome}" Margin="-100,-22,-28,-22">
                     <!-- .stage: top: 44px; left: 92px; width: 160px; height: 250px; -->
-                    <Canvas IsVisible="{Binding HasAccount}">
-                        <!-- 3D skin model inside launcher: always visible when account exists -->
+                    <Canvas IsVisible="{Binding ShowHomeSkinModel}">
+                        <!-- 3D skin model inside launcher: 有账号才有人可画，外观设置里可以关掉（默认开）。
+                             左键拖位置（按首页比例存，见 MainWindow.axaml.cs 的 LayoutHomeSkinPreview），右键转。
+                             HitFootprintOnly：命中区剪到身体那一块，脚下那 81 DIP 空档不再替小人吃掉按钮的点击。 -->
                         <controls:MinecraftSkinPreview x:Name="SkinPreview"
                                                        Canvas.Left="92" Canvas.Top="44"
+                                                       CanDragPosition="True"
+                                                       RotateButton="Right"
+                                                       HitFootprintOnly="True"
                                                        PlayerName="{Binding CurrentAccount.Name}"/>
                     </Canvas>
 
@@ -1080,6 +1086,23 @@
                                                         <TextBlock Text="切换深浅色" VerticalAlignment="Center"/>
                                                     </StackPanel>
                                                 </Button>
+                                            </Grid>
+                                        </Border>
+
+                                        <Border Height="58" BorderBrush="#26262b" BorderThickness="0,0,0,1">
+                                            <Grid ColumnDefinitions="* Auto">
+                                                <StackPanel VerticalAlignment="Center" Spacing="2" Margin="0,0,16,0">
+                                                    <TextBlock Text="首页 3D 模型" FontWeight="Medium" Foreground="#fafafa"/>
+                                                    <TextBlock Text="左键拖它的位置（会记住），右键转角度。关掉它会把拖过的位置一起清掉，重开回到默认站位。"
+                                                               FontSize="12" Foreground="#71717a" TextWrapping="Wrap"/>
+                                                </StackPanel>
+                                                <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                                                    <!-- 只清位置、不动开关：拖乱了想回原点，不该顺手把模型也关掉 -->
+                                                    <Button Classes="BtnSm BtnOutline" Content="复位位置"
+                                                            Command="{Binding ResetHomeSkinModelPositionCommand}"
+                                                            IsVisible="{Binding HasHomeSkinModelPosition}"/>
+                                                    <ToggleSwitch IsChecked="{Binding HomeSkinModelVisible}" OnContent="" OffContent=""/>
+                                                </StackPanel>
                                             </Grid>
                                         </Border>
 
