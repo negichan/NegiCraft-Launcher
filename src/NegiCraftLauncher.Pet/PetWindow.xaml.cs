@@ -973,23 +973,13 @@ public partial class PetWindow : Window
     }
 
     /// <summary>
-    /// 两个纯摆姿势的开关。叉腰靠的是分段四肢（<c>PetPreview.LimbJoints</c>，XAML 里已开），
-    /// 摆动靠骨盆 / 胸椎那两节总关节 —— 都不碰物理，所以和模式 / 移动互不影响。
+    /// 叉腰扭胯：一个开关同时给"双手叉腰 + 两脚分开"的静态姿势和骨盆摆动（原来这两个开关是分开的，
+    /// 而叉腰单独开着没意义 —— 它就是给摆动当骨架的）。叉腰靠分段四肢（<c>PetPreview.LimbJoints</c>，
+    /// XAML 里已开），摆动靠骨盆 / 胸椎那两节总关节 —— 都不碰物理，所以和模式 / 移动互不影响。
     /// </summary>
-    private void OnToggleHipsClick(object sender, RoutedEventArgs e)
-    {
-        PetPreview.HandsOnHips = !PetPreview.HandsOnHips;
-        MenuHipsIcon.Visibility = Vis(PetPreview.HandsOnHips);
-    }
-
     private void OnToggleSwayClick(object sender, RoutedEventArgs e)
     {
         PetPreview.Swaying = !PetPreview.Swaying;
-        if (PetPreview.Swaying && !PetPreview.HandsOnHips)
-        {
-            PetPreview.HandsOnHips = true;
-            MenuHipsIcon.Visibility = Vis(true);
-        }
         MenuSwayIcon.Visibility = Vis(PetPreview.Swaying);
     }
 

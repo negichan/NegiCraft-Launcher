@@ -193,24 +193,15 @@ public sealed class SkinPoseDriver
     }
 
     /// <summary>
-    /// 双手叉腰、两脚分开站。<b>要 <c>SkinRenderBase.LimbJoints</c> 开着才有意义</b> ——
-    /// 单段四肢折不出肘，开了也只会看到胳膊斜着伸出去。
-    /// </summary>
-    public bool HandsOnHips
-    {
-        get => _hips;
-        set { if (_hips != value) { _hips = value; _dirty = true; } }
-    }
-
-    private bool _hips;
-
-    /// <summary>
-    /// 扭胯摆动。<b>叠在当前姿势之上</b>，不替换它 —— 所以和 <see cref="HandsOnHips"/>
-    /// 同时开就是"叉着腰扭"，这正是这个姿势的用法。
+    /// 叉着腰扭胯 —— 一个开关，两件事一起：<b>双手叉腰 + 两脚分开站</b> 的静态姿势，叠上
+    /// 骨盆左右顶 / 2 倍频起伏 / 脊椎反向补偿的摆动。
     ///
     /// <para>它走的是骨盆 / 胸椎那两节新关节（<c>SkinRenderBase.Hip*</c> / <c>Spine*</c>），
     /// 四肢和头是真的挂在下面被带着走的。旧的 <c>BodyRotate</c> 是扁平的、不带动任何部件，
     /// 用它扭只会看到躯干盒子在自己原地转。</para>
+    ///
+    /// <para>叉腰那部分<b>要 <c>SkinRenderBase.LimbJoints</c> 开着才有意义</b> —— 单段四肢
+    /// 折不出肘，开了也只会看到胳膊斜着伸出去。</para>
     /// </summary>
     public bool Swaying
     {
@@ -342,7 +333,7 @@ public sealed class SkinPoseDriver
         _sneakK = Math.Clamp(_sneakK + ((Sneaking ? 1 : -1) * dt / SneakTransition), 0, 1);
         _dangleK = Math.Clamp(_dangleK + ((Dangling ? 1 : -1) * dt / DangleTransition), 0, 1);
         _walkK = Math.Clamp(_walkK + ((Walking ? 1 : -1) * dt / WalkTransition), 0, 1);
-        _hipsK = Math.Clamp(_hipsK + (((HandsOnHips || Swaying) ? 1 : -1) * dt / HipsTransition), 0, 1);
+        _hipsK = Math.Clamp(_hipsK + ((Swaying ? 1 : -1) * dt / HipsTransition), 0, 1);
 
         if (!_swayParked)
         {

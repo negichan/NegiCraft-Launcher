@@ -154,20 +154,6 @@ public sealed class SkinPreviewControl : Grid
         set => SetValue(IsSprintingProperty, value);
     }
 
-    public static readonly DependencyProperty HandsOnHipsProperty =
-        DependencyProperty.Register(
-            nameof(HandsOnHips),
-            typeof(bool),
-            typeof(SkinPreviewControl),
-            new PropertyMetadata(false, OnPoseFlagChanged));
-
-    /// <summary>双手叉腰、两脚分开。<b>要 <see cref="LimbJoints"/> 开着才弯得出来。</b></summary>
-    public bool HandsOnHips
-    {
-        get => (bool)GetValue(HandsOnHipsProperty);
-        set => SetValue(HandsOnHipsProperty, value);
-    }
-
     public static readonly DependencyProperty SwayingProperty =
         DependencyProperty.Register(
             nameof(Swaying),
@@ -176,8 +162,9 @@ public sealed class SkinPreviewControl : Grid
             new PropertyMetadata(false, OnPoseFlagChanged));
 
     /// <summary>
-    /// 扭胯摆动。<b>叠在其它姿势之上</b>，和 <see cref="HandsOnHips"/> 同时开就是"叉着腰扭"。
+    /// 叉着腰扭胯：双手叉腰 + 两脚分开站的静态姿势，叠上骨盆左右顶 / 起伏 / 脊椎反向补偿的摆动。
     /// 它动的是骨盆 / 胸椎两节总关节，所以四肢是真的被带着走；开着时不会停渲染（本来就该一直动）。
+    /// 叉腰那部分要 <see cref="LimbJoints"/> 开着才弯得出肘。
     /// </summary>
     public bool Swaying
     {
@@ -578,7 +565,6 @@ public sealed class SkinPreviewControl : Grid
         else if (e.Property == IsWalkingProperty) preview._pose.Walking = on;
         else if (e.Property == IsJumpingProperty) preview._pose.Jumping = on;
         else if (e.Property == IsSprintingProperty) preview._pose.Sprinting = on;
-        else if (e.Property == HandsOnHipsProperty) preview._pose.HandsOnHips = on;
         else if (e.Property == SwayingProperty) preview._pose.Swaying = on;
     }
 

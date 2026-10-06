@@ -54,15 +54,9 @@
                     <MenuItem.Icon>
                         <materialIcons:MaterialIcon Kind="HumanHandsup" Width="16" Height="16" />
                     </MenuItem.Icon>
-                    <MenuItem Header="扭胯摆动" x:Name="MenuSway" Click="OnToggleSwayClick">
+                    <MenuItem Header="叉腰扭胯" x:Name="MenuSway" Click="OnToggleSwayClick">
                         <MenuItem.Icon>
                             <materialIcons:MaterialIcon x:Name="MenuSwayIcon" Kind="Check" Width="16" Height="16"
-                                                        Visibility="Collapsed" />
-                        </MenuItem.Icon>
-                    </MenuItem>
-                    <MenuItem Header="双手叉腰" x:Name="MenuHips" Click="OnToggleHipsClick">
-                        <MenuItem.Icon>
-                            <materialIcons:MaterialIcon x:Name="MenuHipsIcon" Kind="Check" Width="16" Height="16"
                                                         Visibility="Collapsed" />
                         </MenuItem.Icon>
                     </MenuItem>

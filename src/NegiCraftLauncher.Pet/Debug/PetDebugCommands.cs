@@ -153,13 +153,6 @@ public static class PetDebugCommands
                     preview.LimbJoints = Truthy(arg);
                     return "OK " + preview.LimbJoints;
                 });
-            case "pet-hips":
-                return PetDebugMailbox.Ui(() =>
-                {
-                    if (Preview(pet) is not { } preview) return "ERR no pet preview";
-                    preview.HandsOnHips = Truthy(arg);
-                    return $"OK hips={preview.HandsOnHips} joints={preview.LimbJoints}";
-                });
             case "pet-sway":
                 // pet-sway on|off 或 pet-sway <0..1>（定格在特定相位拍照）
                 return PetDebugMailbox.Ui(() =>
@@ -177,7 +170,7 @@ public static class PetDebugCommands
                     }
                     preview.ParkSway(null);
                     preview.Swaying = Truthy(arg);
-                    return $"OK sway={preview.Swaying} hips={preview.HandsOnHips} joints={preview.LimbJoints}";
+                    return $"OK sway={preview.Swaying} joints={preview.LimbJoints}";
                 });
             case "pet-look-mouse":
                 return PetDebugMailbox.Ui(() =>
