@@ -228,8 +228,9 @@ public sealed class DebugBridge
                     });
                     return "OK";
                 case "bgsound":
-                    // 视频壁纸的声音开关：`bgsound on|off`。走的是和界面复选框相同的 VM 属性，
-                    // 所以既验了持久化，也验了视图那条 PropertyChanged 分支有没有把值落到播放器上
+                    // 视频壁纸的声音开关：`bgsound on|off`。静音就是音量 0，所以这条动词动的其实是音量
+                    // （on = 回上一次那个非 0 值，off = 归 0）；走的是和界面复选框相同的 VM 属性，
+                    // 既验持久化也验视图那条 PropertyChanged 有没有落到播放器上
                     // （结果看 `state` 里的 video=[muted=… volume=…]）。
                     await PetDebugMailbox.Ui(() =>
                         _vm.VideoBackgroundSound = arg.Equals("on", StringComparison.OrdinalIgnoreCase));

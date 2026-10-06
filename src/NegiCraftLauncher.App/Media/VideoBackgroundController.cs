@@ -41,8 +41,7 @@ internal sealed class VideoBackgroundController : IDisposable
     private readonly VideoDrawing _drawing;
 
     private string? _path;
-    private bool _sound;
-    private int _volume = 100;
+    private int _volume;
     private bool _disposed;
 
     public VideoBackgroundController()
@@ -136,24 +135,11 @@ internal sealed class VideoBackgroundController : IDisposable
     }
 
     /// <summary>
-    /// 是否出声。<b>默认 <c>false</c>（静音）</b>。值没变时不做任何事，所以可以随便重复设。
-    /// </summary>
-    public bool Sound
-    {
-        get => _sound;
-        set
-        {
-            if (_sound == value) return;
-            _sound = value;
-            ApplySound();
-        }
-    }
-
-    /// <summary>
-    /// 出声时的音量，<c>0</c>–<c>100</c>。值没变时不做任何事。
+    /// 音量，<c>0</c>–<c>100</c>；<b><c>0</c> 就是静音</b>。值没变时不做任何事，所以可以随便重复设。
     ///
-    /// <para>与 <see cref="Sound" /> 分工：那个是静音开关，这个是"出声时多大声"。
-    /// 静音时一律把播放器音量压到 <c>0</c>，所以这里改成多少都不会漏音。</para>
+    /// <para>⚠️ 静音<b>没有第二个开关</b>。以前这里另有一个 <c>Sound</c> 布尔，和音量各管各的：
+    /// 音量条拖到 0 会顺手把它关掉，可把音量条拖回去时没人把它打开 —— 结果就是"音量 40 了还是没声，
+    /// 得去点一下喇叭"。一个状态两份记录，就一定会分叉。</para>
     /// </summary>
     public int Volume
     {
@@ -168,7 +154,7 @@ internal sealed class VideoBackgroundController : IDisposable
     }
 
     /// <summary>
-    /// 把 <see cref="Sound"/> / <see cref="Volume"/> 落到播放器上。<c>Volume</c> 和 <c>IsMuted</c> 一起设：
+    /// 把 <see cref="Volume"/> 落到播放器上。<c>IsMuted</c> 和 <c>Volume</c> 一起设：
     /// 光靠 <c>IsMuted</c> 在某些驱动/音频会话上不够干净，<c>Volume=0</c> 是第二道保险。
     /// </summary>
     private void ApplySound()
@@ -177,8 +163,8 @@ internal sealed class VideoBackgroundController : IDisposable
 
         try
         {
-            _player.IsMuted = !_sound;
-            _player.Volume = _sound ? _volume / 100.0 : 0.0;
+            _player.IsMuted = _volume == 0;
+            _player.Volume = _volume / 100.0;
         }
         catch (Exception)
         {
@@ -247,7 +233,7 @@ internal sealed class VideoBackgroundController : IDisposable
         try
         {
             _player.Open(new Uri(Path.GetFullPath(path!)));
-            // 换片时 _sound 可能已经和上一次不同，Open 之后重落一遍（首次挂载时与字段初始化等价）。
+            // Open 会重开一条音频会话，音量得照着当前值再落一遍（含"0 = 静音"那道 IsMuted）。
             ApplySound();
         }
         catch (Exception ex)

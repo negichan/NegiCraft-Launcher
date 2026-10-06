@@ -642,7 +642,8 @@
             <neg:NegiStackPanel Orientation="Horizontal" Spacing="4"
                                 HorizontalAlignment="Right" VerticalAlignment="Top"
                                 Margin="0,12,14,0" Panel.ZIndex="30">
-                <!-- 喇叭本体。图标只反映"开 / 关"两态；音量在它下面那条竖排浮层里调。
+                <!-- 喇叭本体。图标看的就是"音量是不是 0"（VideoBackgroundSound 现在就是那个别名）：
+                     0 → VolumeOff，非 0 → VolumeHigh。音量在它下面那条竖排浮层里调，点图标 = 归 0 / 回上一格。
                      ⚠️ 刻意**不给 ToolTip**：悬停时音量浮层会出现在正下方，再弹一个提示气泡
                        就把浮层盖住了（两个都是"悬停出现"）。图标本身已经够自解释。 -->
                 <Button x:Name="VideoSoundButton"

@@ -239,9 +239,8 @@ public partial class MainWindow : Window
     /// </summary>
     private void ApplyVideoBackground()
     {
-        // 先定静音与音量再换片：Load 内部会在 Open 之后断言一次，顺序反了会白做一次。
-        _videoBackground.Sound = _vm?.VideoBackgroundSound ?? false;
-        _videoBackground.Volume = _vm?.VideoBackgroundVolume ?? 100;
+        // 先定音量再换片：Load 内部会在 Open 之后按当前值再断言一次，顺序反了会白做一次。
+        _videoBackground.Volume = _vm?.VideoBackgroundVolume ?? 0;
         _videoBackground.Load(_vm?.VideoBackgroundPath);
 
         var brush = _videoBackground.HasVideo ? _videoBackground.Brush : null;
@@ -547,7 +546,7 @@ public partial class MainWindow : Window
     public string WindowToneDebug =>
         $"light={_winCtrlLight} lum={(_lastLum is double l ? l.ToString("0.###") : "n/a")}";
 
-    /// <summary>右上角喇叭：点一下切静音。</summary>
+    /// <summary>右上角喇叭：点一下出声 ↔ 静音。静音就是音量归 0，再点回去上一次那个音量。</summary>
     private void OnVideoSoundClick(object sender, RoutedEventArgs e)
     {
         if (_vm is null) return;
@@ -940,19 +939,15 @@ public partial class MainWindow : Window
             return;
         }
 
-        // 声音开关：只改播放器的静音状态，不用重新换片。
+        // 音量（含"静音 = 音量 0"那一格）：只改播放器音量，不用重新换片。
         // 但它也决定"离开首页要不要继续播"，所以播放门控要跟着重算一遍。
-        if (e.PropertyName == nameof(MainWindowViewModel.VideoBackgroundSound))
+        // VideoBackgroundSound 现在只是音量的别名，VM 会连着发一声 —— 两个名字走同一条分支，
+        // 省得"一个更新了另一个没更新"再分叉一次。
+        if (e.PropertyName is nameof(MainWindowViewModel.VideoBackgroundVolume)
+                         or nameof(MainWindowViewModel.VideoBackgroundSound))
         {
-            _videoBackground.Sound = _vm?.VideoBackgroundSound ?? false;
+            _videoBackground.Volume = _vm?.VideoBackgroundVolume ?? 0;
             UpdateVideoPlayback();
-            return;
-        }
-
-        // 音量条：同理，只改播放器音量。
-        if (e.PropertyName == nameof(MainWindowViewModel.VideoBackgroundVolume))
-        {
-            _videoBackground.Volume = _vm?.VideoBackgroundVolume ?? 100;
             return;
         }
 
