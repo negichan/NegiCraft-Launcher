@@ -18,8 +18,9 @@ namespace NegiCraftLauncher.App.Probe;
 /// <para>出图走 <see cref="RenderTargetBitmap"/> 直接渲染窗口内容根（见 <c>UseDirectRender</c>），
 /// 与 Avalonia 版 <c>DebugBridge</c> 的 <c>shot</c> 同一条路，出图可以直接逐像素对照。</para>
 ///
-/// <para><b>画布尺寸与窗口解耦</b>：屏幕比 1180 窄时窗口管理器会把窗口夹小，
-/// 但截图统一强制到 1180x720（见 <see cref="ForceCanvas"/>），所以像素对照有稳定基准。</para>
+/// <para><b>画布尺寸与窗口解耦</b>：屏幕比窗口窄时窗口管理器会把窗口夹小，
+/// 但截图统一强制到固定的画布（见 <see cref="ForceCanvas"/> 与 <c>CanvasWidth</c>），
+/// 所以像素对照有稳定基准。</para>
 ///
 /// <para><b>不止看截图</b>：还会把 WPF 的绑定错误（<c>PresentationTraceSources.DataBindingSource</c>）
 /// 收集进报告，并逐个报出四个页面容器的真实 <c>Visibility</c>。
@@ -32,12 +33,26 @@ internal static class UiShot
 
     private static readonly string[] Pages = ["home", "instances", "download", "settings"];
 
-    /// <summary>像素对照用的固定画布尺寸，与 Avalonia 版 <c>MainWindow.axaml</c> 的 Width/Height 一致。</summary>
-    private const int CanvasWidth = 1180;
+    /// <summary>
+    /// 像素对照用的固定画布尺寸，与两端窗口的 Width/Height 一致 —— <b>含壳外那圈投影留白</b>。
+    ///
+    /// <para>⚠️ 这个数不是壳的 1180x720：窗口内容根是"壳 + 四周 60 留白"，画布按壳的尺寸去
+    /// <c>Measure/Arrange</c> 会把留白挤掉、壳缩成 1060x600，于是和 Avalonia 那份 1300x840 的
+    /// 基准整体错位（实测整页 13% 差异，看着像回归，其实是探针自己缩了）。
+    /// 改窗口留白宽度时这里要跟着改（两端 <c>MainWindow.xaml</c> 的 Width/Height 是唯一真相）。</para>
+    /// </summary>
+    private const int CanvasWidth = 1300;
 
-    private const int CanvasHeight = 720;
+    private const int CanvasHeight = 840;
 
-    private static readonly string[] SettingsTabs = ["游戏", "Java", "下载", "外观", "关于"];
+    private static readonly string[] SettingsTabs =
+    [
+        "游戏", "Java", "下载", "外观", "关于",
+#if DEBUG
+        // 设置页那块 Debug 分区只在 Debug 构建里存在（见 MainWindow.Debug.cs），探针也跟着多抓一张。
+        "Debug",
+#endif
+    ];
 
     private static readonly string[] PageContainerNames = ["PageHome", "PageInstances", "PageDownload", "PageSettings"];
 
@@ -71,14 +86,15 @@ internal static class UiShot
         log.AppendLine("NegiCraft Launcher — WPF 主窗口逐页截图");
         log.AppendLine($"时间: {DateTime.Now:yyyy-MM-dd HH:mm:ss}");
         log.AppendLine($"渲染路径: {(UseDirectRender ? "直接渲染 RenderTargetBitmap.Render(content)" : "VisualBrush 归零重画")}");
-        log.AppendLine("对照基准: Avalonia 版 design/_smoke.ps1 出的 %TEMP%\\ncl-smoke-<page>.png（1180x720，同为直接渲染）");
+        log.AppendLine($"对照基准: Avalonia 版 design/_smoke.ps1 出的 %TEMP%\\ncl-smoke-<page>.png（{CanvasWidth}x{CanvasHeight}，同为直接渲染）");
         log.AppendLine("像素对照: python design/_diff.py <wpf.png> <smoke.png> --shift 6");
         log.AppendLine("（design/ 下的脚本是本地私有工具，不随源码分发 —— 见 design/README.md）");
 
         MainWindowViewModel vm;
         try
         {
-            vm = new MainWindowViewModel();
+            // 解码器要注入：不注入的话自选壁纸不会出现在探针图里（VM 拿不到像素）。
+            vm = new MainWindowViewModel(new Services.WpfBitmapDecoder());
         }
         catch (Exception ex)
         {
@@ -117,8 +133,8 @@ internal static class UiShot
     {
         await Task.Delay(3000);
 
-        // 窗口尺寸被 WM 夹住时（屏幕比 1180 窄）不要紧 —— 截图走 ForceCanvas，
-        // 把内容根强行排到 1180x720，和窗口大小解耦。
+        // 窗口尺寸被 WM 夹住时（屏幕比窗口窄）不要紧 —— 截图走 ForceCanvas，
+        // 把内容根强行排到画布尺寸，和窗口大小解耦。
         window.Width = CanvasWidth;
         window.Height = CanvasHeight;
         await Task.Delay(200);
@@ -300,11 +316,11 @@ internal static class UiShot
     }
 
     /// <summary>
-    /// 把内容根强行排布到固定的 1180x720，绕开窗口管理器。
+    /// 把内容根强行排布到固定的画布尺寸（<see cref="CanvasWidth"/>x<see cref="CanvasHeight"/>），绕开窗口管理器。
     ///
-    /// <para>屏幕比 1180 窄时（无头会话常见 1024x768），窗口管理器会把窗口夹到
+    /// <para>屏幕比窗口窄时（无头会话常见 1024x768），窗口管理器会把窗口夹到
     /// <c>虚拟屏宽 + 边框</c>（实测 1044），而且<b>事后改 <c>Window.Width</c> 也压不住</b> ——
-    /// WM 会立刻夹回来。窗口一窄，内容就跟着窄，出图和 Avalonia 的 1180x720 基准对不上。</para>
+    /// WM 会立刻夹回来。窗口一窄，内容就跟着窄，出图和 Avalonia 那份同尺寸基准对不上。</para>
     ///
     /// <para>做法：直接对内容根调 <c>Measure</c> + <c>Arrange</c>，<b>不调 <c>UpdateLayout()</c></b>
     /// —— 那会把整棵树（含 Window 自己）重排一遍，反而把强制尺寸冲掉。</para>
