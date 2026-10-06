@@ -71,7 +71,7 @@ public partial class MainWindow : Window
     private const double HomeSkinAnchorTop = 44;
 
     /// <summary>
-    /// 把"想要的舞台落点"夹成合法落点：身体不出首页，也不压到侧栏与停靠卡上。
+    /// 把"想要的舞台落点"夹成合法落点：身体不出首页，也不压到侧栏、停靠卡与右上角那排上。
     /// 数学在共享层 <c>HomeStageLayout</c> 一份，两端撞同一处会停在同一像素上。
     /// </summary>
     private (double X, double Y) ClampHomeSkinPlace(double wantX, double wantY)
@@ -84,12 +84,12 @@ public partial class MainWindow : Window
         return HomeStageLayout.Clamp(
             wantX, wantY, pageW, pageH,
             new PageBox(f.X, f.Y, f.Width, f.Height),
-            PageBoxOf(Sidebar), PageBoxOf(DockCard));
+            PageBoxOf(Sidebar), PageBoxOf(DockCard), PageBoxOf(TopRightControls));
     }
 
     /// <summary>
-    /// 元素在首页坐标里的矩形。侧栏和停靠卡是<b>量出来的</b>，不是写死的数 ——
-    /// 它们改边距、改宽度（停靠卡的高度还跟着"启动中"那张卡变），这里的障碍跟着变。
+    /// 元素在首页坐标里的矩形。侧栏、停靠卡和右上角那排都是<b>量出来的</b>，不是写死的数 ——
+    /// 它们改边距、改宽度，这里的障碍跟着变。
     /// </summary>
     private PageBox PageBoxOf(Visual element)
     {
@@ -136,7 +136,7 @@ public partial class MainWindow : Window
 
     /// <summary>调试桥用：撞墙验收要判"停在障碍外沿对不对"，先得看得见这两块量成了什么。</summary>
     public string HomeSkinKeepOutForDebug =>
-        $"sidebar={PageBoxOf(Sidebar)} dock={PageBoxOf(DockCard)} " +
+        $"sidebar={PageBoxOf(Sidebar)} dock={PageBoxOf(DockCard)} topRight={PageBoxOf(TopRightControls)} " +
         $"page=({PageHome.Bounds.X:0},{PageHome.Bounds.Y:0},{PageHome.Bounds.Width:0}x{PageHome.Bounds.Height:0})";
 
     // ==========================================================

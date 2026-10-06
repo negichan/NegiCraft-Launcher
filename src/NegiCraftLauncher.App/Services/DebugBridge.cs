@@ -189,7 +189,8 @@ public sealed class DebugBridge
                         return $"OK visible={_vm.HomeSkinModelVisible} " +
                                $"frac=({Num(_vm.HomeSkinModelX)},{Num(_vm.HomeSkinModelY)}) " +
                                $"canvas=({System.Windows.Controls.Canvas.GetLeft(host.SkinPreview):0.#}," +
-                               $"{System.Windows.Controls.Canvas.GetTop(host.SkinPreview):0.#})";
+                               $"{System.Windows.Controls.Canvas.GetTop(host.SkinPreview):0.#}) " +
+                               host.HomeSkinKeepOutForDebug;
                     });
                 }
                 case "bg":
