@@ -765,6 +765,69 @@ public partial class MainWindowViewModel : ViewModelBase
     }
 
     // ==========================================================
+    // 首页 3D 模型（皮肤小人）
+    // ==========================================================
+
+    /// <summary>
+    /// 主页那块 3D 皮肤模型是否出现，<b>默认开</b>。
+    ///
+    /// <para>关掉时把拖过的位置一起清掉：一个看不见的东西没有"停在哪儿"可言，重新打开就该站在
+    /// 设计锚点上。读设置那一次例外 —— 那一刻 <see cref="HomeSkinModelX" /> 还没轮到赋值，
+    /// 清了就把用户拖出来的位置抹在启动路上。</para>
+    /// </summary>
+    [ObservableProperty]
+    private bool _homeSkinModelVisible = true;
+
+    partial void OnHomeSkinModelVisibleChanged(bool value)
+    {
+        if (!value && !_applyingSettings)
+        {
+            HomeSkinModelX = null;
+            HomeSkinModelY = null;
+        }
+
+        PersistSettings();
+        OnPropertyChanged(nameof(ShowHomeSkinModel));
+    }
+
+    /// <summary>
+    /// 模型在首页可用区里的位置，<b>单位是宽高的比例</b>（0..1）。视图只管把拖完的比例写回来，
+    /// 落盘统一在这里（和 <see cref="BgTuningX" /> 同一套路）。
+    /// </summary>
+    [ObservableProperty]
+    private double? _homeSkinModelX;
+
+    [ObservableProperty]
+    private double? _homeSkinModelY;
+
+    partial void OnHomeSkinModelXChanged(double? value)
+    {
+        PersistSettings();
+        OnPropertyChanged(nameof(HasHomeSkinModelPosition));
+    }
+
+    partial void OnHomeSkinModelYChanged(double? value)
+    {
+        PersistSettings();
+        OnPropertyChanged(nameof(HasHomeSkinModelPosition));
+    }
+
+    /// <summary>「复位位置」这颗按钮只在拖过之后才有得按。</summary>
+    public bool HasHomeSkinModelPosition => HomeSkinModelX is not null || HomeSkinModelY is not null;
+
+    /// <summary>首页那层 Canvas 的可见性：没账号就没人可画，开关关掉就整块不出现。</summary>
+    public bool ShowHomeSkinModel => HasAccount && HomeSkinModelVisible;
+
+    [RelayCommand]
+    private void ResetHomeSkinModelPosition()
+    {
+        if (HomeSkinModelX is null && HomeSkinModelY is null) return;
+
+        HomeSkinModelX = null;
+        HomeSkinModelY = null;
+    }
+
+    // ==========================================================
     // Accounts
     // ==========================================================
 
@@ -789,6 +852,7 @@ public partial class MainWindowViewModel : ViewModelBase
         foreach (var a in Accounts) a.IsCurrent = ReferenceEquals(a, value);
         AvatarBitmap = value?.AvatarBitmap ?? NoAccountAvatar;
         OnPropertyChanged(nameof(HasAccount));
+        OnPropertyChanged(nameof(ShowHomeSkinModel));
         OnPropertyChanged(nameof(EffectivePetName));
     }
 
@@ -1970,6 +2034,9 @@ public partial class MainWindowViewModel : ViewModelBase
             BgTuningLeft = settings.BackgroundTuningLeft;
             BgTuningX = settings.BackgroundTuningX;
             BgTuningY = settings.BackgroundTuningY;
+            HomeSkinModelVisible = settings.HomeSkinModelVisible;
+            HomeSkinModelX = settings.HomeSkinModelX;
+            HomeSkinModelY = settings.HomeSkinModelY;
             // 老配置里"静音"是一个独立布尔（默认 false）。第一次读进来要照它的意思把音量压成 0，
             // 否则更新完第一次放背景视频就是满音量糊脸。存回去时两个字段自洽，之后就恒等了。
             var storedVolume = Math.Clamp(settings.VideoBackgroundVolume, 0, 100);
@@ -2016,6 +2083,9 @@ public partial class MainWindowViewModel : ViewModelBase
         settings.BackgroundTuningLeft = BgTuningLeft;
         settings.BackgroundTuningX = BgTuningX;
         settings.BackgroundTuningY = BgTuningY;
+        settings.HomeSkinModelVisible = HomeSkinModelVisible;
+        settings.HomeSkinModelX = HomeSkinModelX;
+        settings.HomeSkinModelY = HomeSkinModelY;
         // 这个布尔现在只是"音量 > 0"的别名：留着写是为了让旧版本读到的还是对的意思，
         // 也是新配置第一次读入时那个"照它压一次音量"的迁移依据。
         settings.VideoBackgroundSound = VideoBackgroundSound;
