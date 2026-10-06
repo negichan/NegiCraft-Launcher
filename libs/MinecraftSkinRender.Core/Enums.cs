@@ -71,7 +71,12 @@ public enum StateType
 public enum ModelPartType
 {
     Head, Body, LeftArm, RightArm, LeftLeg, RightLeg, Cape,
-    Proj, View, Model
+    Proj, View, Model,
+
+    // The lower halves of the limbs, only built when SkinRenderBase.LimbJoints is on.
+    // Named "ForeArm"/"LowerLeg" rather than "UpperArm"/"Thigh" because the enum member
+    // that already exists (LeftArm / LeftLeg) becomes the upper segment in that mode.
+    LeftForeArm, RightForeArm, LeftLowerLeg, RightLowerLeg
 }
 
 /// <summary>

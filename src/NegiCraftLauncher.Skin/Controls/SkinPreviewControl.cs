@@ -5,7 +5,9 @@ using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Shapes;
+using MinecraftSkinRender;
 using NegiCraftLauncher.Raster;
+using NegiCraftLauncher.Raster.Animation;
 using NegiCraftLauncher.Raster.Rendering;
 using NegiCraftLauncher.Skin.Rendering;
 
@@ -150,6 +152,37 @@ public sealed class SkinPreviewControl : Grid
         set => SetValue(IsSprintingProperty, value);
     }
 
+    public static readonly DependencyProperty HandsOnHipsProperty =
+        DependencyProperty.Register(
+            nameof(HandsOnHips),
+            typeof(bool),
+            typeof(SkinPreviewControl),
+            new PropertyMetadata(false, OnPoseFlagChanged));
+
+    /// <summary>双手叉腰、两脚分开。<b>要 <see cref="LimbJoints"/> 开着才弯得出来。</b></summary>
+    public bool HandsOnHips
+    {
+        get => (bool)GetValue(HandsOnHipsProperty);
+        set => SetValue(HandsOnHipsProperty, value);
+    }
+
+    public static readonly DependencyProperty SwayingProperty =
+        DependencyProperty.Register(
+            nameof(Swaying),
+            typeof(bool),
+            typeof(SkinPreviewControl),
+            new PropertyMetadata(false, OnPoseFlagChanged));
+
+    /// <summary>
+    /// 扭胯摆动。<b>叠在其它姿势之上</b>，和 <see cref="HandsOnHips"/> 同时开就是"叉着腰扭"。
+    /// 它动的是骨盆 / 胸椎两节总关节，所以四肢是真的被带着走；开着时不会停渲染（本来就该一直动）。
+    /// </summary>
+    public bool Swaying
+    {
+        get => (bool)GetValue(SwayingProperty);
+        set => SetValue(SwayingProperty, value);
+    }
+
     public static readonly DependencyProperty StageOffsetYProperty =
         DependencyProperty.Register(
             nameof(StageOffsetY),
@@ -186,6 +219,23 @@ public sealed class SkinPreviewControl : Grid
         set => SetValue(UseGpuProperty, value);
     }
 
+    public static readonly DependencyProperty SpineFlexibleProperty =
+        DependencyProperty.Register(
+            nameof(SpineFlexible),
+            typeof(bool),
+            typeof(SkinPreviewControl),
+            new PropertyMetadata(false, OnSpineFlexibleChanged));
+
+    /// <summary>
+    /// 躯干换成细分网格、按顶点做脊椎形变（扭腰 / 弯腰时上身会拧出弧度，而不是一块盒子原地转）。
+    /// 和 <see cref="LimbJoints"/> 一样只影响 WPF 两个后端；关掉时躯干就是原来的整盒。
+    /// </summary>
+    public bool SpineFlexible
+    {
+        get => (bool)GetValue(SpineFlexibleProperty);
+        set => SetValue(SpineFlexibleProperty, value);
+    }
+
     public static readonly DependencyProperty CanDragRotateProperty =
         DependencyProperty.Register(
             nameof(CanDragRotate),
@@ -216,6 +266,42 @@ public sealed class SkinPreviewControl : Grid
     {
         get => (bool)GetValue(HeadFollowsHostMouseProperty);
         set => SetValue(HeadFollowsHostMouseProperty, value);
+    }
+
+    public static readonly DependencyProperty LimbJointsProperty =
+        DependencyProperty.Register(
+            nameof(LimbJoints),
+            typeof(bool),
+            typeof(SkinPreviewControl),
+            new PropertyMetadata(false, OnLimbJointsChanged));
+
+    /// <summary>
+    /// 把胳膊和腿各切成上下两段（肘 / 膝），这样才弯得出"手叉腰"这类姿势。
+    ///
+    /// <para>默认 false —— 关掉时几何和位姿矩阵和以前**逐字节一样**，主页预览的像素基准不动。
+    /// 只影响 WPF 两个后端；Avalonia 的 OpenGL 后端按名字建 VAO，只认单段四肢。</para>
+    /// </summary>
+    public bool LimbJoints
+    {
+        get => (bool)GetValue(LimbJointsProperty);
+        set => SetValue(LimbJointsProperty, value);
+    }
+
+    public static readonly DependencyProperty LimbFlexibleProperty =
+        DependencyProperty.Register(
+            nameof(LimbFlexible),
+            typeof(bool),
+            typeof(SkinPreviewControl),
+            new PropertyMetadata(false, OnLimbFlexibleChanged));
+
+    /// <summary>
+    /// 四肢整根网格竖切细分并在关节处平滑自由弯曲。
+    /// 替代两段式刚性切割，使肘部和膝盖在弯曲时形成自然的连续曲面。
+    /// </summary>
+    public bool LimbFlexible
+    {
+        get => (bool)GetValue(LimbFlexibleProperty);
+        set => SetValue(LimbFlexibleProperty, value);
     }
 
     // ==========================================================
@@ -389,6 +475,60 @@ public sealed class SkinPreviewControl : Grid
 
     public void TriggerAttack(double? parkAt = null) => _pose.TriggerAttack(parkAt);
 
+    /// <summary>播放指定的 MMD 动作剪辑。</summary>
+    public void PlayMotion(VmdMotionClip clip, bool loop = true)
+    {
+        _pose.PlayMotion(clip, loop);
+        _viewDirty = true;
+    }
+
+    /// <summary>停止播放当前的 MMD 动作剪辑。</summary>
+    public void StopMotion()
+    {
+        _pose.StopMotion();
+        _viewDirty = true;
+    }
+
+    /// <summary>当前是否正在播放 MMD 动作动画。</summary>
+    public bool IsPlayingMotion => _pose.IsPlayingMotion;
+
+    /// <summary>当前正在播放的 MMD 动作名称。</summary>
+    public string? CurrentMotionName => _pose.CurrentMotionName;
+
+    /// <summary>正在播的剪辑本体（调试动词读解算中间量用）。</summary>
+    public VmdMotionClip? ActiveMotion => _pose.ActiveMotion;
+
+    /// <summary>当前动作时钟（秒）。</summary>
+    public double MotionTime => _pose.MotionTime;
+
+    /// <summary>调试用：把动作时钟钉在某一秒。</summary>
+    public void ParkMotionAt(double seconds)
+    {
+        _pose.ParkMotionAt(seconds);
+        _viewDirty = true;
+    }
+
+    /// <summary>调试用：解除定格，从定格位置接着走。</summary>
+    public void ResumeMotion()
+    {
+        _pose.ResumeMotion();
+        _viewDirty = true;
+    }
+
+    /// <summary>调试用：把扭胯动画定格在某个进度相位（0..1）。传 null 解除定格恢复正常播放。</summary>
+    public void ParkSway(double? phase = null)
+    {
+        _pose.ParkSway(phase);
+        RenderFrame();
+    }
+
+    /// <summary>
+    /// 调试用：往某个关节的角度上加一份偏移（度），用来把叉腰那组骨架角边看边调。
+    /// 见 <see cref="SkinPoseDriver.TweakJoint"/>。
+    /// </summary>
+    public void TweakJoint(ModelPartType part, float xDeg, float yDeg, float zDeg) =>
+        _pose.TweakJoint(part, xDeg, yDeg, zDeg);
+
     /// <summary>
     /// 跳跃的垂直位移（负值向上）。只动**人物与名牌**，阴影钉死在地面上，
     /// 并按离地高度缩小变淡 —— 与 Avalonia 版 <c>MinecraftSkinPreview.SetJumpOffset</c> 一致。
@@ -462,7 +602,7 @@ public sealed class SkinPreviewControl : Grid
         preview.LoadFromUsername(name);
     }
 
-    /// <summary>四个纯姿势开关（蹲/走/跳/跑）都是直接转发给 <see cref="SkinPoseDriver"/>。</summary>
+    /// <summary>几个纯姿势开关（蹲/走/跳/跑/叉腰/摆动）都是直接转发给 <see cref="SkinPoseDriver"/>。</summary>
     private static void OnPoseFlagChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
     {
         if (d is not SkinPreviewControl preview) return;
@@ -472,6 +612,8 @@ public sealed class SkinPreviewControl : Grid
         else if (e.Property == IsWalkingProperty) preview._pose.Walking = on;
         else if (e.Property == IsJumpingProperty) preview._pose.Jumping = on;
         else if (e.Property == IsSprintingProperty) preview._pose.Sprinting = on;
+        else if (e.Property == HandsOnHipsProperty) preview._pose.HandsOnHips = on;
+        else if (e.Property == SwayingProperty) preview._pose.Swaying = on;
     }
 
     private static void OnDanglingChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
@@ -485,6 +627,46 @@ public sealed class SkinPreviewControl : Grid
         preview._shadow.Width = dangling ? 36 : 56;
         preview._shadow.Opacity = dangling ? 0.32 : 1.0;
         preview._nametag.Opacity = dangling ? 0.0 : 1.0;
+    }
+
+    /// <summary>
+    /// 分段开关要铺到**两个**后端上，而且 GPU 那份是惰性建的 —— 建的时候要按当前值补一次，
+    /// 否则会出现"软件那份切了、GPU 那份没切"，而屏幕上看到的是 GPU 那份。
+    /// </summary>
+    private static void OnLimbJointsChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
+    {
+        if (d is not SkinPreviewControl preview) return;
+
+        var jointed = e.NewValue is true;
+        preview._software.LimbJoints = jointed;
+
+        if (preview._gpu is { } gpu) gpu.LimbJoints = jointed;
+
+        preview._viewDirty = true;
+    }
+
+    private static void OnSpineFlexibleChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
+    {
+        if (d is not SkinPreviewControl preview) return;
+
+        var flexible = e.NewValue is true;
+        preview._software.SpineFlexible = flexible;
+
+        if (preview._gpu is { } gpu) gpu.SpineFlexible = flexible;
+
+        preview._viewDirty = true;
+    }
+
+    private static void OnLimbFlexibleChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
+    {
+        if (d is not SkinPreviewControl preview) return;
+
+        var flexible = e.NewValue is true;
+        preview._software.LimbFlexible = flexible;
+
+        if (preview._gpu is { } gpu) gpu.LimbFlexible = flexible;
+
+        preview._viewDirty = true;
     }
 
     private static void OnStageOffsetChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
@@ -700,6 +882,11 @@ public sealed class SkinPreviewControl : Grid
         Children.Insert(1, view);
 
         _pose = new SkinPoseDriver(_software, _gpu);
+
+        // 惰性建的时候补一次当前值 —— 变更回调早就跑过了，不补这份会一直是默认的 false。
+        _gpu.LimbJoints = LimbJoints;
+        _gpu.SpineFlexible = SpineFlexible;
+        _gpu.LimbFlexible = LimbFlexible;
 
         if (_lastTexture is not null)
         {

@@ -9,6 +9,8 @@ using System.Windows.Media;
 using System.Windows.Threading;
 using NegiCraftLauncher.Icons;
 using NegiCraftLauncher.Pet.Services;
+using NegiCraftLauncher.Raster;
+using NegiCraftLauncher.Raster.Animation;
 using NegiCraftLauncher.Skin.Controls;
 
 namespace NegiCraftLauncher.Pet;
@@ -110,6 +112,24 @@ public partial class PetWindow : Window
             if (_interactSwallowClicks == value) return;
             _interactSwallowClicks = value;
             UpdateInteractUi();
+        }
+    }
+
+    private bool _lookAtMouse = true;
+
+    /// <summary>视线是否跟随鼠标。关闭后桌宠头部保持正视前方。</summary>
+    public bool LookAtMouse
+    {
+        get => _lookAtMouse;
+        set
+        {
+            if (_lookAtMouse == value) return;
+            _lookAtMouse = value;
+            if (!_lookAtMouse)
+            {
+                PetPreview.SetHeadLookAt(0, 0);
+            }
+            MenuLookAtMouseIcon.Visibility = Vis(_lookAtMouse);
         }
     }
 
@@ -260,6 +280,7 @@ public partial class PetWindow : Window
 
     private DispatcherTimer? _physicsTimer;
     private readonly System.Diagnostics.Stopwatch _physicsStopwatch = new();
+    private readonly MenuDismissTracker _menuDismissTracker;
 
     public PetWindow()
     {
@@ -267,6 +288,10 @@ public partial class PetWindow : Window
 
         // 窗口还没上屏时 HWND 不存在，ApplyToolWindow 会挂到 SourceInitialized 上。
         PetShellStyle.ApplyToolWindow(this);
+
+        // 监听全局鼠标输入，解决 WS_EX_NOACTIVATE 窗口点击外部无法关闭右键菜单的问题
+        _menuDismissTracker = new MenuDismissTracker(Dispatcher, PetContextMenu, TrayMenu);
+        Closed += (_, _) => _menuDismissTracker.Dispose();
 
         // 菜单图标、焦点、回自由待机时把窗口摆回去 —— 这些是 view 的事，物理内核不管。
         _motion.ModeChanged += OnMotionModeChanged;
@@ -315,6 +340,12 @@ public partial class PetWindow : Window
                 _host.PropertyChanged -= OnHostPropertyChanged;
             }
         };
+    }
+
+    public string PlayerName
+    {
+        get => PetPreview.PlayerName;
+        set => PetPreview.PlayerName = value;
     }
 
     public void SetPlayerName(string name)
@@ -548,7 +579,14 @@ public partial class PetWindow : Window
         PetPreview.SetJumpOffset(_motion.JumpOffsetY);
 
         if (_motion.YawDelta != 0f) PetPreview.RotateModel(_motion.YawDelta);
-        if (_motion.HasHeadLook) PetPreview.SetHeadLookAt(_motion.HeadPitch, _motion.HeadYaw);
+        if (_lookAtMouse)
+        {
+            if (_motion.HasHeadLook) PetPreview.SetHeadLookAt(_motion.HeadPitch, _motion.HeadYaw);
+        }
+        else
+        {
+            PetPreview.SetHeadLookAt(0, 0);
+        }
         if (_motion.PositionDirty) MoveWindowTo(_motion.GroundX, _motion.GroundY);
 
         MenuSneakIcon.Visibility = Vis(_motion.ManualSneakToggle);
@@ -668,6 +706,13 @@ public partial class PetWindow : Window
 
     private void OnRootMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
     {
+        if (_menuDismissTracker.HasOpenMenu)
+        {
+            _menuDismissTracker.CloseAll();
+            e.Handled = true;
+            return;
+        }
+
         // 双击切换手动潜行（Avalonia 是 DoubleTapped；WPF 的 Grid 没有 DoubleClick 事件，看 ClickCount）。
         if (e.ClickCount == 2)
         {
@@ -692,6 +737,13 @@ public partial class PetWindow : Window
 
     private void OnRootMouseRightButtonDown(object sender, MouseButtonEventArgs e)
     {
+        if (_menuDismissTracker.HasOpenMenu)
+        {
+            _menuDismissTracker.CloseAll();
+            e.Handled = true;
+            return;
+        }
+
         _isRightPressed = true;
         _isRightRotating = false;
         _rightPressPoint = e.GetPosition(this);
@@ -817,10 +869,37 @@ public partial class PetWindow : Window
     }
 
     /// <summary>调试用：程序化关闭右键菜单。</summary>
-    public void ClosePetContextMenu() => PetContextMenu.IsOpen = false;
+    public void ClosePetContextMenu()
+    {
+        PetContextMenu.IsOpen = false;
+        _menuDismissTracker?.CloseAll();
+    }
 
     /// <summary>右键菜单当前是否开着。</summary>
     public bool IsPetContextMenuOpen => PetContextMenu.IsOpen;
+
+    /// <summary>调试用：测试指定屏幕坐标的点击是否判定为外部点击并触发关菜单。</summary>
+    public bool TestMenuClick(int screenX, int screenY) =>
+        _menuDismissTracker?.TestClick(screenX, screenY) ?? false;
+
+    /// <summary>调试用：获取当前右键菜单在屏幕上的物理坐标范围。</summary>
+    public Rect GetMenuScreenRect()
+    {
+        if (!PetContextMenu.IsOpen) return Rect.Empty;
+        var p = PetContextMenu.PointToScreen(new Point(0, 0));
+        var p2 = PetContextMenu.PointToScreen(new Point(PetContextMenu.ActualWidth, PetContextMenu.ActualHeight));
+        return new Rect(p, p2);
+    }
+
+    /// <summary>
+    /// 托盘菜单及其宿主。只有独立版（<c>NegiPet.exe</c>）会用；声明在这儿是因为菜单必须内联在
+    /// 本文件的可视树里才有逻辑父级（放 App.xaml 资源里会弹成透明的、而且一开就自己关掉）。
+    /// 宿主是 0 尺寸元素，所以启动器内嵌的桌宠带着它也没有任何可见影响。
+    /// </summary>
+    /// <remarks>名字不能叫 <c>TrayMenu</c>：XAML 里那个 <c>x:Name="TrayMenu"</c> 已经生成了同名的
+    /// internal 字段，两者并存是 CS0102。生成的字段是 internal 的，跨程序集（NegiPet.exe）看不见，
+    /// 所以才要有这个公开包装。</remarks>
+    public (FrameworkElement host, ContextMenu menu) TrayMenuParts => (TrayMenuHost, TrayMenu);
 
     #endregion
 
@@ -835,7 +914,15 @@ public partial class PetWindow : Window
         }
     }
 
-    private void SetScale(double scale)
+    public double CurrentScale => _currentScale;
+
+    public bool SpineFlexible
+    {
+        get => PetPreview.SpineFlexible;
+        set => PetPreview.SpineFlexible = value;
+    }
+
+    public void SetScale(double scale)
     {
         _currentScale = scale;
         Width = _baseWidth * scale;
@@ -855,6 +942,66 @@ public partial class PetWindow : Window
         _motion.ToggleManualSneak();
         PetPreview.Sneaking = _motion.Sneaking;
         MenuSneakIcon.Visibility = Vis(_motion.ManualSneakToggle);
+    }
+
+    /// <summary>
+    /// 两个纯摆姿势的开关。叉腰靠的是分段四肢（<c>PetPreview.LimbJoints</c>，XAML 里已开），
+    /// 摆动靠骨盆 / 胸椎那两节总关节 —— 都不碰物理，所以和模式 / 移动互不影响。
+    /// </summary>
+    private void OnToggleHipsClick(object sender, RoutedEventArgs e)
+    {
+        PetPreview.HandsOnHips = !PetPreview.HandsOnHips;
+        MenuHipsIcon.Visibility = Vis(PetPreview.HandsOnHips);
+    }
+
+    private void OnToggleSwayClick(object sender, RoutedEventArgs e)
+    {
+        PetPreview.Swaying = !PetPreview.Swaying;
+        if (PetPreview.Swaying && !PetPreview.HandsOnHips)
+        {
+            PetPreview.HandsOnHips = true;
+            MenuHipsIcon.Visibility = Vis(true);
+        }
+        MenuSwayIcon.Visibility = Vis(PetPreview.Swaying);
+    }
+
+    private void OnToggleLookAtMouseClick(object sender, RoutedEventArgs e)
+    {
+        LookAtMouse = !LookAtMouse;
+    }
+
+    private void OnTriggerAttackClick(object sender, RoutedEventArgs e)
+    {
+        PetPreview.TriggerAttack();
+    }
+
+    private void OnLoadVmdClick(object sender, RoutedEventArgs e)
+    {
+        var dialog = new Microsoft.Win32.OpenFileDialog
+        {
+            Title = "选择 MMD 动作文件 (.vmd)",
+            Filter = "MMD 动作文件 (*.vmd)|*.vmd|所有文件 (*.*)|*.*",
+            Multiselect = false,
+        };
+
+        if (dialog.ShowDialog(this) != true) return;
+
+        try
+        {
+            var clip = VmdMotionClip.Load(dialog.FileName);
+            PetPreview.PlayMotion(clip, loop: true);
+            MenuStopVmd.IsEnabled = true;
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(this, $"加载 VMD 失败：{ex.Message}", "错误", MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+    }
+
+    private void OnStopVmdClick(object sender, RoutedEventArgs e)
+    {
+        PetPreview.StopMotion();
+        MenuStopVmd.IsEnabled = false;
     }
 
     /// <summary>调试用：设一个屏幕坐标（物理像素）作为导航目标。</summary>
@@ -981,12 +1128,22 @@ public partial class PetWindow : Window
 
         try
         {
-            PetPreview.ApplySkin(File.ReadAllBytes(dialog.FileName));
+            var bytes = File.ReadAllBytes(dialog.FileName);
+            PetPreview.ApplySkin(bytes);
+            var settings = PetSettings.Load();
+            settings.SkinPath = dialog.FileName;
+            settings.SkinPlayerName = null;
+            settings.Save();
         }
         catch (Exception ex)
         {
             Console.WriteLine($"[PetWindow] Failed to load skin: {ex.Message}");
         }
+    }
+
+    private void OnOpenSettingsClick(object sender, RoutedEventArgs e)
+    {
+        OpenSettingsWindow();
     }
 
     private void OnOpenLauncherClick(object sender, RoutedEventArgs e)
@@ -997,6 +1154,86 @@ public partial class PetWindow : Window
     private void OnClosePetClick(object sender, RoutedEventArgs e)
     {
         Close();
+    }
+
+    public void ApplySettings(PetSettings settings)
+    {
+        if (!string.IsNullOrWhiteSpace(settings.CustomName))
+        {
+            PetPreview.PlayerName = settings.CustomName;
+            if (_host != null) _host.CustomName = settings.CustomName;
+            UpdateResetNameMenuState();
+        }
+
+        if (!string.IsNullOrWhiteSpace(settings.SkinPath) && File.Exists(settings.SkinPath))
+        {
+            try
+            {
+                PetPreview.ApplySkin(File.ReadAllBytes(settings.SkinPath));
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[PetWindow] ApplySettings skin error: {ex.Message}");
+            }
+        }
+        else if (!string.IsNullOrWhiteSpace(settings.SkinPlayerName))
+        {
+            var preset = DefaultSkins.TryRead(settings.SkinPlayerName);
+            if (preset != null)
+            {
+                PetPreview.ApplySkin(preset);
+            }
+            else
+            {
+                PetPreview.PlayerName = settings.SkinPlayerName;
+            }
+        }
+
+        if (settings.Scale >= 0.5 && settings.Scale <= 2.0)
+        {
+            SetScale(settings.Scale);
+        }
+
+        LookAtMouse = settings.LookAtMouse;
+        PetPreview.SpineFlexible = settings.SpineFlexible;
+        Topmost = settings.Topmost;
+        if (MenuTopmost != null)
+        {
+            MenuTopmost.IsChecked = settings.Topmost;
+        }
+
+        PetPreview.UseGpu = settings.UseGpu;
+        if (_host != null) _host.UseGpu = settings.UseGpu;
+        MenuGpuRenderIcon.Visibility = Vis(settings.UseGpu);
+
+        if (Enum.TryParse<PetInteractionMode>(settings.InteractionMode, true, out var mode))
+        {
+            CurrentMode = mode;
+        }
+    }
+
+    private PetSettingsWindow? _activeSettingsDialog;
+
+    public PetSettingsWindow OpenSettingsWindow(string? shotPath = null, bool isFirstRunSetup = false)
+    {
+        if (_activeSettingsDialog is { IsVisible: true })
+        {
+            _activeSettingsDialog.Activate();
+            return _activeSettingsDialog;
+        }
+
+        var settings = PetSettings.Load();
+        var dialog = new PetSettingsWindow(settings, isFirstRunSetup: isFirstRunSetup, petWindow: this);
+        _activeSettingsDialog = dialog;
+        dialog.Closed += (_, _) => _activeSettingsDialog = null;
+        dialog.Show();
+
+        if (shotPath != null)
+        {
+            SaveWindowContent(dialog, shotPath);
+        }
+
+        return dialog;
     }
 
     #endregion
@@ -1036,7 +1273,7 @@ public partial class PetWindow : Window
         var targets = new List<Window>();
         foreach (Window window in Application.Current.Windows)
         {
-            if (window is PromptPetNameDialog or CoordPickOverlayWindow) targets.Add(window);
+            if (window is PromptPetNameDialog or CoordPickOverlayWindow or PetSettingsWindow) targets.Add(window);
         }
 
         foreach (var window in targets) window.Close();

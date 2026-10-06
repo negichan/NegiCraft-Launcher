@@ -180,12 +180,222 @@ public abstract class SkinRenderBase
     public Vector3 RightLegRotate { get; set; }
     public Vector3 BodyRotate { get; set; }
 
+    // Elbow and knee. Only read when LimbJoints is on — with the limbs in one piece there is
+    // nothing to bend. Left as plain inputs rather than wired into _skina, so the built-in walk
+    // animation keeps its original single-box behaviour.
+    public Vector3 LeftForeArmRotate { get; set; }
+    public Vector3 RightForeArmRotate { get; set; }
+    public Vector3 LeftLowerLegRotate { get; set; }
+    public Vector3 RightLowerLegRotate { get; set; }
+
     public Vector3 BodyPos { get; set; }
     public Vector3 HeadPos { get; set; }
     public Vector3 LeftArmPos { get; set; }
     public Vector3 RightArmPos { get; set; }
     public Vector3 LeftLegPos { get; set; }
     public Vector3 RightLegPos { get; set; }
+
+    // 两节"总关节"：骨盆和胸椎。骨架本来是完全扁平的 —— 每个部件一个独立矩阵，躯干转了四肢不跟，
+    // 所以旧姿势（蹲 / 挥拳 / 被拎）都是手动把躯干的倾角抄进每条四肢的角度里凑出来的。
+    // 扭胯那种"胯转过去、胸口反着回正"的动作用凑是凑不出来的，必须有真正的父子链。
+    //
+    // 挂法：骨盆 → 两条腿 + 胸椎；胸椎 → 躯干盒 + 头 + 两条胳膊。
+    // ⚠️ 全 0 时这两节都是单位阵，所以现有姿势一个像素都不会变 —— 只有新动画会去动它们。
+    public Vector3 HipRotate { get; set; }
+    public Vector3 HipPos { get; set; }
+    public Vector3 SpineRotate { get; set; }
+
+    /// <summary>
+    /// 是否在扭胯摆动时将脚部/小腿锁死在地面（小腿与脚底保持静止水平，不随骨盆平移与侧倾）。
+    /// </summary>
+    public bool GroundLockFeet { get; set; }
+
+    /// <summary>小腿接地锁定时的基准大腿旋转（静止姿态）。</summary>
+    public Vector3 LeftLegRestRotate { get; set; }
+    public Vector3 RightLegRestRotate { get; set; }
+
+    /// <summary>
+    /// 四肢切成上下两段（肘 / 膝）。
+    ///
+    /// <para>开着时几何换的是 <see cref="Steve3DModel.GetSteve(SkinType, bool)"/> 的分段版本，
+    /// 位姿矩阵换成下面 <see cref="Joint"/> / <see cref="Chain"/> 那条链；关着时一切照旧。
+    /// OpenGL 后端只认单段四肢，所以它必须保持 false。</para>
+    ///
+    /// <para>⚠️ setter 置的是 <c>_switchModel</c> 而不是 <c>_switchType</c>：软件光栅重建网格只看
+    /// <c>_switchModel</c>，写错的表现是"设了没反应"。各自另有网格缓存的后端覆写
+    /// <see cref="OnLimbJointsChanged"/> 把自己的缓存清掉。</para>
+    /// </summary>
+    public bool LimbJoints
+    {
+        get { return _limbJoints; }
+        set
+        {
+            if (_limbJoints == value) return;
+
+            _limbJoints = value;
+            _switchModel = true;
+            OnLimbJointsChanged();
+        }
+    }
+
+    private bool _limbJoints;
+
+    /// <summary>四肢分段开了 / 关了。几何换了，缓存过网格的后端在这里把自己的缓存作废。</summary>
+    protected virtual void OnLimbJointsChanged()
+    {
+    }
+
+    // ---- 脊椎自由变形（FFD）----------------------------------------------------
+    //
+    // 躯干不再是"一个刚性盒子转一下"，而是按顶点高度施加递增的转角：越往上转得越多。
+    // 这样腰才真的拧得起来，而不是整块胸甲原地旋转。侧弯（绕 Z）和前弯（绕 X）走同一条通道，
+    // 所以扭和弯是同一个机制的两个分量。
+    //
+    // ⚠️ 只有开了 SpineFlexible 的后端会去逐顶点变形；GL 后端拿的还是没细分的整盒，
+    // 对它来说这些角度恒为 0，画面上什么都没有。
+
+    /// <summary>
+    /// 躯干侧壁竖切几段。6 段在桌宠那个尺寸（模型约 110×171）下已经看不出阶梯；
+    /// 每多一段就是躯干每层多 4 个面，两层合计多 8 个面。
+    /// </summary>
+    public const int SpineSegments = 6;
+
+    /// <summary>
+    /// 躯干改成细分网格 + 逐顶点变形。几何变了，和 <see cref="LimbJoints"/> 一样要走
+    /// <c>_switchModel</c> 让后端重建网格。
+    /// </summary>
+    public bool SpineFlexible
+    {
+        get { return _spineFlexible; }
+        set
+        {
+            if (_spineFlexible == value) return;
+
+            _spineFlexible = value;
+            _switchModel = true;
+            OnSpineChanged();
+        }
+    }
+
+    private bool _spineFlexible;
+
+    protected virtual void OnSpineChanged()
+    {
+    }
+
+    /// <summary>
+    /// 从腰到肩累计的形变角，顺序和别的旋转入参一致：<b>X = 侧弯（绕 Z）/ Y = 前弯（绕 X）/
+    /// Z = 扭转（绕 Y）</b>，单位同样是"弧度 × 360"。全 0 时逐顶点等于没动。
+    /// </summary>
+    public Vector3 SpineDeform { get; set; }
+
+    /// <summary>脊椎转轴基点（躯干盒底面，也就是髋线）。</summary>
+    protected static readonly Vector3 SpinePivot = new(0, -CubeModel.Value * 1.5f, 0);
+
+    /// <summary>从髋线到肩线的高度（躯干 12 像素 + 往上到肩顶 2 像素）。</summary>
+    protected const float SpineHeight = CubeModel.Value * 2.5f;
+
+    /// <summary>
+    /// 某个高度上的形变矩阵。<b>网格顶点和挂载点（肩、头）必须都走这一个函数</b> ——
+    /// 分开算就会出现"胳膊跟着转了、肩头的皮还留在原地"。
+    /// </summary>
+    protected Matrix4x4 SpineMatrixAt(float y)
+    {
+        if (!_spineFlexible || SpineDeform == Vector3.Zero) return Matrix4x4.Identity;
+
+        // 高度线性分配转角：髋线 t=0 完全不动，往上越来越拧。t 可以超过 1（肩顶以上转得最多）。
+        var t = (y - SpinePivot.Y) / SpineHeight;
+        if (t <= 0f) return Matrix4x4.Identity;
+
+        return Matrix4x4.CreateTranslation(-SpinePivot)
+             * Rotation(SpineDeform * t)
+             * Matrix4x4.CreateTranslation(SpinePivot);
+    }
+
+    /// <summary>把一个躯干局部顶点按它自己的高度变形。</summary>
+    protected Vector3 SpinePoint(Vector3 p) => Vector3.Transform(p, SpineMatrixAt(p.Y));
+
+    // ---- 四肢自由变形（FFD）----------------------------------------------------
+    //
+    // 四肢保持整根盒子（不再拆分成两截割裂的独立刚体盒），沿 Y 轴竖切细分，并在关节处施加平滑过渡弯曲。
+    // 足底保证 Roll=0 / Pitch=0 贴地，膝盖与肘部以连续平滑曲面自然过渡。
+
+    public const int LimbSegments = 8;
+
+    public bool LimbFlexible
+    {
+        get { return _limbFlexible; }
+        set
+        {
+            if (_limbFlexible == value) return;
+
+            _limbFlexible = value;
+            _switchModel = true;
+            OnLimbFlexibleChanged();
+        }
+    }
+
+    private bool _limbFlexible;
+
+    protected virtual void OnLimbFlexibleChanged()
+    {
+    }
+
+    public LimbDeform LeftArmDeform = LimbDeform.Identity;
+    public LimbDeform RightArmDeform = LimbDeform.Identity;
+    public LimbDeform LeftLegDeform = LimbDeform.Identity;
+    public LimbDeform RightLegDeform = LimbDeform.Identity;
+
+    public ref readonly LimbDeform GetLimbDeform(ModelPartType part)
+    {
+        switch (part)
+        {
+            case ModelPartType.LeftArm: return ref LeftArmDeform;
+            case ModelPartType.RightArm: return ref RightArmDeform;
+            case ModelPartType.LeftLeg: return ref LeftLegDeform;
+            case ModelPartType.RightLeg: return ref RightLegDeform;
+            default: return ref LimbDeform.Identity;
+        }
+    }
+
+    public Vector3 LimbPoint(ModelPartType part, Vector3 p)
+    {
+        if (!_limbFlexible) return p;
+
+        ref readonly var deform = ref GetLimbDeform(part);
+        if (deform.BendRotation == Quaternion.Identity && deform.Offset == Vector3.Zero)
+            return p;
+
+        var yTop = deform.TransitionTop;
+        var yBot = deform.TransitionBottom;
+        if (yTop <= yBot)
+        {
+            yTop = 0.25f;
+            yBot = -0.25f;
+        }
+
+        float w;
+        if (p.Y >= yTop)
+        {
+            w = 0f;
+        }
+        else if (p.Y <= yBot)
+        {
+            w = 1f;
+        }
+        else
+        {
+            var t = (yTop - p.Y) / (yTop - yBot);
+            w = t * t * (3f - 2f * t);
+        }
+
+        if (w <= 0f) return p;
+
+        var q = Quaternion.Slerp(Quaternion.Identity, deform.BendRotation, w);
+        var offset = deform.Offset * w;
+
+        return Vector3.Transform(p, q) + offset;
+    }
 
     /// <summary>
     /// FPS刷新
@@ -327,6 +537,9 @@ public abstract class SkinRenderBase
         _lastXY.X = 0;
         _lastXY.Y = 0;
         _last = Matrix4x4.Identity;
+        GroundLockFeet = false;
+        LeftLegRestRotate = Vector3.Zero;
+        RightLegRestRotate = Vector3.Zero;
     }
 
     /// <summary>
@@ -387,24 +600,73 @@ public abstract class SkinRenderBase
         // free end and put the pose offset before the rotation, which made a fold read as a fall.
         var armPivotX = value * CubeModel.Value;
 
+        // With the limbs split in two, each segment's geometry is authored with its own joint at
+        // the local origin instead, so the parent needs no `pivot` term at all — `rest` *is* the
+        // joint's position. These are the same joints the single-piece cases above use, just
+        // added together, so both modes describe one skeleton.
+        var shoulderL = new Vector3(armPivotX, Steve3DModel.ShoulderY, 0);
+        var shoulderR = new Vector3(-armPivotX, Steve3DModel.ShoulderY, 0);
+        var hipL = new Vector3(CubeModel.Value * 0.5f, -CubeModel.Value * 3f + Steve3DModel.HipY, 0);
+        var hipR = new Vector3(-CubeModel.Value * 0.5f, -CubeModel.Value * 3f + Steve3DModel.HipY, 0);
+
+        // Elbow / knee, measured from the parent joint down the parent's own axis — so they ride
+        // the parent's rotation. Joint-to-joint distances, hence independent of the overlay's
+        // 1.125x inflation.
+        var elbow = new Vector3(0, Steve3DModel.SplitY - Steve3DModel.ShoulderY, 0);
+        var knee = new Vector3(0, Steve3DModel.SplitY - Steve3DModel.HipY, 0);
+
+        var joints = _limbJoints;
+
+        // 骨盆绕髋线转（就是两条腿挂上去那条高度），所以胯怎么扭，腿根的挂载点都不动。
+        // 胸椎绕躯干自己的中心转 —— 它是"胸口反着回正"那一节，挂躯干盒、头、两条胳膊。
+        // 两节在全 0 时都是单位阵（Pose 里 T(-pivot) 和 T(pivot) 抵消），所以不驱动就等于不存在。
+        var pelvis = Pose(HipPos, new Vector3(0, -CubeModel.Value * 1.5f, 0), HipRotate, Vector3.Zero);
+        var torso = Pose(Vector3.Zero, Vector3.Zero, BodyRotate, BodyPos);
+
+        // 肩线（躯干局部 y = CubeModel.Value）正好是脊椎参考高度的 t=1，所以胳膊和头挂的
+        // 就是"扭到头"的那一节；躯干网格自己的顶点按各自高度取同一族矩阵（SpineMatrixAt），
+        // 两边共用一个函数，不会出现胳膊转了、肩头的皮没转。
+        var chest = Pose(Vector3.Zero, Vector3.Zero, SpineRotate, Vector3.Zero)
+                  * SpineMatrixAt(CubeModel.Value) * torso * pelvis;
+
         return type switch
         {
-            ModelPartType.Body => Pose(Vector3.Zero, Vector3.Zero, BodyRotate, BodyPos),
+            ModelPartType.Body => torso * pelvis,
             ModelPartType.Head => Pose(
               new Vector3(0, CubeModel.Value * 2.5f, 0),
-              new Vector3(0, -CubeModel.Value, 0), head, HeadPos),
-            ModelPartType.LeftArm => Pose(
-              new Vector3(armPivotX, 0, 0),
-              new Vector3(0, CubeModel.Value, 0), leftArm, LeftArmPos),
-            ModelPartType.RightArm => Pose(
-              new Vector3(-armPivotX, 0, 0),
-              new Vector3(0, CubeModel.Value, 0), rightArm, RightArmPos),
-            ModelPartType.LeftLeg => Pose(
-              new Vector3(CubeModel.Value * 0.5f, -CubeModel.Value * 3f, 0),
-              new Vector3(0, CubeModel.Value * 1.5f, 0), leftLeg, LeftLegPos),
-            ModelPartType.RightLeg => Pose(
-              new Vector3(-CubeModel.Value * 0.5f, -CubeModel.Value * 3f, 0),
-              new Vector3(0, CubeModel.Value * 1.5f, 0), rightLeg, RightLegPos),
+              new Vector3(0, -CubeModel.Value, 0), head, HeadPos) * chest,
+            ModelPartType.LeftArm => (joints
+              ? Joint(shoulderL, leftArm, LeftArmPos)
+              : Pose(new Vector3(armPivotX, 0, 0),
+                new Vector3(0, CubeModel.Value, 0), leftArm, LeftArmPos)) * chest,
+            ModelPartType.RightArm => (joints
+              ? Joint(shoulderR, rightArm, RightArmPos)
+              : Pose(new Vector3(-armPivotX, 0, 0),
+                new Vector3(0, CubeModel.Value, 0), rightArm, RightArmPos)) * chest,
+            ModelPartType.LeftForeArm => joints
+              ? Chain(elbow, LeftForeArmRotate, Joint(shoulderL, leftArm, LeftArmPos) * chest)
+              : Matrix4x4.Identity,
+            ModelPartType.RightForeArm => joints
+              ? Chain(elbow, RightForeArmRotate, Joint(shoulderR, rightArm, RightArmPos) * chest)
+              : Matrix4x4.Identity,
+            ModelPartType.LeftLeg => (joints
+              ? Joint(hipL, leftLeg, LeftLegPos)
+              : Pose(new Vector3(CubeModel.Value * 0.5f, -CubeModel.Value * 3f, 0),
+                new Vector3(0, CubeModel.Value * 1.5f, 0), leftLeg, LeftLegPos)) * pelvis,
+            ModelPartType.RightLeg => (joints
+              ? Joint(hipR, rightLeg, RightLegPos)
+              : Pose(new Vector3(-CubeModel.Value * 0.5f, -CubeModel.Value * 3f, 0),
+                new Vector3(0, CubeModel.Value * 1.5f, 0), rightLeg, RightLegPos)) * pelvis,
+            ModelPartType.LeftLowerLeg => joints
+              ? (GroundLockFeet
+                  ? Rotation(LeftLowerLegRotate) * Matrix4x4.CreateTranslation(Vector3.Transform(knee, Joint(hipL, LeftLegRestRotate, LeftLegPos)))
+                  : Chain(knee, LeftLowerLegRotate, Joint(hipL, leftLeg, LeftLegPos) * pelvis))
+              : Matrix4x4.Identity,
+            ModelPartType.RightLowerLeg => joints
+              ? (GroundLockFeet
+                  ? Rotation(RightLowerLegRotate) * Matrix4x4.CreateTranslation(Vector3.Transform(knee, Joint(hipR, RightLegRestRotate, RightLegPos)))
+                  : Chain(knee, RightLowerLegRotate, Joint(hipR, rightLeg, RightLegPos) * pelvis))
+              : Matrix4x4.Identity,
             ModelPartType.Proj => Matrix4x4.CreatePerspectiveFieldOfView(
               (float)(Math.PI / 4), (float)Width / Height, 0.1f, 10.0f),
             ModelPartType.View => Matrix4x4.CreateLookAt(new(0, 0, 7), new(), new(0, 1, 0)),
@@ -426,8 +688,73 @@ public abstract class SkinRenderBase
         Rotation(rotate) *
         Matrix4x4.CreateTranslation(pivot + rest + offset);
 
-    private static Matrix4x4 Rotation(Vector3 rotate) =>
+    /// <summary>
+    /// 一段四肢的父变换：几何已经把自己的关节放在局部原点了，所以只剩"绕原点转、再搬到关节该在的位置"。
+    /// </summary>
+    private static Matrix4x4 Joint(Vector3 rest, Vector3 rotate, Vector3 offset) =>
+        Rotation(rotate) *
+        Matrix4x4.CreateTranslation(rest + offset);
+
+    /// <summary>
+    /// 子段挂在父段下面：<b>先</b>绕自己的关节转，<b>再</b>落到父段局部帧里的关节位置，最后整个交给父段。
+    ///
+    /// <para>⚠️ 行向量约定下这条链读起来和"骨骼直觉"是反的。写成看着更自然的
+    /// <c>parent * Rotation * Translation</c> 编译得过、也画得出来，但那个关节偏移就<b>不会</b>跟着父段
+    /// 转 —— 表现是小臂像被钉在地上，胳膊一抬它就脱开。</para>
+    /// </summary>
+    private static Matrix4x4 Chain(Vector3 joint, Vector3 rotate, in Matrix4x4 parent) =>
+        Rotation(rotate) *
+        Matrix4x4.CreateTranslation(joint) *
+        parent;
+
+    public static Matrix4x4 Rotation(Vector3 rotate) =>
         Matrix4x4.CreateRotationZ(rotate.X / 360) *
         Matrix4x4.CreateRotationX(rotate.Y / 360) *
         Matrix4x4.CreateRotationY(rotate.Z / 360);
 }
+
+/// <summary>
+/// 四肢自由形变参数（弯曲旋转 + 平移补偿 + 过渡区上下边界）。
+/// </summary>
+public struct LimbDeform : IEquatable<LimbDeform>
+{
+    public Quaternion BendRotation;
+    public Vector3 Offset;
+    public float TransitionTop;
+    public float TransitionBottom;
+
+    public LimbDeform()
+    {
+        BendRotation = Quaternion.Identity;
+        Offset = Vector3.Zero;
+        TransitionTop = 0.25f;
+        TransitionBottom = -0.25f;
+    }
+
+    public static readonly LimbDeform Identity = new();
+
+    public static LimbDeform Lerp(in LimbDeform a, in LimbDeform b, float t)
+    {
+        if (t <= 0f) return a;
+        if (t >= 1f) return b;
+        return new LimbDeform
+        {
+            BendRotation = Quaternion.Slerp(a.BendRotation, b.BendRotation, t),
+            Offset = Vector3.Lerp(a.Offset, b.Offset, t),
+            TransitionTop = a.TransitionTop + (b.TransitionTop - a.TransitionTop) * t,
+            TransitionBottom = a.TransitionBottom + (b.TransitionBottom - a.TransitionBottom) * t
+        };
+    }
+
+    public bool Equals(LimbDeform other) =>
+        BendRotation == other.BendRotation &&
+        Offset == other.Offset &&
+        TransitionTop == other.TransitionTop &&
+        TransitionBottom == other.TransitionBottom;
+
+    public override bool Equals(object? obj) => obj is LimbDeform other && Equals(other);
+    public override int GetHashCode() => HashCode.Combine(BendRotation, Offset, TransitionTop, TransitionBottom);
+    public static bool operator ==(LimbDeform left, LimbDeform right) => left.Equals(right);
+    public static bool operator !=(LimbDeform left, LimbDeform right) => !left.Equals(right);
+}
+

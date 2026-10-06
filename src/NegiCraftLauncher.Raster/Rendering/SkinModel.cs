@@ -40,23 +40,70 @@ public static class SkinModel
     /// <summary>
     /// 组装一层（本体或第二层）的所有部件。
     /// 老皮肤没有第二层，<c>GetSteveTop</c> 只会给出头部 —— 这里如实返回，不补齐。
+    ///
+    /// <para><paramref name="jointed"/> 把胳膊和腿各拆成上下两段（肘 / 膝）。不拆时那四个字段是
+    /// null，<see cref="Add"/> 直接跳过，拿到的东西和以前逐字节一样 —— OpenGL 后端就走这条路。</para>
+    ///
+    /// <para><paramref name="spineSegments"/> 把躯干的四个侧壁各竖切这么多段，供逐顶点脊椎变形用
+    /// （1 = 不切，保持原来的整盒）。切了之后躯干一个部件就有 <c>4×段数 + 2</c> 个面，
+    /// 所以 <see cref="AppendQuads"/> 不能再假设"一个部件六个面"。</para>
+    ///
+    /// <para><paramref name="limbSegments"/> 把四肢的四个侧壁各竖切这么多段，供逐顶点四肢自由变形用
+    /// （1 = 不切，保持原来的整盒）。只在未分段（<paramref name="jointed"/> == false）时生效。</para>
     /// </summary>
-    public static List<SkinPart> Build(SkinType type, bool top)
+    public static List<SkinPart> Build(SkinType type, bool top, bool jointed = false, int spineSegments = 1, int limbSegments = 1)
     {
-        var model = top ? Steve3DModel.GetSteveTop(type) : Steve3DModel.GetSteve(type);
-        var texture = top ? Steve3DTexture.GetSteveTextureTop(type) : Steve3DTexture.GetSteveTexture(type);
+        var model = top ? Steve3DModel.GetSteveTop(type, jointed) : Steve3DModel.GetSteve(type, jointed);
+        var texture = top ? Steve3DTexture.GetSteveTextureTop(type, jointed) : Steve3DTexture.GetSteveTexture(type, jointed);
 
-        var parts = new List<SkinPart>(7);
+        var parts = new List<SkinPart>(10);
+
+        // 躯干的几何和 UV 必须一起切，而且切完仍是"一个部件"（只是面数变多），
+        // 这样两个后端都只认一个 Body 矩阵、外加逐顶点变形，不用新增部件类型。
+        var body = model.Body;
+        if (spineSegments > 1 && body?.Model != null && texture.Body != null)
+        {
+            var (mesh, point, uv) = SpineMesh.Build(body.Model, texture.Body, spineSegments);
+            body = new CubeModelItemObj { Model = mesh, Point = point };
+            parts.Add(new SkinPart(ModelPartType.Body, body.Model, uv));
+        }
+        else
+        {
+            Add(ModelPartType.Body, body, texture.Body);
+        }
 
         Add(ModelPartType.Head, model.Head, texture.Head);
-        Add(ModelPartType.Body, model.Body, texture.Body);
-        Add(ModelPartType.LeftArm, model.LeftArm, texture.LeftArm);
-        Add(ModelPartType.RightArm, model.RightArm, texture.RightArm);
-        Add(ModelPartType.LeftLeg, model.LeftLeg, texture.LeftLeg);
-        Add(ModelPartType.RightLeg, model.RightLeg, texture.RightLeg);
+
+        // 四肢在整段且启用自由形变时，四个侧壁竖切细分，供逐顶点弯曲
+        AddLimb(ModelPartType.LeftArm, model.LeftArm, texture.LeftArm);
+        AddLimb(ModelPartType.RightArm, model.RightArm, texture.RightArm);
+        AddLimb(ModelPartType.LeftLeg, model.LeftLeg, texture.LeftLeg);
+        AddLimb(ModelPartType.RightLeg, model.RightLeg, texture.RightLeg);
+
         Add(ModelPartType.Cape, model.Cape, texture.Cape);
 
+        // 关节段的顺序跟着各自的父段走，别打乱 —— 本体层靠深度测试无所谓，
+        // 但第二层是不写深度的混合绘制，同层的先后就是遮挡关系。
+        Add(ModelPartType.LeftForeArm, model.LeftForeArm, texture.LeftForeArm);
+        Add(ModelPartType.RightForeArm, model.RightForeArm, texture.RightForeArm);
+        Add(ModelPartType.LeftLowerLeg, model.LeftLowerLeg, texture.LeftLowerLeg);
+        Add(ModelPartType.RightLowerLeg, model.RightLowerLeg, texture.RightLowerLeg);
+
         return parts;
+
+        void AddLimb(ModelPartType partType, CubeModelItemObj? part, float[]? uv)
+        {
+            if (part?.Model == null || uv == null) return;
+            if (limbSegments > 1 && !jointed)
+            {
+                var (mesh, _, limbUv) = SpineMesh.Build(part.Model, uv, limbSegments);
+                parts.Add(new SkinPart(partType, mesh, limbUv));
+            }
+            else
+            {
+                parts.Add(new SkinPart(partType, part.Model, uv));
+            }
+        }
 
         void Add(ModelPartType partType, CubeModelItemObj? part, float[]? uv)
         {
@@ -66,14 +113,14 @@ public static class SkinModel
         }
     }
 
-    /// <summary>把一个部件展开成 6 个面片（每面 2 个三角形由光栅器自己拆）。</summary>
+    /// <summary>把一个部件展开成面片（每面 2 个三角形由光栅器自己拆）。</summary>
     public static void AppendQuads(SkinPart part, List<SkinQuad> destination)
     {
         var pos = part.Model;
         var uv = part.Uv;
 
-        // 24 个顶点 = 6 个面 × 4；索引固定 0..23（CubeModel.GetSquareIndicies 生成的就是它）。
-        for (var face = 0; face < 6; face++)
+        // 面数按顶点数算：整盒是 6 个面，细分过的躯干会更多。
+        for (var face = 0; face < pos.Length / 12; face++)
         {
             var v = face * 4;
 
@@ -86,7 +133,7 @@ public static class SkinModel
             destination.Add(new SkinQuad(
                 p0, p3, p2, p1,
                 Uv(uv, v + 0), Uv(uv, v + 3), Uv(uv, v + 2), Uv(uv, v + 1),
-                Normal(v)));
+                Normal(p0, p3, p2)));
         }
     }
 
@@ -102,7 +149,16 @@ public static class SkinModel
         return new Vector2(uvs[i], uvs[i + 1]);
     }
 
-    /// <summary>平面着色：一个面的 4 个顶点共用同一个法线，取该面第一个顶点的即可。</summary>
-    private static Vector3 Normal(int faceVertexIndex) =>
-        Vertex(CubeModel.Vertices, faceVertexIndex);
+    /// <summary>
+    /// 面法线：从三个角现算，不再去 <c>CubeModel.Vertices</c> 里按下标取 ——
+    /// 那个表只有 24 项（六个面），细分过的躯干面数超过它，按下标会越界。
+    ///
+    /// <para>目前光栅器是平光、也没有背面剔除，这个值实际没人读；留着是为了以后真上光照时
+    /// 不用再改一遍调用点。</para>
+    /// </summary>
+    private static Vector3 Normal(Vector3 a, Vector3 b, Vector3 c)
+    {
+        var n = Vector3.Cross(b - a, c - a);
+        return n.LengthSquared() > 1e-9f ? Vector3.Normalize(n) : Vector3.Zero;
+    }
 }

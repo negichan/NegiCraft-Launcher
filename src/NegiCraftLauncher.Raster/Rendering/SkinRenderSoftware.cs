@@ -141,12 +141,38 @@ public sealed class SkinRenderSoftware : SkinRenderBase
         {
             var mvp = GetMatrix4(part) * model * view * projection;
 
+            // 躯干与整段四肢支持逐顶点自由形变：
+            // 躯干沿高度扭转，四肢在关节处做平滑连续弯曲。
+            var spine = part == ModelPartType.Body && SpineFlexible;
+            var limb = LimbFlexible && (part == ModelPartType.LeftArm || part == ModelPartType.RightArm ||
+                                       part == ModelPartType.LeftLeg || part == ModelPartType.RightLeg);
+
             foreach (var quad in quads)
             {
-                var a = Projector.Project(mvp, quad.P0.X, quad.P0.Y, quad.P0.Z, quad.T0.X, quad.T0.Y, viewportWidth, viewportHeight);
-                var b = Projector.Project(mvp, quad.P1.X, quad.P1.Y, quad.P1.Z, quad.T1.X, quad.T1.Y, viewportWidth, viewportHeight);
-                var c = Projector.Project(mvp, quad.P2.X, quad.P2.Y, quad.P2.Z, quad.T2.X, quad.T2.Y, viewportWidth, viewportHeight);
-                var d = Projector.Project(mvp, quad.P3.X, quad.P3.Y, quad.P3.Z, quad.T3.X, quad.T3.Y, viewportWidth, viewportHeight);
+                var p0 = quad.P0;
+                var p1 = quad.P1;
+                var p2 = quad.P2;
+                var p3 = quad.P3;
+
+                if (spine)
+                {
+                    p0 = SpinePoint(p0);
+                    p1 = SpinePoint(p1);
+                    p2 = SpinePoint(p2);
+                    p3 = SpinePoint(p3);
+                }
+                else if (limb)
+                {
+                    p0 = LimbPoint(part, p0);
+                    p1 = LimbPoint(part, p1);
+                    p2 = LimbPoint(part, p2);
+                    p3 = LimbPoint(part, p3);
+                }
+
+                var a = Projector.Project(mvp, p0.X, p0.Y, p0.Z, quad.T0.X, quad.T0.Y, viewportWidth, viewportHeight);
+                var b = Projector.Project(mvp, p1.X, p1.Y, p1.Z, quad.T1.X, quad.T1.Y, viewportWidth, viewportHeight);
+                var c = Projector.Project(mvp, p2.X, p2.Y, p2.Z, quad.T2.X, quad.T2.Y, viewportWidth, viewportHeight);
+                var d = Projector.Project(mvp, p3.X, p3.Y, p3.Z, quad.T3.X, quad.T3.Y, viewportWidth, viewportHeight);
 
                 _renderer.DrawQuad(a, b, c, d, _skinPixels, _textureWidth, _textureHeight, blend, depthWrite);
             }
@@ -158,7 +184,10 @@ public sealed class SkinRenderSoftware : SkinRenderBase
         _baseLayer.Clear();
         _topLayer.Clear();
 
-        foreach (var part in SkinModel.Build(_skinType, top: false))
+        var spineSegs = SpineFlexible ? SpineSegments : 1;
+        var limbSegs = LimbFlexible ? LimbSegments : 1;
+
+        foreach (var part in SkinModel.Build(_skinType, top: false, LimbJoints, spineSegs, limbSegs))
         {
             // 披风用的是**另一张贴图**（不是皮肤），这里还没做披风支持。
             // 不跳过的话它会拿皮肤贴图去采样 (0..22, 1..17) 那一片头部区域，
@@ -169,7 +198,7 @@ public sealed class SkinRenderSoftware : SkinRenderBase
         }
 
         // 老皮肤（64x32）的贴图里只有头部那层覆盖，Build 会如实只返回头 —— 不用特判。
-        foreach (var part in SkinModel.Build(_skinType, top: true))
+        foreach (var part in SkinModel.Build(_skinType, top: true, LimbJoints, spineSegs, limbSegs))
         {
             _topLayer.Add((part.Type, ToQuads(part)));
         }
