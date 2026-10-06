@@ -871,7 +871,15 @@ public sealed class SkinPreviewControl : Grid
     {
         if (_gpu is not null) return;
 
-        _gpu = new SkinRenderGpu();
+        _gpu = new SkinRenderGpu
+        {
+            // WPF 的 3D 贴图采样固定是双线性，而 RenderOptions.BitmapScalingMode 只管 2D 画刷、
+            // 管不到 Media3D —— 所以只能把纹素先放大到"一个烘焙纹素 ≪ 一个屏幕像素"，让插值来不及
+            // 在块内抹出中间色。默认那档 2 倍不够：标准档一个原始纹素约 2.5 设备像素，烘完一个烘焙
+            // 纹素还有 1.25 像素宽 ⇒ 渐变带正好铺满一个像素，看着就是"糊一层 + 方块交界一条细线"。
+            // 8 倍：64x64 → 512x512（1 MB / 层），渐变带缩到 0.3 像素，肉眼没了。
+            TextureUpscale = 8,
+        };
         _viewport = new SkinGpuViewport();
 
         var view = _viewport.View;
