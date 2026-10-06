@@ -160,13 +160,21 @@ public sealed class SkinGpuViewport
     /// <para><c>TileMode.Tile</c> 是为了跟软件后端对齐：软件采样时对纹素下标取了模
     /// （插值可能让 UV 略微越界），这里也让它在 UV 平面上平铺，行为一致。</para>
     /// </summary>
-    private static ImageBrush BuildTextureBrush(ImageSource texture) => new(texture)
+    private static ImageBrush BuildTextureBrush(ImageSource texture)
     {
-        ViewportUnits = BrushMappingMode.Absolute,
-        Viewport = new Rect(0, 0, 1, 1),
-        Stretch = Stretch.Fill,
-        TileMode = TileMode.Tile,
-    };
+        var brush = new ImageBrush(texture)
+        {
+            ViewportUnits = BrushMappingMode.Absolute,
+            Viewport = new Rect(0, 0, 1, 1),
+            Stretch = Stretch.Fill,
+            TileMode = TileMode.Tile,
+        };
+
+        // 不设这句就是 WPF 默认的 Linear：64x64 的皮肤被双线性抹开，整只桌宠看着就是糊的
+        // （软件后端是 (int)(u * 宽) 直接取纹素 = 最近邻，两条后端必须一样）。
+        RenderOptions.SetBitmapScalingMode(brush, BitmapScalingMode.NearestNeighbor);
+        return brush;
+    }
 
     private static Matrix3D ToMatrix3D(in Matrix4x4 m) => new(
         m.M11, m.M12, m.M13, m.M14,
