@@ -302,7 +302,7 @@
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="{x:Type RepeatButton}">
-                        <Border Width="3" CornerRadius="1.5"
+                        <Border Width="5" CornerRadius="2.5"
                                 Background="{TemplateBinding Background}"
                                 HorizontalAlignment="Center" />
                     </ControlTemplate>
@@ -313,20 +313,26 @@
             <Setter Property="Background" Value="{DynamicResource PrimaryBrush}" />
         </Style>
         <Style x:Key="VolumeRestStyle" TargetType="{x:Type RepeatButton}" BasedOn="{StaticResource VolumeBarStyle}">
-            <Setter Property="Background" Value="{DynamicResource MutedBrush}" />
+            <!-- 未过那半必须是**看得见**的一条。先后试过 MutedBrush（文字用的灰）和 26% 白，
+                 在 #111114 的底上都几乎隐形 —— 35% 的截图里上半段整条消失，看着像只有下半截。
+                 用描边同款 #26262b：刚好读得出"还有轨道"，又不跟实心抢戏。 -->
+            <Setter Property="Background" Value="#26262b" />
         </Style>
         <Style x:Key="VolumeThumbStyle" TargetType="{x:Type Thumb}">
-            <Setter Property="Width" Value="12" />
-            <Setter Property="Height" Value="12" />
+            <Setter Property="Width" Value="15" />
+            <Setter Property="Height" Value="15" />
             <Setter Property="Focusable" Value="False" />
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="{x:Type Thumb}">
-                        <!-- 实心那半也是浅色，所以钮得自带一圈底色描边，否则和轨道糊在一起 -->
-                        <Ellipse Width="10" Height="10"
+                        <!-- 钮和实心那半同色（都是 PrimaryBrush = 白），所以得靠一圈底色把它从条里
+                             "抠"出来 —— 2px 描边时两者糊成一个葫芦形，看不出钮在哪。3px 才分得开。
+                             描边色要跟浮层底（#111114）一致 —— 之前用的是 CardBackgroundBrush，
+                             比浮层底浅，钮看着像戴了个灰环。 -->
+                        <Ellipse Width="13" Height="13"
                                  Fill="{DynamicResource PrimaryBrush}"
-                                 Stroke="{DynamicResource CardBackgroundBrush}"
-                                 StrokeThickness="2" />
+                                 Stroke="#111114"
+                                 StrokeThickness="3" />
                     </ControlTemplate>
                 </Setter.Value>
             </Setter>
@@ -656,27 +662,28 @@
                 </Button>
             </neg:NegiStackPanel>
 
-            <!-- 音量浮层：喇叭底下那条竖排音量条，照音乐软件那种样式。
+            <!-- 音量浮层：挂在喇叭正下方那条竖排音量条。
                  ⚠️ 之前做的是"悬停时从喇叭左边滑出一条横的"，那个鼠标很难挪上去
                    （条子在往左长、指针却在按钮上）。改成挂在按钮正下方的浮层，
                    指针往下走就进得去；开合靠 MainWindow 里的进出轮询兜底。
-                 ⚠️ 尺寸刻意压小：这是"悬停顺手拨一下"的浮层，不是设置项。
-                   之前 112 高的轨道 + 12 的上下内边距，整块将近 170px（窗口才 720），
-                   太占地方了。现在轨道 76、内边距 9。
-                 ⚠️ 横向定位**不写死边距**：浮层宽度由内容决定，写死数字一改里面的
-                   尺寸箭头就不在喇叭正下方了。左边距 0、右边缘由 MainWindow 按
-                   "喇叭中心 − 浮层宽/2" 实时算（见 RepositionVolumePanel）。
+                 ⚠️ **宽度写死 48**：浮层靠"喇叭中心 − 浮层宽/2"横向定位（见 RepositionVolumePanel），
+                   宽度要是由内容决定，拖动时百分比从 "5%" 变到 "100%" 会让整块变宽，
+                   而那个定位只在打开那一刻算一次 ⇒ 箭头自己就飘走了。这就是"音量条没对上喇叭"。
+                 ⚠️ 轨道 96 高（原来 76）：这是一根要**拨**的条，76 高时一格不到 0.8px，
+                   想调到 80% 全凭手感。加高之后整块约 150，仍在"顺手拨一下"的量级里。
                  ⚠️ 上边距 44 = 喇叭按钮的下边缘（12 + 32），**紧贴着不留缝**，
                    再加 `Background="Transparent"` 把整块矩形都变成可命中 ——
                    否则指针从按钮往下挪时要穿过一段谁都不算"悬停"的死区，
                    收合看门狗正好在那 180ms 里轮询一次就会把浮层关掉。
+                 ⚠️ ZIndex 46：画中画（BgShot，45）就在右上角，浮层必须压在它上面。
                  ⚠️ 开合动画**不用 `Pop`**，用资源里 VolumePopStyle 那套自己的。 -->
             <Border x:Name="VolumePanel"
                     HorizontalAlignment="Right" VerticalAlignment="Top"
+                    Width="48"
                     Margin="0,44,0,0"
                     Background="Transparent"
                     Style="{StaticResource VolumePopStyle}"
-                    Panel.ZIndex="45"
+                    Panel.ZIndex="46"
                     MouseEnter="OnVolumePanelMouseEnter">
                 <Border.RenderTransform>
                     <TranslateTransform Y="-6" />
@@ -685,15 +692,15 @@
                     <!-- 指向喇叭的小尖角。和面板同色，接缝在面板上边的直线段上（圆角在两侧，碰不到）。 -->
                     <Polygon Points="0,7 7,0 14,7" Fill="#111114" HorizontalAlignment="Center" />
                     <Border Background="#111114" BorderBrush="#26262b" BorderThickness="1"
-                            CornerRadius="10" Padding="9,9">
-                        <neg:NegiStackPanel Spacing="7" HorizontalAlignment="Center">
+                            CornerRadius="12" Padding="8,10">
+                        <neg:NegiStackPanel Spacing="8" HorizontalAlignment="Center">
                             <Slider x:Name="VideoVolumeSlider"
                                     Style="{StaticResource VolumeSliderStyle}"
-                                    Height="76" Width="22"
+                                    Height="96" Width="24"
                                     Value="{Binding VideoBackgroundVolume, Mode=TwoWay}" />
                             <TextBlock Text="{Binding VideoBackgroundVolume, StringFormat={}{0}%}"
                                        Foreground="#fafafa" FontSize="11" FontWeight="Medium"
-                                       HorizontalAlignment="Center" />
+                                       Width="30" TextAlignment="Center" />
                         </neg:NegiStackPanel>
                     </Border>
                 </neg:NegiStackPanel>
