@@ -1,0 +1,217 @@
+<!-- 背景调节窗：主窗口**外面**的一扇小工具窗。
+     为什么不在主窗口里做弹层：弹层整个盖在它正在调的那块背景上，调完才看得见效果；
+     而且加了取景和调色之后卡片已经顶到窗口底边。挪出来之后主窗口始终是全貌。
+     窗口自己带一圈留白给投影（和主窗口同一个道理：无边框 + AllowsTransparency
+     没法把阴影画到自己矩形外面）。 -->
+<Window x:Class="NegiCraftLauncher.App.Views.BackgroundTuningWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:neg="clr-namespace:NegiCraftLauncher.Theme;assembly=NegiCraftLauncher.Theme"
+        xmlns:materialIcons="clr-namespace:NegiCraftLauncher.Icons;assembly=NegiCraftLauncher.Icons"
+        Title="背景调节"
+        Width="320" SizeToContent="Height"
+        WindowStyle="None"
+        AllowsTransparency="True"
+        Background="Transparent"
+        ResizeMode="NoResize"
+        ShowInTaskbar="False"
+        ShowActivated="True"
+        WindowStartupLocation="Manual"
+        UseLayoutRounding="True"
+        TextOptions.TextFormattingMode="Display">
+
+    <Window.Resources>
+        <!-- 一行的两块：左边"图标 + 名字"，右边只读数值。
+             数值不给输入框：手输要另写一套校验，而且滑杆已经能到任何一个值。 -->
+        <Style x:Key="RowHead" TargetType="neg:NegiStackPanel">
+            <Setter Property="Orientation" Value="Horizontal" />
+            <Setter Property="Spacing" Value="8" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+        </Style>
+        <Style x:Key="RowLabel" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="13" />
+            <Setter Property="Foreground" Value="#a1a1aa" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+        </Style>
+        <Style x:Key="RowIcon" TargetType="materialIcons:MaterialIcon">
+            <Setter Property="Width" Value="14" />
+            <Setter Property="Height" Value="14" />
+            <Setter Property="Foreground" Value="#a1a1aa" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+        </Style>
+        <Style x:Key="RowValue" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="13" />
+            <Setter Property="FontWeight" Value="Medium" />
+            <Setter Property="Foreground" Value="#fafafa" />
+            <Setter Property="HorizontalAlignment" Value="Right" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+        </Style>
+        <!-- ⚠️ 必须 BasedOn 主题的隐式样式：显式设 Style 会**顶掉**它，模板一没就退回 WPF
+             默认的方滑块（这次滑杆样式就是这么丢的）。 -->
+        <Style x:Key="RowSlider" TargetType="Slider" BasedOn="{StaticResource {x:Type Slider}}">
+            <Setter Property="Margin" Value="0,7,0,0" />
+            <Setter Property="IsSnapToTickEnabled" Value="True" />
+            <Setter Property="TickFrequency" Value="1" />
+        </Style>
+        <Style x:Key="SectionHead" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="12" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="Foreground" Value="#fafafa" />
+            <Setter Property="Margin" Value="0,0,0,8" />
+        </Style>
+    </Window.Resources>
+
+    <Border Margin="18" CornerRadius="14" Background="#F2111114"
+            BorderBrush="#26262b" BorderThickness="1" Effect="{StaticResource ShadowLg}">
+        <neg:NegiStackPanel Spacing="0">
+
+            <!-- 标题栏：整条可拖（DragMove），右边一个关闭。它同时是这扇窗"是个窗口"的证据。
+                 拖拽和 Padding 都挂在外层 Border 上 —— NegiGrid 是 Grid 的子类，没有 Padding。 -->
+            <Border Background="Transparent" Cursor="SizeAll" Padding="14,11,10,11"
+                    MouseLeftButtonDown="OnTitleBarMouseDown">
+                <neg:NegiGrid Columns="Auto * Auto">
+                    <materialIcons:MaterialIcon Kind="DotsGrid" Width="14" Height="14"
+                                                Foreground="#52525b" VerticalAlignment="Center" />
+                    <TextBlock Grid.Column="1" Text="背景调节" FontWeight="SemiBold" FontSize="13"
+                               Foreground="#fafafa" Margin="8,0,0,0" VerticalAlignment="Center" />
+                    <!-- 关闭走 VM 而不是 Window.Close：这扇窗的可见性由 IsBgTuningOpen 一处说了算，
+                         自己关掉会让那个标志停在 true，下次主窗口以为它还开着。 -->
+                    <Button Grid.Column="2" Width="28" Height="26" Background="Transparent"
+                            BorderThickness="0" Foreground="#a1a1aa" Cursor="Hand"
+                            Command="{Binding CloseBgTuningCommand}" ToolTip="关闭">
+                        <materialIcons:MaterialIcon Kind="Close" Width="15" Height="15" />
+                    </Button>
+                </neg:NegiGrid>
+            </Border>
+
+            <Border Height="1" Background="#26262b" />
+
+            <neg:NegiStackPanel Spacing="14" Margin="16,14,16,16">
+
+                <neg:NegiStackPanel Spacing="12">
+                    <TextBlock Text="背景" Style="{StaticResource SectionHead}" />
+
+                    <neg:NegiStackPanel Spacing="0">
+                        <neg:NegiGrid Columns="* Auto">
+                            <neg:NegiStackPanel Style="{StaticResource RowHead}">
+                                <materialIcons:MaterialIcon Kind="WeatherSunny" Style="{StaticResource RowIcon}" />
+                                <TextBlock Text="亮度" Style="{StaticResource RowLabel}" />
+                            </neg:NegiStackPanel>
+                            <TextBlock Grid.Column="1" Text="{Binding BgBrightness, FallbackValue=0}"
+                                       Style="{StaticResource RowValue}" />
+                        </neg:NegiGrid>
+                        <Slider Style="{StaticResource RowSlider}" Minimum="-100" Maximum="100"
+                                Value="{Binding BgBrightness}" />
+                    </neg:NegiStackPanel>
+
+                    <neg:NegiStackPanel Spacing="0">
+                        <neg:NegiGrid Columns="* Auto">
+                            <neg:NegiStackPanel Style="{StaticResource RowHead}">
+                                <materialIcons:MaterialIcon Kind="BlurLinear" Style="{StaticResource RowIcon}" />
+                                <TextBlock Text="模糊" Style="{StaticResource RowLabel}" />
+                            </neg:NegiStackPanel>
+                            <TextBlock Grid.Column="1" Text="{Binding BgBlur, FallbackValue=0}"
+                                       Style="{StaticResource RowValue}" />
+                        </neg:NegiGrid>
+                        <Slider Style="{StaticResource RowSlider}" Minimum="0" Maximum="40"
+                                Value="{Binding BgBlur}" />
+                    </neg:NegiStackPanel>
+                </neg:NegiStackPanel>
+
+                <!-- 调色只在"吃调色"的那种背景才出现：色彩矩阵只作用于自选图片，
+                     视频和内置场景都不吃 ⇒ 挂着视频时这一整段（连同上面那条分隔线）不该占位置。 -->
+                <Border Height="1" Background="#26262b"
+                        Visibility="{Binding IsCustomBackground, Converter={StaticResource BoolToVis}}" />
+
+                <neg:NegiStackPanel Spacing="12"
+                                    Visibility="{Binding IsCustomBackground, Converter={StaticResource BoolToVis}}">
+                    <TextBlock Text="调色" Style="{StaticResource SectionHead}" />
+
+                    <neg:NegiStackPanel Spacing="0">
+                        <neg:NegiGrid Columns="* Auto">
+                            <neg:NegiStackPanel Style="{StaticResource RowHead}">
+                                <materialIcons:MaterialIcon Kind="Contrast" Style="{StaticResource RowIcon}" />
+                                <TextBlock Text="对比度" Style="{StaticResource RowLabel}" />
+                            </neg:NegiStackPanel>
+                            <TextBlock Grid.Column="1" Text="{Binding BgContrast, FallbackValue=0}"
+                                       Style="{StaticResource RowValue}" />
+                        </neg:NegiGrid>
+                        <Slider Style="{StaticResource RowSlider}" Minimum="-100" Maximum="100"
+                                Value="{Binding BgContrast}" />
+                    </neg:NegiStackPanel>
+
+                    <neg:NegiStackPanel Spacing="0">
+                        <neg:NegiGrid Columns="* Auto">
+                            <neg:NegiStackPanel Style="{StaticResource RowHead}">
+                                <materialIcons:MaterialIcon Kind="Water" Style="{StaticResource RowIcon}" />
+                                <TextBlock Text="饱和度" Style="{StaticResource RowLabel}" />
+                            </neg:NegiStackPanel>
+                            <TextBlock Grid.Column="1" Text="{Binding BgSaturation, FallbackValue=0}"
+                                       Style="{StaticResource RowValue}" />
+                        </neg:NegiGrid>
+                        <Slider Style="{StaticResource RowSlider}" Minimum="-100" Maximum="100"
+                                Value="{Binding BgSaturation}" />
+                    </neg:NegiStackPanel>
+
+                    <neg:NegiStackPanel Spacing="0">
+                        <neg:NegiGrid Columns="* Auto">
+                            <neg:NegiStackPanel Style="{StaticResource RowHead}">
+                                <materialIcons:MaterialIcon Kind="Palette" Style="{StaticResource RowIcon}" />
+                                <TextBlock Text="色相" Style="{StaticResource RowLabel}" />
+                            </neg:NegiStackPanel>
+                            <TextBlock Grid.Column="1" Text="{Binding BgHue, FallbackValue=0}"
+                                       Style="{StaticResource RowValue}" />
+                        </neg:NegiGrid>
+                        <Slider Style="{StaticResource RowSlider}" Minimum="-180" Maximum="180"
+                                Value="{Binding BgHue}" />
+                    </neg:NegiStackPanel>
+                </neg:NegiStackPanel>
+
+                <!-- 声音开关：只对视频背景有意义，没有视频时整行不出现。 -->
+                <neg:NegiGrid Columns="* Auto"
+                              Visibility="{Binding IsVideoBackground, Converter={StaticResource BoolToVis}}">
+                    <neg:NegiStackPanel VerticalAlignment="Center" Spacing="1">
+                        <TextBlock Text="播放声音" Foreground="#a1a1aa" FontSize="13" />
+                        <TextBlock Text="默认静音；打开后视频壁纸的声音会外放。"
+                                   FontSize="11" Foreground="#71717a" />
+                    </neg:NegiStackPanel>
+                    <CheckBox Grid.Column="1" VerticalAlignment="Center"
+                              IsChecked="{Binding VideoBackgroundSound}" />
+                </neg:NegiGrid>
+
+                <Border Height="1" Background="#26262b" />
+
+                <neg:NegiStackPanel Spacing="8">
+                    <neg:NegiGrid Columns="* *">
+                        <Button Style="{StaticResource BtnSmOutlineStyle}" Content="选择图片"
+                                HorizontalAlignment="Stretch" Click="OnPickImageClick" />
+                        <Button Grid.Column="1" Style="{StaticResource BtnSmOutlineStyle}" Content="选择视频"
+                                Margin="8,0,0,0" HorizontalAlignment="Stretch" Click="OnPickVideoClick" />
+                    </neg:NegiGrid>
+                    <Button Style="{StaticResource BtnSmOutlineStyle}" HorizontalAlignment="Stretch"
+                            Click="OnSyncWallpaperEngineClick">
+                        <neg:NegiStackPanel Orientation="Horizontal" Spacing="6">
+                            <materialIcons:MaterialIcon Kind="Wallpaper" Width="14" Height="14" />
+                            <TextBlock Text="同步 Wallpaper Engine" VerticalAlignment="Center" />
+                        </neg:NegiStackPanel>
+                    </Button>
+                    <!-- 两颗等宽（原型就是 flex:1 平分，不是一 Stretch 一 Auto）。
+                         恢复默认带图标、完成不带；而且它只归零参数，不动用户选的那张背景 ——
+                         "换回默认壁纸"在设置页的「背景」那一行。 -->
+                    <neg:NegiGrid Columns="* *" Margin="0,2,0,0">
+                        <Button Style="{StaticResource BtnSmOutlineStyle}" Command="{Binding ResetBackgroundTuningCommand}"
+                                HorizontalAlignment="Stretch">
+                            <neg:NegiStackPanel Orientation="Horizontal" Spacing="6">
+                                <materialIcons:MaterialIcon Kind="Restore" Width="14" Height="14" />
+                                <TextBlock Text="恢复默认" VerticalAlignment="Center" />
+                            </neg:NegiStackPanel>
+                        </Button>
+                        <Button Grid.Column="1" Style="{StaticResource BtnSmPrimaryStyle}" Content="完成"
+                                Margin="8,0,0,0" HorizontalAlignment="Stretch"
+                                Command="{Binding CloseBgTuningCommand}" />
+                    </neg:NegiGrid>
+                </neg:NegiStackPanel>
+            </neg:NegiStackPanel>
+        </neg:NegiStackPanel>
+    </Border>
+</Window>

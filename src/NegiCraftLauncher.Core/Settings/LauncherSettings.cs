@@ -44,6 +44,47 @@ public sealed class LauncherSettings
     public double BackgroundBrightness { get; set; }
 
     /// <summary>
+    ///     自选壁纸的取景：平移与缩放。
+    ///
+    ///     <para><b><see cref="BackgroundPanX" /> / <see cref="BackgroundPanY" /> 的单位是"可平移范围的
+    ///     百分比"</b>，不是像素也不是窗口尺寸：图片按 cover 铺满后比窗口大出来的那部分就是总余量，
+    ///     ±100 恰好看到对侧边。这样换窗口大小、换缩放都自洽，而且参数域本身就限死了不会露边。</para>
+    ///
+    ///     <para><see cref="BackgroundZoom" /> 的 <c>100</c> 就是今天的"居中裁切铺满"。</para>
+    ///
+    ///     <para>图片与视频共用这一组参数（数学在 <c>Raster/BackgroundFrame.cs</c> 一份）。
+    ///     内置生成场景不吃它 —— 那张是 <c>Fill</c> 硬拉伸的像素画，加分数缩放会让像素宽窄不均。</para>
+    /// </summary>
+    public double BackgroundPanX { get; set; }
+    public double BackgroundPanY { get; set; }
+    public double BackgroundZoom { get; set; } = 100;
+
+    /// <summary>
+    ///     自选壁纸的调色：对比度 / 饱和度 −100..100（0 = 不变），色相 −180..180 度。
+    ///
+    ///     <para>与 <see cref="BackgroundBrightness" /> 不同，这三个是色彩矩阵的参数，只在共享层
+    ///     <c>Raster/ImageGrade.cs</c> 作用于自选图片的像素上；<b>视频与内置场景都不吃它</b>
+    ///     （视频要等着色器那条路，内置场景保持作者调好的原样）。</para>
+    /// </summary>
+    public double BackgroundContrast { get; set; }
+    public double BackgroundSaturation { get; set; }
+    public double BackgroundHue { get; set; }
+
+    /// <summary>
+    ///     背景调节窗口的位置。
+    ///
+    ///     <para><see cref="BackgroundTuningX" /> / <see cref="BackgroundTuningY" /> 是屏幕坐标，
+    ///     <b>null 表示"用户没拖过"</b> —— 那时由视图按"贴主窗口一侧、那一侧放不下就翻边"现算。
+    ///     被拖过之后就不再自动挪：这类小窗每次开机换地方很烦。</para>
+    ///
+    ///     <para><see cref="BackgroundTuningLeft" /> 记的是上一次贴了哪一边，只作参考 ——
+    ///     真正的依据是每次开窗时那侧的屏幕余量，因为窗口可能被拖到另一个显示器旁边。</para>
+    /// </summary>
+    public bool BackgroundTuningLeft { get; set; }
+    public double? BackgroundTuningX { get; set; }
+    public double? BackgroundTuningY { get; set; }
+
+    /// <summary>
     ///     视频壁纸。与 <see cref="CustomBackgroundPath" /> 互斥 —— 两个都设了就按视频算。
     ///
     ///     <para>只有 Windows(WPF) 侧会播它：Avalonia 侧没有视频面，读到非空值等于没有背景，
@@ -127,7 +168,32 @@ public sealed class LauncherSettings
     {
         MaxMemoryMb = Math.Clamp(MaxMemoryMb, 512, 65536);
         DownloadThreads = Math.Clamp(DownloadThreads, 1, 64);
-        BackgroundBlur = Math.Clamp(BackgroundBlur, 0, 40);
-        BackgroundBrightness = Math.Clamp(BackgroundBrightness, -100, 100);
+        BackgroundBlur = Finite(BackgroundBlur, 0, 40, 0);
+        BackgroundBrightness = Finite(BackgroundBrightness, -100, 100, 0);
+        BackgroundPanX = Finite(BackgroundPanX, -100, 100, 0);
+        BackgroundPanY = Finite(BackgroundPanY, -100, 100, 0);
+        // 40..300：100 = cover 铺满，往下是"图比窗口小、外面露主题底色"。
+        // 下限的真值在 Raster/BackgroundFrame.MinZoom（Core 不引 Raster，所以这里只能写数字 ——
+        // 改那边记得改这里，两处都写了注释指认对方）。
+        BackgroundZoom = Finite(BackgroundZoom, 40, 300, 100);
+        BackgroundContrast = Finite(BackgroundContrast, -100, 100, 0);
+        BackgroundSaturation = Finite(BackgroundSaturation, -100, 100, 0);
+        BackgroundHue = Finite(BackgroundHue, -180, 180, 0);
+        BackgroundTuningX = FiniteOrNull(BackgroundTuningX);
+        BackgroundTuningY = FiniteOrNull(BackgroundTuningY);
     }
+
+    /// <summary>
+    /// 调节窗位置：非有限值退回 <c>null</c>（＝"没拖过，让视图自己算"），而不是退回 0 ——
+    /// 屏幕坐标 0 是左上角，一个坏值会把窗口甩到屏幕外。
+    /// </summary>
+    private static double? FiniteOrNull(double? value) =>
+        value is { } v && double.IsFinite(v) ? v : null;
+
+    /// <summary>
+    /// 背景这几个键会直接喂给变换矩阵和像素内核：<c>Math.Clamp(NaN,…)</c> 原样返回 NaN，
+    /// 一旦漏进去，变换会 NaN 成"背景整个消失"、调色会 NaN 成全黑。所以非有限值一律回默认。
+    /// </summary>
+    private static double Finite(double value, double min, double max, double fallback) =>
+        double.IsFinite(value) ? Math.Clamp(value, min, max) : fallback;
 }

@@ -1,6 +1,13 @@
+<!-- 应用级资源：两扇窗口（主窗口 + 背景调节窗）都要用的那一套放这儿。
+     以前全塞在 MainWindow.xaml 的 Window.Resources 里，那时有唯一一扇窗所以没事；
+     背景调节挪成独立窗口之后，同一份按钮/阴影样式要能被两边取到 ——
+     复制一份到第二扇窗等于埋一个"改了这边忘了那边"的坑。
+     ⚠️ 只有和代码无关的样式能搬：托盘菜单那种带 Click 的必须留在 MainWindow.xaml。 -->
 <Application x:Class="NegiCraftLauncher.App.App"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:conv="clr-namespace:NegiCraftLauncher.App.Converters"
+             xmlns:neg="clr-namespace:NegiCraftLauncher.Theme;assembly=NegiCraftLauncher.Theme"
              ShutdownMode="OnExplicitShutdown">
     <Application.Resources>
         <ResourceDictionary>
@@ -9,6 +16,110 @@
                      但源码是两份（XAML 没有共同编译器）。 -->
                 <ResourceDictionary Source="pack://application:,,,/NegiCraftLauncher.Theme;component/Theme.xaml" />
             </ResourceDictionary.MergedDictionaries>
+
+            <conv:BoolToVisibilityConverter x:Key="BoolToVis" />
+
+            <!-- BoxShadow 的等价物。x:Shared="False" 是必须的：Freezable 不能被两个元素共用。 -->
+            <DropShadowEffect x:Key="ShadowLg" x:Shared="False"
+                              BlurRadius="80" ShadowDepth="30" Direction="270"
+                              Color="#000000" Opacity="0.80" RenderingBias="Performance" />
+            <DropShadowEffect x:Key="ShadowToast" x:Shared="False"
+                              BlurRadius="50" ShadowDepth="20" Direction="270"
+                              Color="#000000" Opacity="0.87" RenderingBias="Performance" />
+
+            <!-- 主窗口那圈 shadow-lg 的参数（宽的那一层，见 MainWindow 里的 ShellShadowWide）：
+                 给"本身就是一块画面、没有卡片底"的元素用 —— 画中画就是。
+                 上面那两个 Shadow* 是给弹层/Toast 那种带底色的卡片用的，套到裸画面上会重一倍。 -->
+            <DropShadowEffect x:Key="WindowShadowEffect" x:Shared="False"
+                              BlurRadius="15" ShadowDepth="10" Direction="270"
+                              Color="#000000" Opacity="0.10" RenderingBias="Quality" />
+
+            <!-- 半透明浮卡的投影，等价 Avalonia 的 BoxShadow="0 10 30 -12 #B0000000"。
+                 做法是「单独画一个黑圆角块再模糊」，不是给卡片挂 DropShadowEffect。三条理由：
+                 ① DropShadowEffect 没有 spread ⇒ 等于拿整张卡片的轮廓去投影，四周糊出一圈比
+                    设计稿重得多的暗晕（实测卡片左缘外 26px 处亮度只剩底色的 74%，Avalonia 是 101%）；
+                 ② 卡片是 55% 半透明，而 Effect 的阴影画在元素**背后** ⇒ 阴影透过玻璃把卡片内部
+                    也压暗一截；
+                 ③ 位图 Effect 会重采样元素自身 ⇒ 那条 1px 描边被抹成两行，紧贴内侧还多一条暗缝。
+                 常数怎么来的：形状 = 宿主矩形每边内缩 |spread| = 12，再往下移 offset-y 10
+                 ⇒ Margin = 12,22,12,2；圆角同量缩到 18 − 12 = 6；BlurEffect.Radius 与 CSS 的
+                 blur 半径同口径（首页背景模糊 0..40 就是按这个对上的），所以写 30。
+                 ⚠️ 只能用在宿主比内容大的地方（首页这两张卡）。弹层/Toast 的宿主尺寸 == 内容尺寸，
+                 溢出会被硬裁，那边继续用上面的 Shadow*。 -->
+            <Style x:Key="FloatShadowStyle" TargetType="{x:Type Border}">
+                <Setter Property="Background" Value="#B0000000" />
+                <Setter Property="CornerRadius" Value="6" />
+                <Setter Property="Margin" Value="12,22,12,2" />
+                <Setter Property="IsHitTestVisible" Value="False" />
+                <Setter Property="Effect">
+                    <Setter.Value>
+                        <BlurEffect Radius="30" />
+                    </Setter.Value>
+                </Setter>
+            </Style>
+
+            <!-- Shadcn 风格按钮 -->
+            <Style x:Key="BtnStyle" TargetType="{x:Type Button}" BasedOn="{StaticResource {x:Type Button}}">
+                <Setter Property="Height" Value="36" />
+                <Setter Property="Padding" Value="16,0" />
+                <Setter Property="neg:Negi.CornerRadius" Value="10" />
+                <Setter Property="FontWeight" Value="Medium" />
+                <Setter Property="Cursor" Value="Hand" />
+                <Setter Property="BorderThickness" Value="0" />
+                <Setter Property="HorizontalContentAlignment" Value="Center" />
+                <Setter Property="VerticalContentAlignment" Value="Center" />
+            </Style>
+            <Style x:Key="BtnSmStyle" TargetType="{x:Type Button}" BasedOn="{StaticResource {x:Type Button}}">
+                <Setter Property="Height" Value="32" />
+                <Setter Property="Padding" Value="12,0" />
+                <Setter Property="FontSize" Value="13" />
+                <Setter Property="neg:Negi.CornerRadius" Value="10" />
+                <Setter Property="FontWeight" Value="Medium" />
+                <Setter Property="Cursor" Value="Hand" />
+                <Setter Property="BorderThickness" Value="0" />
+                <Setter Property="HorizontalContentAlignment" Value="Center" />
+                <Setter Property="VerticalContentAlignment" Value="Center" />
+            </Style>
+            <Style x:Key="BtnPrimaryStyle" TargetType="{x:Type Button}" BasedOn="{StaticResource BtnStyle}">
+                <Setter Property="Background" Value="#fafafa" />
+                <Setter Property="Foreground" Value="#18181b" />
+                <Style.Triggers>
+                    <Trigger Property="IsMouseOver" Value="True">
+                        <Setter Property="Opacity" Value="0.9" />
+                    </Trigger>
+                </Style.Triggers>
+            </Style>
+            <Style x:Key="BtnOutlineStyle" TargetType="{x:Type Button}" BasedOn="{StaticResource BtnStyle}">
+                <Setter Property="Background" Value="#111114" />
+                <Setter Property="Foreground" Value="#fafafa" />
+                <Setter Property="BorderBrush" Value="#26262b" />
+                <Setter Property="BorderThickness" Value="1" />
+                <Style.Triggers>
+                    <Trigger Property="IsMouseOver" Value="True">
+                        <Setter Property="Background" Value="#1c1c21" />
+                    </Trigger>
+                </Style.Triggers>
+            </Style>
+            <Style x:Key="BtnSmPrimaryStyle" TargetType="{x:Type Button}" BasedOn="{StaticResource BtnSmStyle}">
+                <Setter Property="Background" Value="#fafafa" />
+                <Setter Property="Foreground" Value="#18181b" />
+                <Style.Triggers>
+                    <Trigger Property="IsMouseOver" Value="True">
+                        <Setter Property="Opacity" Value="0.9" />
+                    </Trigger>
+                </Style.Triggers>
+            </Style>
+            <Style x:Key="BtnSmOutlineStyle" TargetType="{x:Type Button}" BasedOn="{StaticResource BtnSmStyle}">
+                <Setter Property="Background" Value="#111114" />
+                <Setter Property="Foreground" Value="#fafafa" />
+                <Setter Property="BorderBrush" Value="#26262b" />
+                <Setter Property="BorderThickness" Value="1" />
+                <Style.Triggers>
+                    <Trigger Property="IsMouseOver" Value="True">
+                        <Setter Property="Background" Value="#1c1c21" />
+                    </Trigger>
+                </Style.Triggers>
+            </Style>
         </ResourceDictionary>
     </Application.Resources>
 </Application>

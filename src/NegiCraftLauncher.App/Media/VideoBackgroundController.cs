@@ -2,6 +2,7 @@ using System;
 using System.IO;
 using System.Windows;
 using System.Windows.Media;
+using NegiCraftLauncher.Raster;
 
 namespace NegiCraftLauncher.App.Media;
 
@@ -49,21 +50,90 @@ internal sealed class VideoBackgroundController : IDisposable
         // Rect 只是占位；真正的大小要等 MediaOpened 才知道（见 OnMediaOpened）。
         _drawing = new VideoDrawing { Player = _player, Rect = new Rect(0, 0, 16, 9) };
 
-        Brush = new DrawingBrush(_drawing)
+        _brush = new DrawingBrush(_drawing)
         {
-            // 背景要铺满整壳并保持比例：多余的部分裁掉，不拉伸变形。
-            Stretch = Stretch.UniformToFill,
-            AlignmentX = AlignmentX.Center,
-            AlignmentY = AlignmentY.Center,
+            // 取景全在 brush 上算（见 <see cref="SetFrame" />）：Viewbox = "从视频里取哪一块"，
+            // Viewport = "画到元素矩形的哪一块"。以前这里是 Stretch=UniformToFill + 居中，
+            // 等价于"取最大能放进矩形的那块"，没有平移的余地。
+            //
+            // ⚠️ 两个 Units 必须显式写成 Absolute —— TileBrush 默认是 RelativeToBoundingBox，
+            //    喂像素数进去会被当成比例（这条在 Skin/Rendering/SkinGpuViewport.cs:139-166 踩过）。
+            Stretch = Stretch.Fill,
+            ViewboxUnits = BrushMappingMode.Absolute,
+            ViewportUnits = BrushMappingMode.Absolute,
         };
 
         _player.MediaOpened += OnMediaOpened;
         _player.MediaFailed += OnMediaFailed;
         _player.MediaEnded += OnMediaEnded;
+
+        // 画中画那格的第二支画刷：主层那支的 Viewbox 是"窗口看得见的那块"，而画中画要的是
+        // <b>整帧</b> —— 一个 brush 只有一套几何，没法两处共用，所以再建一支。
+        //
+        // ⚠️ 两支画刷必须共用<b>同一个 VideoDrawing 实例</b>。另建一个 VideoDrawing 挂同一个
+        //    MediaPlayer 是画不出来的（实测小窗只剩描边）：WPF 的视频渲染只认那一个绘制目标。
+        //    共用 Drawing 则各自按自己的 Viewbox 光栅化，解码仍然只有一次。
+        _pipBrush = new DrawingBrush(_drawing)
+        {
+            Stretch = Stretch.Fill,
+            ViewboxUnits = BrushMappingMode.Absolute,
+            ViewportUnits = BrushMappingMode.Absolute,
+            Viewbox = _drawing.Rect,
+        };
     }
 
-    /// <summary>主背景层与侧栏背板共用的画刷。</summary>
-    public Brush Brush { get; }
+    private readonly DrawingBrush _pipBrush;
+
+    /// <summary>
+    /// 画中画用的画刷。调用方把 <see cref="SetPipViewport" /> 设成格子里那块图片矩形即可，
+    /// Viewbox 跟着 MediaOpened 换成真实帧尺寸。
+    /// </summary>
+    public Brush PipBrush => _pipBrush;
+
+    /// <summary>画中画：把整帧画进这个矩形（chip 里算好的那块图片区域）。</summary>
+    public void SetPipViewport(Rect viewport) => _pipBrush.Viewport = viewport;
+
+    /// <summary>
+    /// 主背景层与侧栏背板共用的画刷。对外只给 <see cref="Brush"/> 这个基类型
+    /// （两处元素只需要 Fill），取景要写的 Viewport/Viewbox 在 <see cref="_brush"/> 上。
+    /// </summary>
+    public Brush Brush => _brush;
+
+    private readonly DrawingBrush _brush;
+
+    private double _frameWidth, _frameHeight, _panX, _panY = 0, _zoom = 100;
+
+    /// <summary>
+    /// 换取景（平移 + 缩放），参数与图片那条路完全同一套（数学在
+    /// <c>Raster/BackgroundFrame.cs</c>，所以图片和视频不会各摆各的）。
+    ///
+    /// <para>几何只落在这一个 brush 上，而主背景层与侧栏背板共用它 ⇒ 改一处两处同步。
+    /// ⚠️ 前提是两个元素的矩形都等于壳矩形（<c>MainWindow.ApplyVideoBackground</c> 把同一个
+    /// brush 挂给两处）。用 UniformToFill 时这个前提被掩盖着 —— 换成绝对 Viewport 之后
+    /// 一旦哪天侧栏不再是壳尺寸，两处就会分叉。</para>
+    /// </summary>
+    public void SetFrame(double width, double height, double panX, double panY, double zoom)
+    {
+        _frameWidth = width;
+        _frameHeight = height;
+        _panX = panX;
+        _panY = panY;
+        _zoom = zoom;
+        ApplyFrame();
+    }
+
+    private void ApplyFrame()
+    {
+        var nat = _drawing.Rect.Size;
+        if (_frameWidth <= 0 || _frameHeight <= 0 || nat.Width <= 0 || nat.Height <= 0) return;
+
+        var box = BackgroundFrame.ComputeVideoViewbox(
+            _frameWidth, _frameHeight, nat.Width, nat.Height, _panX, _panY, _zoom);
+
+        // 取景框与元素同宽高比 ⇒ Stretch=Fill 拉过去也不会变形；Viewport 就是壳矩形。
+        _brush.Viewport = new Rect(0, 0, _frameWidth, _frameHeight);
+        _brush.Viewbox = new Rect(box.X, box.Y, box.Width, box.Height);
+    }
 
     /// <summary>
     /// 是否出声。<b>默认 <c>false</c>（静音）</b>。值没变时不做任何事，所以可以随便重复设。
@@ -136,8 +206,20 @@ internal sealed class VideoBackgroundController : IDisposable
     /// <summary>当前是否挂着一个视频（打开失败后会被清掉）。</summary>
     public bool HasVideo => _path is not null;
 
+    /// <summary>
+    /// 视频的原生分辨率。<c>MediaOpened</c> 之前是构造里那个 16:9 占位 —— 拖动平移要按它算余量，
+    /// 所以拿到真实尺寸前拖出来的量会略偏，属于可接受的短暂状态。
+    /// </summary>
+    public Size NaturalSize => _drawing.Rect.Size;
+
     /// <summary>播放失败时抛出给视图，由它转成 <c>ShowBanner</c>。</summary>
     public event Action<string>? Failed;
+
+    /// <summary>
+    /// 媒体已打开、原生尺寸已可信。<b>只在这一刻</b>取景和画中画的余量才算得对
+    /// （在那之前 _drawing.Rect 是 16:9 占位），所以视图要借这个时机重算一遍。
+    /// </summary>
+    public event Action? Opened;
 
     /// <summary>
     /// 换片。传 <c>null</c> 或空串就是卸掉视频（回到生成图）。
@@ -199,6 +281,11 @@ internal sealed class VideoBackgroundController : IDisposable
         if (_player.NaturalVideoWidth > 0)
         {
             _drawing.Rect = new Rect(0, 0, _player.NaturalVideoWidth, _player.NaturalVideoHeight);
+            // 画中画那支跟着换成真实帧尺寸（它的 Viewbox 一直是"整帧"）。
+            _pipBrush.Viewbox = _drawing.Rect;
+            // 原生尺寸现在才可信，取景按它重算一遍（之前是按 16:9 占位算的）。
+            ApplyFrame();
+            Opened?.Invoke();
         }
 
         // 防御性再落一遍：成本为零，且不依赖"DP 值一定全程有效"这种假设。

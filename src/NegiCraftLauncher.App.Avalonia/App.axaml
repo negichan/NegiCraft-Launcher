@@ -11,5 +11,45 @@
     <Application.Styles>
         <StyleInclude Source="avares://NegiCraftLauncher.Theme.Avalonia/Theme.axaml"/>
         <!-- 图标控件不用注册样式：它在 Render 里自绘（默认前景色由控件自己给）。 -->
+
+        <!-- Shadcn 按钮那套：主窗口和背景调节窗共用。放在这里而不是某扇窗的 Styles 里，
+             是因为 Avalonia 的 Window.Styles 只对自己生效 —— 抄两份到两扇窗，
+             迟早有一天只改得动一边。与 WPF 侧 App.xaml 里那组同名样式一一对应。 -->
+        <Style Selector="Button.Btn">
+            <Setter Property="Height" Value="36"/>
+            <Setter Property="Padding" Value="16,0"/>
+            <Setter Property="CornerRadius" Value="10"/>
+            <Setter Property="FontWeight" Value="Medium"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="HorizontalContentAlignment" Value="Center"/>
+            <Setter Property="VerticalContentAlignment" Value="Center"/>
+        </Style>
+        <Style Selector="Button.BtnSm">
+            <Setter Property="Height" Value="32"/>
+            <Setter Property="Padding" Value="12,0"/>
+            <Setter Property="FontSize" Value="13"/>
+            <Setter Property="CornerRadius" Value="10"/>
+            <Setter Property="FontWeight" Value="Medium"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="HorizontalContentAlignment" Value="Center"/>
+            <Setter Property="VerticalContentAlignment" Value="Center"/>
+        </Style>
+        <Style Selector="Button.BtnPrimary">
+            <Setter Property="Background" Value="#fafafa"/>
+            <Setter Property="Foreground" Value="#18181b"/>
+        </Style>
+        <Style Selector="Button.BtnPrimary:pointerover">
+            <Setter Property="Opacity" Value="0.9"/>
+        </Style>
+        <Style Selector="Button.BtnOutline">
+            <Setter Property="Background" Value="#111114"/>
+            <Setter Property="Foreground" Value="#fafafa"/>
+            <Setter Property="BorderBrush" Value="#26262b"/>
+            <Setter Property="BorderThickness" Value="1"/>
+        </Style>
+        <Style Selector="Button.BtnOutline:pointerover">
+            <Setter Property="Background" Value="#1c1c21"/>
+        </Style>
     </Application.Styles>
 </Application>

@@ -1,4 +1,6 @@
+using System.IO;
 using System.Windows;
+using System.Windows.Threading;
 using NegiCraftLauncher.App.Probe;
 
 namespace NegiCraftLauncher.App;
@@ -8,6 +10,8 @@ public partial class App : Application
     protected override void OnStartup(StartupEventArgs e)
     {
         base.OnStartup(e);
+
+        DispatcherUnhandledException += OnUnhandledException;
 
         // --selftest：无头跑完风险探针就退出，结果写到 %TEMP%\ncl-wpf-selftest.txt。
         // 这是 P1 阶段的验证入口，等真正的主窗口接进来之后可以删掉。
@@ -63,7 +67,9 @@ public partial class App : Application
             return;
         }
 
-        var vm = new ViewModels.MainWindowViewModel();
+        // 壁纸的解码器也在这里注入：VM 只能持有平台中立的像素，调色才有唯一一份实现
+    // （见 ViewModels/IBitmapDecoder.cs）。必须赶在构造 VM 之前定好 —— 构造里就会去解背景图。
+    var vm = new ViewModels.MainWindowViewModel(new Services.WpfBitmapDecoder());
 
         var window = new MainWindow { DataContext = vm };
         MainWindow = window;
@@ -72,5 +78,22 @@ public partial class App : Application
         // 只在 --debug 启动时开本地控制通道（%TEMP%\ncl-debug）。
         // 必须在 Show 之后：桥要拿窗口的 HWND，也要能读到已经建好的可视树。
         Services.DebugBridge.StartIfNeeded(window);
+    }
+
+    /// <summary>
+    /// 照 <c>Pet.App/App.xaml.cs</c> 的做法：崩溃前把异常落到工作目录的 <c>crash.log</c>。
+    /// 故意不置 <c>e.Handled</c> —— 异常照常终结进程，只是从此有据可查，
+    /// 不必再去翻 %LOCALAPPDATA%\CrashDumps 里几十兆的转储。
+    /// </summary>
+    private static void OnUnhandledException(object sender, DispatcherUnhandledExceptionEventArgs e)
+    {
+        try
+        {
+            File.WriteAllText("crash.log", e.Exception.ToString());
+        }
+        catch
+        {
+            // 写日志失败就算了，别在异常处理里再抛一次。
+        }
     }
 }
