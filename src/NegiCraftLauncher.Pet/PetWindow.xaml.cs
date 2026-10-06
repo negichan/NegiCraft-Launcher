@@ -57,6 +57,13 @@ public partial class PetWindow : Window
     /// </summary>
     public PetWorkArea CurrentWorkArea => _motion.LastWorkArea;
 
+    /// <summary>
+    /// 工作区是从哪条路拿的、按多少 DPI 折算的 —— <c>pet-area</c> 把它报出来。
+    /// 150% 缩放下"桌宠能走出屏幕"只可能是单位错乱，而光看 <c>work=</c> 的数值分不出
+    /// 是"监视器的物理像素没除"还是"根本没走监视器那条路"。
+    /// </summary>
+    public string WorkAreaSource { get; private set; } = "还没取过";
+
     /// <summary>内核上一帧看到的窗口左上角（DIP）。</summary>
     public PetPoint CurrentWindow => _motion.LastWindow;
 
@@ -557,6 +564,7 @@ public partial class PetWindow : Window
                 if (GetMonitorInfoW(monitor, ref info))
                 {
                     var r = info.rcWork;
+                    WorkAreaSource = $"监视器 @{scale:0.##}";
                     return new PetWorkArea(
                         r.Left / scale,
                         r.Top / scale,
@@ -564,10 +572,16 @@ public partial class PetWindow : Window
                         (r.Bottom - r.Top) / scale);
                 }
             }
+            WorkAreaSource = "GetMonitorInfo 失败→主屏";
+        }
+        else
+        {
+            WorkAreaSource = "无HWND→主屏";
         }
 
         // 窗口还没上屏（HWND 不存在）或查监视器失败时退回主屏工作区 —— 也就是旧行为，别更差。
         var fallback = SystemParameters.WorkArea;
+        WorkAreaSource = "主屏 SystemParameters（本身就是 DIP，不再折算）";
         return new PetWorkArea(fallback.X, fallback.Y, fallback.Width, fallback.Height);
     }
 

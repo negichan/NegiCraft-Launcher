@@ -688,6 +688,9 @@ public sealed class SkinPreviewControl : Grid
             window.PreviewMouseMove += OnHostMouseMove;
             // 窗口被拖到缩放率不同的显示器上时位图尺寸要跟着变 —— 静止时也得重画一次。
             window.DpiChanged += OnHostDpiChanged;
+            // 桌宠换大小改的就是宿主窗口的尺寸（外层 Viewbox 把它转成缩放）。不补这一刀，
+            // 静止时换了大小缓冲还是旧分辨率，要等下一次姿势变化才变清晰。
+            window.SizeChanged += OnHostSizeChanged;
         }
     }
 
@@ -701,11 +704,14 @@ public sealed class SkinPreviewControl : Grid
         {
             _hostWindow.PreviewMouseMove -= OnHostMouseMove;
             _hostWindow.DpiChanged -= OnHostDpiChanged;
+            _hostWindow.SizeChanged -= OnHostSizeChanged;
             _hostWindow = null;
         }
     }
 
     private void OnHostDpiChanged(object sender, DpiChangedEventArgs e) => _viewDirty = true;
+
+    private void OnHostSizeChanged(object sender, SizeChangedEventArgs e) => _viewDirty = true;
 
     private void OnRendering(object? sender, EventArgs e)
     {
@@ -759,17 +765,44 @@ public sealed class SkinPreviewControl : Grid
         _dpiX = dpi.DpiScaleX > 0 ? dpi.DpiScaleX : 1.0;
         _dpiY = dpi.DpiScaleY > 0 ? dpi.DpiScaleY : 1.0;
 
-        // 与 Avalonia 的 GL 控件一致：按设备像素渲染（150% 缩放下就是 165x257），
-        // 再让 WPF 按 DPI 缩回 110x171 DIP 显示。
-        var width = Math.Max(1, (int)Math.Round(ModelWidth * _dpiX));
-        var height = Math.Max(1, (int)Math.Round(ModelHeight * _dpiY));
+        // 缓冲要按"最终在屏幕上占多少设备像素"开，只按 DPI 算不够：桌宠整棵子树套在 Viewbox 里，
+        // 换大小只改窗口尺寸 ⇒ 拉伸发生在 Viewbox 那一层，位图会被 resample（特大档 165px 的缓冲
+        // 要铺到约 248px，像素画踩成 1px/2px 交替；75% 档又被合并糊掉）。
+        // 舞台 DIP → 设备像素 = 到窗口根的变换（把 Viewbox 那层算进来）× DPI。
+        var (x, y) = StageToDeviceScale();
+        var width = Math.Max(1, (int)Math.Round(ModelWidth * x));
+        var height = Math.Max(1, (int)Math.Round(ModelHeight * y));
         if (_buffer is not null && _pixelWidth == width && _pixelHeight == height) return;
 
         _pixelWidth = width;
         _pixelHeight = height;
         _buffer = new PixelBuffer(width, height);
-        _bitmap = new WriteableBitmap(width, height, 96 * _dpiX, 96 * _dpiY, PixelFormats.Pbgra32, null);
+        // 位图自己的 DPI 跟着一起报，DIP 尺寸才仍然是 110x171：布局不动，只有像素变密。
+        _bitmap = new WriteableBitmap(width, height, 96 * x, 96 * y, PixelFormats.Pbgra32, null);
         _model.Source = _bitmap;
+    }
+
+    /// <summary>
+    /// 一单位"舞台 DIP"等于多少设备像素。没连上布局时退回 DPI（也就是当作没有外层缩放）。
+    /// </summary>
+    private (double X, double Y) StageToDeviceScale()
+    {
+        var root = _hostWindow ?? Window.GetWindow(this);
+        if (root is null) return (_dpiX, _dpiY);
+
+        try
+        {
+            // 只取变换的两个轴向量差当缩放：GeneralTransform 拿矩阵要绕，而这里确定没有旋转。
+            var t = TransformToVisual(root);
+            var o = t.Transform(new Point(0, 0));
+            var sx = Math.Abs(t.Transform(new Point(1, 0)).X - o.X) * _dpiX;
+            var sy = Math.Abs(t.Transform(new Point(0, 1)).Y - o.Y) * _dpiY;
+            return sx > 0 && sy > 0 ? (sx, sy) : (_dpiX, _dpiY);
+        }
+        catch (InvalidOperationException)
+        {
+            return (_dpiX, _dpiY);   // 两个 visual 还没连到同一棵树
+        }
     }
 
     private void RenderFrame()
