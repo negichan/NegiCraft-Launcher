@@ -5,6 +5,8 @@ using System.Numerics;
 using System.Text;
 using MinecraftSkinRender;
 using NegiCraftLauncher.Raster.Rendering;
+using static NegiCraftLauncher.Raster.Rendering.LegIk;
+using static NegiCraftLauncher.Raster.Rendering.SkinPoseDriver;
 
 namespace NegiCraftLauncher.Raster.Animation;
 
@@ -155,25 +157,6 @@ public sealed class VmdBoneTrack
 }
 
 /// <summary>
-/// 计算完成并准备施加到渲染器的位姿数据。
-/// </summary>
-public struct VmdPose
-{
-    public Vector3 HipPos;
-    public Vector3 HipRotate;
-    public Vector3 SpineDeform;
-    public Vector3 HeadRotate;
-    public Vector3 LeftArmRotate;
-    public Vector3 RightArmRotate;
-    public LimbDeform LeftArmDeform;
-    public LimbDeform RightArmDeform;
-    public Vector3 LeftLegRotate;
-    public Vector3 RightLegRotate;
-    public LimbDeform LeftLegDeform;
-    public LimbDeform RightLegDeform;
-}
-
-/// <summary>
 /// 一条腿的解算过程量。<c>pet-vmd-probe</c> 直接打印它，用来把"腿解歪了"和"采样的帧不对"分开。
 /// </summary>
 public readonly struct VmdLegSolve
@@ -283,25 +266,17 @@ public sealed class VmdMotionClip
     private static readonly Vector3 MmdToeLeft = new(0.929f, 0f, -2.464f);
     private static readonly Vector3 MmdToeRight = new(-0.929f, 0f, -2.464f);
 
-    // 本项目腿骨局部系：髋 +0.75 / 膝 0 / 脚底 -0.75（Steve3DModel.HipY、SplitY，CubeModel.Value = 0.5）。
-    private const float McThigh = 0.75f;
-    private const float McShin = 0.75f;
-    private const float McSoleY = -0.75f;
-    private static readonly Vector3 McDown = new(0f, -1f, 0f);
-
+    // 本项目的腿长 / 朝下向量 / 膝盖偏向都在 LegIk 里（那边是唯一的权威），这里只留 MMD 侧的量。
     private static readonly float MmdLegRest = Vector3.Distance(MmdHipLeft, MmdAnkleLeft);
 
     /// <summary>MMD 单位 → 模型单位。按腿长归一，骨盆平移和踝目标共用这一个比例，两边才会互相抵消。</summary>
-    private static readonly float LegUnit = (McThigh + McShin) / MmdLegRest;
+    private static readonly float LegUnit = (ThighLen + ShinLen) / MmdLegRest;
 
     /// <summary>
     /// MMD 世界系 → 渲染器世界系：翻 Z（MMD 的正面是 -Z，渲染器的正面是 +Z），X/Y 同向。
     /// 位置用 <c>p·AxisMap</c>，旋转共轭 <c>AxisMap⁻¹·M·AxisMap</c> —— 反射之下两者规律不同。
     /// </summary>
     private static readonly Matrix4x4 AxisMap = Matrix4x4.CreateScale(1f, 1f, -1f);
-
-    /// <summary>膝盖的偏向：膝盖朝角色正面顶（模型空间 +Z = 朝镜头）。</summary>
-    private static readonly Vector3 KneeBias = new(0f, 0f, 1f);
 
     /// <summary>
     /// 足首骨骼的静止基架：骨轴从踝指向脚尖，真值 (0.054,-1.340,-2.464)（MMD 系，朝下朝前）。
@@ -435,37 +410,6 @@ public sealed class VmdMotionClip
     }
 
     /// <summary>
-    /// 将四元数分解为渲染器所使用的欧拉角格式 (RadToRotateInput)。
-    /// 匹配 SkinRenderBase.Rotation: Rz(z) * Rx(x) * Ry(y)。
-    /// </summary>
-    public static Vector3 QuaternionToRotateInput(Quaternion q) =>
-        MatrixToRotateInput(Matrix4x4.CreateFromQuaternion(q));
-
-    /// <summary>矩阵版：直接吃一个朝向矩阵（换轴共轭之后手上拿的就是矩阵，不必再绕回四元数）。</summary>
-    public static Vector3 MatrixToRotateInput(Matrix4x4 m)
-    {
-        float sinX = Math.Clamp(-m.M32, -1.0f, 1.0f);
-        float x = MathF.Asin(sinX);
-        float cosX = MathF.Cos(x);
-
-        float y, z;
-        if (MathF.Abs(cosX) > 1e-4f)
-        {
-            y = MathF.Atan2(m.M31, m.M33);
-            z = MathF.Atan2(m.M12, m.M22);
-        }
-        else
-        {
-            y = MathF.Atan2(-m.M13, m.M11);
-            z = 0;
-        }
-
-        return new Vector3(z * SkinPoseDriver.RadToRotateInput,
-                           x * SkinPoseDriver.RadToRotateInput,
-                           y * SkinPoseDriver.RadToRotateInput);
-    }
-
-    /// <summary>
     /// 这条轨道到底动没动。
     ///
     /// <para>⚠️ 不能按关键帧个数判：IK 驱动的舞蹈会给大腿/膝盖留一整串<b>单位四元数占位帧</b>
@@ -536,45 +480,6 @@ public sealed class VmdMotionClip
         return invB * local * b;
     }
 
-    /// <summary>最小弧旋转：把单位向量 a 转到单位向量 b（两向量已归一）。</summary>
-    private static Quaternion FromTo(Vector3 a, Vector3 b)
-    {
-        var d = Vector3.Dot(a, b);
-        if (d > 0.999999f) return Quaternion.Identity;
-        if (d < -0.999999f)
-        {
-            var perp = MathF.Abs(a.X) > 0.9f ? Vector3.UnitY : Vector3.UnitX;
-            var axis = Vector3.Normalize(Vector3.Cross(a, perp));
-            return new Quaternion(axis.X, axis.Y, axis.Z, 0f);
-        }
-
-        var c = Vector3.Cross(a, b);
-        return Quaternion.Normalize(new Quaternion(c.X, c.Y, c.Z, 1f + d));
-    }
-
-    private static Matrix4x4 ToMatrix(Quaternion q) => Matrix4x4.CreateFromQuaternion(q);
-
-    /// <summary>两个<b>已归一</b>向量之间的夹角（度）。System.Numerics 没有 Vector3.Angle，自己 acos。</summary>
-    private static float AngleDeg(Vector3 a, Vector3 b) =>
-        MathF.Acos(Math.Clamp(Vector3.Dot(a, b), -1f, 1f)) * (180f / MathF.PI);
-
-    /// <summary>
-    /// 脚底钉回 IK 目标用的平移补偿。
-    ///
-    /// <para><see cref="SkinRenderBase.LimbPoint"/> 的形变是绕部件局部原点（= 膝线）转的，
-    /// 叠上踮脚之后脚底会跟着画一段弧；<c>Offset</c> 和形变共用同一条权重曲线，
-    /// 所以在脚底那一段正好能把落点平移回去 —— 和扭胯钉脚是同一个手法。</para>
-    /// </summary>
-    private static Vector3 SoleCorrection(Matrix4x4 bendFoldOnly, Matrix4x4 bendFinal)
-    {
-        var sole = new Vector3(0f, McSoleY, 0f);
-        return Vector3.Transform(sole, bendFoldOnly) - Vector3.Transform(sole, bendFinal);
-    }
-
-    /// <summary>
-    /// 按脚部 IK 目标反解一条两段连杆腿。
-    /// 产出的是<b>模型空间</b>的大腿 / 小腿绝对朝向矩阵，骨盆那一层由调用方减掉。
-    /// </summary>
     /// <summary>
     /// 足 IK 链在 MMD 世界系里的踝与脚尖位置。
     /// 链是 足IK親 →（足ＩＫ → 踝）／（つま先ＩＫ → 脚尖）—— PMD 里 左つま先ＩＫ 的爹就是 左足ＩＫ，
@@ -595,58 +500,38 @@ public sealed class VmdMotionClip
         return (ankle, toe);
     }
 
-    private VmdLegSolve SolveLegIk(
-        float frame, int side, Vector3 hipTransMmd, Quaternion hipRot,
-        out Matrix4x4 thighWorld, out Matrix4x4 shinWorld)
+    /// <summary>
+    /// 把 MMD 的脚部 IK 目标换算成我们骨架上的"髋→踝"向量（模型空间）。
+    ///
+    /// <para>两边腿长差很多（MMD ≈ 9.41 单位 / 身高 18，本项目 1.5 单位 / 全身 4 单位），
+    /// 所以不搬绝对位移，只搬两个<b>无量纲</b>量：伸得多直（|髋→踝| ÷ 静止腿长）、朝哪边倒
+    /// （髋→踝方向相对静止方向转了多少）。剩下交给 <see cref="LegIk"/>。</para>
+    /// </summary>
+    private Vector3 LegTargetMc(float frame, int side, Vector3 hipTransMmd, Quaternion hipRotMmd)
     {
-        thighWorld = Matrix4x4.Identity;
-        shinWorld = Matrix4x4.Identity;
-
         var hipRest = side > 0 ? MmdHipLeft : MmdHipRight;
         var ankleRest = side > 0 ? MmdAnkleLeft : MmdAnkleRight;
         var (ankleNow, _) = FootChainMmd(frame, side);
 
         // 髋孔绕骨盆自己的枢轴走；踝目标是世界系的 —— 足 IK 的爹挂在全ての親上，不跟骨盆转。
-        var hipNow = hipTransMmd + MmdPelvisPivot + Vector3.Transform(hipRest - MmdPelvisPivot, hipRot);
+        var hipNow = hipTransMmd + MmdPelvisPivot + Vector3.Transform(hipRest - MmdPelvisPivot, hipRotMmd);
 
         var dMmd = ankleNow - hipNow;
         var len = dMmd.Length();
-        if (len < 1e-4f)
-            return new VmdLegSolve(true, 1f, 0f, 0f, Vector3.Zero, McDown);
+        if (len < 1e-4f) return Down * (ThighLen + ShinLen);
 
-        // 只搬无量纲量：伸得多直 + 倒了多少。上限夹到 0.999 免得解退化（完全伸直时余弦定理要除 0）。
         var extension = Math.Clamp(len / MmdLegRest, 0.05f, 0.999f);
         var tilt = MapRotM(ToMatrix(FromTo(Vector3.Normalize(ankleRest - hipRest), Vector3.Normalize(dMmd))));
-        var dirMc = Vector3.Normalize(Vector3.Transform(McDown, tilt));
-        var target = dirMc * (extension * (McThigh + McShin));
-
-        // 两段连杆：髋当原点，膝往 KneeBias 那一侧顶。
-        var u = Vector3.Normalize(target);
-        var dist = target.Length();
-        var bias = KneeBias - u * Vector3.Dot(u, KneeBias);
-        if (bias.LengthSquared() < 1e-6f) bias = Vector3.UnitX - u * Vector3.Dot(u, Vector3.UnitX);
-        bias = Vector3.Normalize(bias);
-
-        var cosPhi = Math.Clamp((dist * dist + McThigh * McThigh - McShin * McShin) / (2f * dist * McThigh), -1f, 1f);
-        var thighDir = Vector3.Normalize(
-            Vector3.Transform(u, Matrix4x4.CreateFromAxisAngle(Vector3.Cross(u, bias), MathF.Acos(cosPhi))));
-        var knee = thighDir * McThigh;
-        var shinDir = Vector3.Normalize(target - knee);
-
-        thighWorld = ToMatrix(FromTo(McDown, thighDir));
-        shinWorld = thighWorld * ToMatrix(FromTo(thighDir, shinDir));
-
-        var thighSign = Vector3.Dot(thighDir - McDown, KneeBias) >= 0f ? 1f : -1f;
-        return new VmdLegSolve(true, extension, AngleDeg(McDown, thighDir) * thighSign,
-            AngleDeg(thighDir, shinDir), target, thighDir);
+        var dirMc = Vector3.Normalize(Vector3.Transform(Down, tilt));
+        return dirMc * (extension * (ThighLen + ShinLen));
     }
 
     /// <summary>
     /// 在指定时间点采样并求解重定向姿势。
     /// </summary>
-    public VmdPose Sample(double timeSeconds, bool loop = true)
+    public MotionPose Sample(double timeSeconds, bool loop = true)
     {
-        var pose = new VmdPose();
+        var pose = new MotionPose();
         if (DurationSeconds <= 0) return pose;
 
         var sampleTime = timeSeconds;
@@ -691,7 +576,7 @@ public sealed class VmdMotionClip
         var (_, rotUpper) = SampleBone(frame, "上半身", "UpperBody", "spine");
         var (_, rotUpper2) = SampleBone(frame, "上半身2", "UpperBody2", "chest");
         var totalSpineRot = rotUpper * rotUpper2;
-        pose.SpineDeform = MatrixToRotateInput(Mapped(totalSpineRot));
+        pose.SpineRotate = MatrixToRotateInput(Mapped(totalSpineRot));
 
         // 3. 头部与颈部：首 / 頭
         var (_, rotNeck) = SampleBone(frame, "首", "Neck");
@@ -772,47 +657,38 @@ public sealed class VmdMotionClip
         float frame, int side, Vector3 hipTransMmd, Quaternion hipRotMmd, Matrix4x4 pelvisMc,
         string[] legBone, string[] kneeBone, string[] ankleBone)
     {
-        var (_, rotLeg) = SampleBone(frame, legBone);
-        var (_, rotKnee) = SampleBone(frame, kneeBone);
         var (_, rotAnkle) = SampleBone(frame, ankleBone);
 
-        Matrix4x4 thighW;
-        Matrix4x4 shinW;
-        VmdLegSolve solve;
+        // 脚（踮脚 / 脚尖朝向）先算出来 —— 它是叠在小腿之后的额外旋转，两种驱动方式都用得上。
+        var footRot = FootRotation(frame, side, rotAnkle);
+
+        LegIk.Result res;
+        bool fromIk;
 
         if (TrackMoves(legBone) || TrackMoves(kneeBone))
         {
-            // FK 舞蹈：骨骼角直接当朝向用（和手臂同一条捷径 —— 不做骨骼局部系→世界的共轭）。
-            thighW = Mapped(rotLeg);
-            shinW = thighW * Mapped(rotKnee);
-
-            var thighDir = Vector3.Transform(McDown, thighW);
-            var shinDir = Vector3.Transform(McDown, shinW);
-            var sign = Vector3.Dot(thighDir - McDown, KneeBias) >= 0f ? 1f : -1f;
-            solve = new VmdLegSolve(false, 1f, AngleDeg(McDown, thighDir) * sign,
-                AngleDeg(thighDir, shinDir), Vector3.Zero, thighDir);
+            // FK 驱动的动作：骨骼角直接当朝向用（和手臂同一条捷径 —— 不做骨轴局部系→世界的共轭）。
+            var (_, rotLeg) = SampleBone(frame, legBone);
+            var (_, rotKnee) = SampleBone(frame, kneeBone);
+            fromIk = false;
+            res = LegIk.FromOrientations(Mapped(rotLeg),
+                Mapped(rotLeg) * Mapped(rotKnee), pelvisMc, footRot);
         }
         else
         {
-            solve = SolveLegIk(frame, side, hipTransMmd, hipRotMmd, out thighW, out shinW);
+            // IK 驱动的舞蹈（常态）：把脚部 IK 目标换算成 髋→踝 向量，交给共用的两段连杆解算。
+            fromIk = true;
+            res = LegIk.Solve(LegTargetMc(frame, side, hipTransMmd, hipRotMmd), pelvisMc, footRot);
         }
 
-        // 件矩阵那一路是"先形变、再大腿转、再骨盆"，全是矩阵乘（左到右 = 先左后右）：
-        //   大腿入参 = T_w · P⁻¹ —— 减的是渲染器真正拿去搭骨盆的那一份，两边才 glued 得住
-        //   bend     = S_w · T_w⁻¹（静止腿部局部系里的小腿折角）
-        Matrix4x4.Invert(thighW, out var invThighW);
-        Matrix4x4.Invert(pelvisMc, out var invPelvis);
-        var rotate = MatrixToRotateInput(thighW * invPelvis);
-        var bendFold = shinW * invThighW;
+        var sign = Vector3.Dot(res.ThighDir - Down, KneeBias) >= 0f ? 1f : -1f;
+        var solve = new VmdLegSolve(fromIk, res.Extension, AngleDeg(Down, res.ThighDir) * sign,
+            res.KneeDeg, res.AnkleTarget, res.ThighDir);
 
-        // 叠在小腿之后 —— 注意得先乘出脚的绝对朝向再减 T_w，(S·T⁻¹)·A 和 S·A·T⁻¹ 不等价。
-        var footRot = FootRotation(frame, side, rotAnkle);
-        var bendFinal = (shinW * footRot) * invThighW;
-
-        return new LegResult(rotate, new LimbDeform
+        return new LegResult(res.ThighRotate, new LimbDeform
         {
-            BendRotation = Quaternion.CreateFromRotationMatrix(bendFinal),
-            Offset = SoleCorrection(bendFold, bendFinal),
+            BendRotation = res.Bend,
+            Offset = res.BendOffset,
             TransitionTop = 0.12f,
             TransitionBottom = -0.58f
         }, solve);
