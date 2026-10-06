@@ -1,4 +1,4 @@
-using System.ComponentModel;
+﻿using System.ComponentModel;
 using System.IO;
 using System.Runtime.InteropServices;
 using System.Windows;
@@ -10,7 +10,6 @@ using System.Windows.Threading;
 using NegiCraftLauncher.Icons;
 using NegiCraftLauncher.Pet.Services;
 using NegiCraftLauncher.Raster;
-using NegiCraftLauncher.Raster.Animation;
 using NegiCraftLauncher.Skin.Controls;
 
 namespace NegiCraftLauncher.Pet;
@@ -975,34 +974,6 @@ public partial class PetWindow : Window
         PetPreview.TriggerAttack();
     }
 
-    private void OnLoadVmdClick(object sender, RoutedEventArgs e)
-    {
-        var dialog = new Microsoft.Win32.OpenFileDialog
-        {
-            Title = "选择 MMD 动作文件 (.vmd)",
-            Filter = "MMD 动作文件 (*.vmd)|*.vmd|所有文件 (*.*)|*.*",
-            Multiselect = false,
-        };
-
-        if (dialog.ShowDialog(this) != true) return;
-
-        try
-        {
-            var clip = VmdMotionClip.Load(dialog.FileName);
-            PetPreview.PlayMotion(clip, loop: true);
-            MenuStopVmd.IsEnabled = true;
-        }
-        catch (Exception ex)
-        {
-            MessageBox.Show(this, $"加载 VMD 失败：{ex.Message}", "错误", MessageBoxButton.OK, MessageBoxImage.Error);
-        }
-    }
-
-    private void OnStopVmdClick(object sender, RoutedEventArgs e)
-    {
-        PetPreview.StopMotion();
-        MenuStopVmd.IsEnabled = false;
-    }
 
     /// <summary>调试用：设一个屏幕坐标（物理像素）作为导航目标。</summary>
     public void SetNavigationTarget(double screenX, double screenY)
