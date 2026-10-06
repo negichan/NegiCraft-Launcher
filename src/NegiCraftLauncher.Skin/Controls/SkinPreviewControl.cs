@@ -63,6 +63,9 @@ public sealed class SkinPreviewControl : Grid
     /// </summary>
     private const double MinFrameSeconds = 1.0 / 60.0;
 
+    /// <summary><see cref="MinFrameSeconds"/> 的 TimeSpan 版：封顶那边每出一帧只把截止点推进一格。</summary>
+    private static readonly TimeSpan MinFrame = TimeSpan.FromSeconds(MinFrameSeconds);
+
     /// <summary>字体在**本程序集**里，所以要带 <c>;component</c>；写成裸 <c>/Assets/...</c>
     /// 会去入口程序集找，找不到就静默回退成系统字体。</summary>
     private const string FontUri =
@@ -346,6 +349,7 @@ public sealed class SkinPreviewControl : Grid
     private double _dpiY = 1.0;
 
     private DateTime _lastFrame;
+    private DateTime _nextDraw;                     // 60fps 封顶用的截止点（余量结转，见 OnRendering）
     private double _lastFrameMs;
     private bool _loopAttached;
     private bool _dragging;
@@ -674,6 +678,7 @@ public sealed class SkinPreviewControl : Grid
         if (_loopAttached) return;
         _loopAttached = true;
         _lastFrame = DateTime.UtcNow;
+        _nextDraw = _lastFrame;
         CompositionTarget.Rendering += OnRendering;
 
         if (Window.GetWindow(this) is { } window)
@@ -730,7 +735,15 @@ public sealed class SkinPreviewControl : Grid
 
         // ★ 再封顶 60fps（见 MinFrameSeconds）。**脏标记故意不清** —— 这一帧只是"还没到时候"，
         //   不是"不用画"；下一帧一到点就会画出来。GPU 模式不封顶。
-        if (!_useGpu && dt < MinFrameSeconds) return;
+        //   判据要拿"截止点"比，不能拿"距上次真出图多久"比：合成回调本身到达得并不均匀（实测
+        //   间隔从 6ms 一直铺到 46ms），拿恰好等于目标周期去比就会把该画的帧判掉 —— 桌宠走路时
+        //   数 frames= 只有 43fps。改成截止点每次只推进一格、踩过头的余量结转给下一格之后 58fps。
+        if (!_useGpu)
+        {
+            if (now < _nextDraw) return;
+            _nextDraw += MinFrame;
+            if (_nextDraw < now) _nextDraw = now + MinFrame;   // 久停（切页 / 卡了一下）后重新对齐，不连补几帧
+        }
 
         _lastFrame = now;
         _viewDirty = false;
