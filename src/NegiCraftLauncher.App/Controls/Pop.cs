@@ -2,7 +2,6 @@ using System.Diagnostics;
 using System.Runtime.CompilerServices;
 using System.Windows;
 using System.Windows.Media;
-using System.Windows.Threading;
 
 namespace NegiCraftLauncher.App.Controls;
 
@@ -16,7 +15,7 @@ namespace NegiCraftLauncher.App.Controls;
 /// 随行程长到整张卡片，所以观感是"从按钮里被拉出来"而不是"原地放大"。</para>
 ///
 /// <para><b>与 Avalonia 版的唯一差别</b>：那边靠 <c>Classes.Open</c> 在打开期间把
-/// <c>IsHitTestVisible</c> 顶回 True；WPF 的样式没有类选择器，所以这里在行程结束时
+/// <c>IsHitTestVisible</c> 顶回 True；WPF 的样式没有类选择器，所以这里在打开时
 /// 显式写 True、回到静止时显式写 False（<see cref="PopoverStyle"/> 的默认值是 False）。
 /// 静止状态两边仍然完全一致 —— Opacity=0、无变换、无裁切 —— 像素级对照不受影响。</para>
 ///
@@ -100,7 +99,10 @@ public static class Pop
         private const double ShadowMargin = 64;
 
         private readonly FrameworkElement _target;
-        private readonly DispatcherTimer _timer;
+        private bool _rendering;
+        private TimeSpan? _lastRenderingTime;
+        private readonly MatrixTransform _transform = new();
+        private readonly RectangleGeometry _clip = new();
         private readonly Stopwatch _clock = new();
 
         private double _popW, _popH;
@@ -118,9 +120,15 @@ public static class Pop
         public Runner(FrameworkElement target)
         {
             _target = target;
-            // 6ms 只是"尽快"；真实节奏由 Stopwatch 决定，所以抖动只影响平滑度，不影响时长。
-            _timer = new DispatcherTimer(DispatcherPriority.Render) { Interval = TimeSpan.FromMilliseconds(6) };
-            _timer.Tick += (_, _) => Step();
+            _target.Unloaded += (_, _) =>
+            {
+                StopRendering();
+                Rest();
+            };
+            _target.Loaded += (_, _) =>
+            {
+                if (GetIsOpen(_target)) Open();
+            };
         }
 
         public void Open()
@@ -132,16 +140,14 @@ public static class Pop
                 _reveal0 = _popH;
             }
 
-            // 卡片在飞的时候正压在指针底下；这期间吃点击的话，底下的行会先亮一下再被盖住。
-            // 落定之后才变成可交互的。
-            _target.IsHitTestVisible = false;
+            // Visual settling must not delay interaction or pass clicks through the popover.
+            _target.IsHitTestVisible = true;
 
             _closing = false;
             _from = _p;
             _spanMs = Math.Max(100, TotalMs - _from);
             _clock.Restart();
-            _timer.Stop();
-            _timer.Start();
+            StartRendering();
             ApplyTimeline(_from);
         }
 
@@ -154,15 +160,41 @@ public static class Pop
             _from = Math.Min(_p, TravelMs);
             if (_from <= 0)
             {
+                StopRendering();
                 Rest();
                 return;
             }
 
             _spanMs = Math.Max(80, CloseMs * _from / TravelMs);
             _clock.Restart();
-            _timer.Stop();
-            _timer.Start();
+            StartRendering();
             ApplyTravel(_from / TravelMs, 1.0);
+        }
+
+        private void StartRendering()
+        {
+            _lastRenderingTime = null;
+            if (_rendering) return;
+            _rendering = true;
+            CompositionTarget.Rendering += OnRendering;
+        }
+
+        private void StopRendering()
+        {
+            if (!_rendering) return;
+            CompositionTarget.Rendering -= OnRendering;
+            _rendering = false;
+            _lastRenderingTime = null;
+        }
+
+        private void OnRendering(object? sender, EventArgs e)
+        {
+            if (e is RenderingEventArgs frame)
+            {
+                if (_lastRenderingTime == frame.RenderingTime) return;
+                _lastRenderingTime = frame.RenderingTime;
+            }
+            Step();
         }
 
         private void Step()
@@ -173,7 +205,7 @@ public static class Pop
                 var k = Math.Min(1, ms / _spanMs);
                 if (k >= 1)
                 {
-                    _timer.Stop();
+                    StopRendering();
                     Rest();
                     return;
                 }
@@ -185,7 +217,7 @@ public static class Pop
             var done = Math.Min(1, ms / _spanMs);
             if (done >= 1)
             {
-                _timer.Stop();
+                StopRendering();
                 _p = TotalMs;
                 _target.RenderTransform = null;
                 _target.Clip = null;
@@ -212,7 +244,8 @@ public static class Pop
                 ? Smooth(Peak, Dip, q / dipEnds)
                 : Smooth(Dip, 1, (q - dipEnds) / (1 - dipEnds));
 
-            _target.RenderTransform = new MatrixTransform(new Matrix(scale, 0, 0, scale, 0, 0));
+            _transform.Matrix = new Matrix(scale, 0, 0, scale, 0, 0);
+            _target.RenderTransform = _transform;
             _target.Opacity = 1;
             _target.Clip = null;
         }
@@ -227,8 +260,8 @@ public static class Pop
             var scale = Lerp(_scale0, top, e);
             var local = Lerp(_reveal0 / _scale0, _popH, e);
 
-            _target.RenderTransform = new MatrixTransform(
-                new Matrix(scale, 0, 0, scale, _offsetX * (1 - e), _offsetY * (1 - e)));
+            _transform.Matrix = new Matrix(scale, 0, 0, scale, _offsetX * (1 - e), _offsetY * (1 - e));
+            _target.RenderTransform = _transform;
             _target.Opacity = 1;
             _target.Clip = ClipFor(local);
         }
@@ -265,7 +298,8 @@ public static class Pop
                 bottom = localHeight + m * ramp;
             }
 
-            return new RectangleGeometry(new Rect(-m, top, _popW + 2 * m, bottom - top));
+            _clip.Rect = new Rect(-m, top, _popW + 2 * m, bottom - top);
+            return _clip;
         }
 
         private bool Measure()
