@@ -528,6 +528,8 @@ public abstract class SkinRenderBase
     public void ResetPos()
     {
         _dis = 1;
+        // Rot() queues deltas until Tick(). A reset must discard any queued turn.
+        _rotXY = Vector2.Zero;
         _diffXY.X = 0;
         _diffXY.Y = 0;
         _xy.X = 0;
