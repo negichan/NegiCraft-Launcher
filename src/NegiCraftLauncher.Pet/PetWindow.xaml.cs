@@ -329,6 +329,7 @@ public partial class PetWindow : Window
         IntPtr hWnd, IntPtr insertAfter, int x, int y, int cx, int cy, uint flags);
 
     private const uint SwpNoSize = 0x0001;      // 尺寸交给 WPF（Width/Height 由缩放管）
+    private const uint SwpNoMove = 0x0002;
     private const uint SwpNoZOrder = 0x0004;    // 不许动 Topmost 那一层
     private const uint SwpNoActivate = 0x0010;  // 桌宠永远不抢焦点
 
@@ -977,6 +978,28 @@ public partial class PetWindow : Window
     /// 所以才要有这个公开包装。</remarks>
     public (FrameworkElement host, ContextMenu menu) TrayMenuParts => (TrayMenuHost, TrayMenu);
 
+    private void BringSettingsForward(PetSettingsWindow dialog)
+    {
+        _menuDismissTracker.CloseAll();
+        if (dialog.WindowState == WindowState.Minimized) dialog.WindowState = WindowState.Normal;
+        dialog.Topmost = true;
+        dialog.Topmost = Topmost;
+        RestoreNativeTopmost();
+        dialog.Activate();
+        Dispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.ContextIdle, new Action(() =>
+        {
+            if (dialog.IsVisible) dialog.Activate();
+        }));
+    }
+
+    private void RestoreNativeTopmost()
+    {
+        var hwnd = new WindowInteropHelper(this).Handle;
+        if (hwnd == IntPtr.Zero) return;
+        SetWindowPos(hwnd, new IntPtr(Topmost ? -1 : -2), 0, 0, 0, 0,
+            SwpNoMove | SwpNoSize | SwpNoActivate);
+    }
+
     #endregion
 
     #region 右键菜单事件
@@ -1266,15 +1289,22 @@ public partial class PetWindow : Window
     {
         if (_activeSettingsDialog is { IsVisible: true })
         {
-            _activeSettingsDialog.Activate();
+            BringSettingsForward(_activeSettingsDialog);
             return _activeSettingsDialog;
         }
 
         var settings = PetSettings.Load();
         var dialog = new PetSettingsWindow(settings, isFirstRunSetup: isFirstRunSetup, petWindow: this);
+        dialog.Owner = this;
+        dialog.ShowActivated = true;
         _activeSettingsDialog = dialog;
-        dialog.Closed += (_, _) => _activeSettingsDialog = null;
+        dialog.Closed += (_, _) =>
+        {
+            _activeSettingsDialog = null;
+            RestoreNativeTopmost();
+        };
         dialog.Show();
+        BringSettingsForward(dialog);
 
         if (shotPath != null)
         {
