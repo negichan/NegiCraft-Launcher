@@ -8,6 +8,8 @@ using NegiCraftLauncher.App.Controls;
 using NegiCraftLauncher.Pet;
 using NegiCraftLauncher.Raster;
 using NegiCraftLauncher.Raster.Rendering;
+using NegiCraftLauncher.Skin.Controls;
+using NegiCraftLauncher.Skin.Rendering;
 
 internal static class Program
 {
@@ -49,6 +51,40 @@ internal static class Program
             pose.Reset();
             pose.Update(0);
             Check("repeated reset preserves initial yaw", ModelYawMatches(renderer, pose.CurrentYawDeg));
+            var startupMotion = new PetMotion();
+            startupMotion.SetMode(PetInteractionMode.Control);
+            startupMotion.BeginControlMode(double.NaN, double.NaN);
+            var startupContext = new PetMotionContext(
+                new PetStage(160, 320, 1, 75),
+                new PetWorkArea(0, 0, 1920, 1080),
+                new PetPoint(double.NaN, double.NaN),
+                new PetPoint(50, 50),
+                24);
+            startupMotion.Tick(1.0 / 60, startupContext);
+            Check("unplaced startup does not emit invalid head look", !startupMotion.HasHeadLook);
+            startupMotion.Tick(1.0 / 60, startupContext with { Window = new PetPoint(500, 300) });
+            Check("startup adopts first finite window position",
+                startupMotion.GroundX == 500 && startupMotion.GroundY == 300);
+            Check("startup head look stays finite",
+                float.IsFinite(startupMotion.HeadYaw) && float.IsFinite(startupMotion.HeadPitch));
+
+            foreach (var gpu in new[] { false, true })
+            {
+                pet = new PetWindow("", null);
+                pet.ApplySettings(new PetSettings
+                {
+                    SkinPlayerName = "Steve", UseGpu = gpu,
+                    SpineFlexible = true, InteractionMode = "Control"
+                });
+                pet.SetVirtualCursor(50, 50);
+                pet.PlaceAtDefaultCorner();
+                pet.Show();
+                await Task.Delay(120);
+                Check($"startup head matrix is finite (GPU={gpu})",
+                    HeadMatrixIsFinite(pet.Preview));
+                pet.Close();
+                pet = null;
+            }
 
             {
                 host = new Window { Width = 420, Height = 320, ShowActivated = false, ShowInTaskbar = false };
@@ -136,6 +172,23 @@ internal static class Program
         return Math.Abs(matrix.M11 - MathF.Cos(radians)) < 1e-5
             && Math.Abs(matrix.M13 + MathF.Sin(radians)) < 1e-5;
     }
+
+    private static bool HeadMatrixIsFinite(SkinPreviewControl preview)
+    {
+        var flags = BindingFlags.Instance | BindingFlags.NonPublic;
+        var software = (SkinRenderSoftware)typeof(SkinPreviewControl)
+            .GetField("_software", flags)!.GetValue(preview)!;
+        var gpu = (SkinRenderGpu?)typeof(SkinPreviewControl)
+            .GetField("_gpu", flags)!.GetValue(preview);
+        return MatrixIsFinite(software.DebugMatrices().Head)
+            && (gpu is null || MatrixIsFinite(gpu.MatrixOf(ModelPartType.Head)));
+    }
+
+    private static bool MatrixIsFinite(System.Numerics.Matrix4x4 m) =>
+        float.IsFinite(m.M11) && float.IsFinite(m.M12) && float.IsFinite(m.M13) && float.IsFinite(m.M14) &&
+        float.IsFinite(m.M21) && float.IsFinite(m.M22) && float.IsFinite(m.M23) && float.IsFinite(m.M24) &&
+        float.IsFinite(m.M31) && float.IsFinite(m.M32) && float.IsFinite(m.M33) && float.IsFinite(m.M34) &&
+        float.IsFinite(m.M41) && float.IsFinite(m.M42) && float.IsFinite(m.M43) && float.IsFinite(m.M44);
 
     private static bool IsRendering(FrameworkElement pop)
     {

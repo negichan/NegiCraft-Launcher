@@ -149,6 +149,8 @@ public sealed class PetMotion
 
     /// <summary>上一帧是不是在拖拽 —— 用来抓"拖拽开始"那个边沿，把上一轮的采样丢掉。</summary>
     private bool _wasDragging;
+    /// <summary>WPF 窗口尚未放置时为真，避免把 NaN 的 Left/Top 带入物理。</summary>
+    private bool _needsWindowPosition = true;
 
     /// <summary>
     /// 上一帧**夹取之后**的脚底 Y（屏幕 DIP）。找支撑面时和当前脚底取 <c>Min</c>：
@@ -342,8 +344,13 @@ public sealed class PetMotion
     /// </summary>
     public void BeginControlMode(double windowX, double windowY)
     {
-        GroundX = windowX;
-        GroundY = windowY;
+        // WPF leaves Left/Top as NaN until placement; defer initialization in that case.
+        _needsWindowPosition = !double.IsFinite(windowX) || !double.IsFinite(windowY);
+        if (!_needsWindowPosition)
+        {
+            GroundX = windowX;
+            GroundY = windowY;
+        }
         JumpOffsetY = 0;
         _velocityY = 0;
         _velocityX = 0;
@@ -379,6 +386,7 @@ public sealed class PetMotion
     {
         GroundX = windowX;
         GroundY = windowY;
+        _needsWindowPosition = false;
         JumpOffsetY = 0;
         _jumping = false;
         _velocityX = 0;
@@ -572,6 +580,16 @@ public sealed class PetMotion
         if (dt < MinStepSeconds) return;
         if (dt > MaxStepSeconds) dt = MaxStepSeconds;
 
+        // Do not derive mouse angles or physics from an unplaced window.
+        if (!double.IsFinite(ctx.Window.X) || !double.IsFinite(ctx.Window.Y)) return;
+        if (_needsWindowPosition || !double.IsFinite(GroundX) || !double.IsFinite(GroundY))
+        {
+            GroundX = ctx.Window.X;
+            GroundY = ctx.Window.Y;
+            _standFeetY = double.PositiveInfinity;
+            _needsWindowPosition = false;
+        }
+
         _timeSeconds += dt;
 
         // 被抓住 / 在拖拽时，以挣扎晃头动画为先。**竖直速度清零** —— 松手时由 EndDrag 把
@@ -606,13 +624,6 @@ public sealed class PetMotion
         }
 
         _wasDragging = false;
-
-        // 窗口被别处挪过（首次显示、用户拖动、切模式），地面位置还没跟上的话对齐一次。
-        if (GroundX == 0 && GroundY == 0 && (ctx.Window.X != 0 || ctx.Window.Y != 0))
-        {
-            GroundX = ctx.Window.X;
-            GroundY = ctx.Window.Y;
-        }
 
         // 1. Shift 下蹲状态检测（物理键盘）
         var shiftDown = PetNativeKeys.IsDown(PetNativeKeys.VkShift);
