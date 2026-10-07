@@ -332,8 +332,11 @@ public partial class PetWindow : Window
     private const uint SwpNoMove = 0x0002;
     private const uint SwpNoZOrder = 0x0004;    // 不许动 Topmost 那一层
     private const uint SwpNoActivate = 0x0010;  // 桌宠永远不抢焦点
+    private const uint SwpNoSendChanging = 0x0400;
 
     private readonly System.Diagnostics.Stopwatch _physicsStopwatch = new();
+    private double _physicsPendingSeconds;
+    private TimeSpan? _lastPhysicsRenderingTime;
     private readonly MenuDismissTracker _menuDismissTracker;
 
     public PetWindow()
@@ -542,21 +545,33 @@ public partial class PetWindow : Window
     {
         TrackDebugInfo = "START_CALLED";
         _physicsStopwatch.Restart();
+        _physicsPendingSeconds = 0;
+        _lastPhysicsRenderingTime = null;
         CompositionTarget.Rendering += OnPhysicsFrame;
     }
 
     private void StopShiftMonitoring()
     {
         CompositionTarget.Rendering -= OnPhysicsFrame;
+        _physicsPendingSeconds = 0;
         _physicsStopwatch.Stop();
     }
 
     private void OnPhysicsFrame(object? sender, EventArgs e)
     {
+        if (e is RenderingEventArgs frame)
+        {
+            if (_lastPhysicsRenderingTime == frame.RenderingTime) return;
+            _lastPhysicsRenderingTime = frame.RenderingTime;
+        }
         try
         {
-            var dt = _physicsStopwatch.Elapsed.TotalSeconds;
+            var elapsed = _physicsStopwatch.Elapsed.TotalSeconds;
             _physicsStopwatch.Restart();
+            _physicsPendingSeconds = Math.Min(_physicsPendingSeconds + elapsed, 0.04);
+            if (_physicsPendingSeconds < 0.002) return;
+            var dt = _physicsPendingSeconds;
+            _physicsPendingSeconds = 0;
 
             // 抓握 / 拖拽时物理让位给挣扎晃头动画（判断在窗口这边，物理只是别乱动）。
             _motion.IsDragging = _isLeftPressed || _isLeftDragging;
@@ -725,7 +740,8 @@ public partial class PetWindow : Window
 
         var hwnd = new WindowInteropHelper(this).Handle;
         if (hwnd != IntPtr.Zero)
-            SetWindowPos(hwnd, IntPtr.Zero, px, py, 0, 0, SwpNoSize | SwpNoZOrder | SwpNoActivate);
+            SetWindowPos(hwnd, IntPtr.Zero, px, py, 0, 0, SwpNoSize | SwpNoZOrder | SwpNoActivate
+                | SwpNoSendChanging);
     }
 
     private void OnWindowKeyDown(object sender, KeyEventArgs e)
