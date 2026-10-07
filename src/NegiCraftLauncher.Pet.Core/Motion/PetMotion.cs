@@ -511,7 +511,7 @@ public sealed class PetMotion
         }
     }
 
-    /// <summary>双击桌宠切换的手动潜行开关。</summary>
+    /// <summary>动作菜单控制的手动潜行开关。</summary>
     public void ToggleManualSneak()
     {
         ManualSneakToggle = !ManualSneakToggle;
