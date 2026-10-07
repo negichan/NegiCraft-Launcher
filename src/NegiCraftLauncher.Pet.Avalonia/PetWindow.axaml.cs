@@ -701,13 +701,6 @@ public partial class PetWindow : Window
         e.Handled = true;
     }
 
-    private void OnRootDoubleTapped(object? sender, TappedEventArgs e)
-    {
-        _motion.ToggleManualSneak();
-        PetPreview.Sneaking = _motion.Sneaking;
-        UpdateSneakMenuIcon();
-    }
-
     #endregion
 
     #region 右键菜单事件
