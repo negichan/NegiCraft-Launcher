@@ -56,6 +56,13 @@ public partial class MainWindow : Window
         };
         SkinPreview.PositionDragged += OnHomeSkinPreviewDragged;
 
+        // 实例页的列数按页宽算：UniformGrid 只会把宽度平摊给它拿到的列数，
+        // "几列才不挤"只有视图量得出来（与 WPF 侧的 UpdateInstanceColumns 同一套）。
+        PageInstances.PropertyChanged += (_, e) =>
+        {
+            if (e.Property == BoundsProperty) UpdateInstanceColumns();
+        };
+
         // 头几趟布局里 TranslatePoint 还给不出稳定的页内坐标（首页那圈 -100/-22 的负边距还没进到
         // 变换链），障碍会量歪 —— 而一旦把锚点当成"压到侧栏"推开，之后就再没人把它摆回来。
         // 排版落定之后再摆一次，落点以这一趟为准。
@@ -519,8 +526,10 @@ public partial class MainWindow : Window
     {
         if (!_isExplicitExit)
         {
+            // Alt+F4 与任务栏的"关闭窗口"绕不开 OnClosing，所以策略挂在这里：这一趟一律先拦下，
+            // 去向交给 VM 的 RequestClose（托盘 / 退出 / 弹询问窗）。✕ 按钮走同一个入口。
             e.Cancel = true;
-            Hide();
+            _vm?.RequestClose();
             return;
         }
         base.OnClosing(e);
@@ -534,6 +543,7 @@ public partial class MainWindow : Window
         {
             _vm.HideWindowRequested -= Hide;
             _vm.ShowWindowRequested -= Restore;
+            _vm.ExitApplicationRequested -= ExitApplication;
             _vm.OpenPetRequested -= OnOpenPetRequested;
             _vm.RecallPetRequested -= ClosePetWindow;
             _vm.PropertyChanged -= OnViewModelPropertyChanged;
@@ -545,6 +555,7 @@ public partial class MainWindow : Window
         {
             _vm.HideWindowRequested += Hide;
             _vm.ShowWindowRequested += Restore;
+            _vm.ExitApplicationRequested += ExitApplication;
             _vm.OpenPetRequested += OnOpenPetRequested;
             _vm.RecallPetRequested += ClosePetWindow;
             _vm.PropertyChanged += OnViewModelPropertyChanged;
@@ -703,7 +714,7 @@ public partial class MainWindow : Window
 
     private void OnCloseClick(object? sender, RoutedEventArgs e)
     {
-        Hide();
+        _vm?.RequestClose();
     }
 
     private void OnPopoverBackgroundPointerPressed(object? sender, PointerPressedEventArgs e)
@@ -788,9 +799,50 @@ public partial class MainWindow : Window
         _vm?.CancelDialogCommand.Execute(null);
     }
 
+    // ==========================================================
+    // 实例页：列数与「⋯」—— 与 App/MainWindow.xaml.cs 逐段对照
+    // ==========================================================
+
+    private const double InstanceCardMinWidth = 268;
+    private const double InstanceGutter = 12;
+
+    /// <summary>
+    /// 按页宽算列数交给 UniformGrid：卡片既要等宽（自适应拉伸）又要等高
+    /// （底行那句「最近游玩」是贴底摆的），WrapPanel 两样都给不了。
+    /// </summary>
+    private void UpdateInstanceColumns()
+    {
+        var w = PageInstances.Bounds.Width;
+        if (_vm is null || w <= 0) return;   // 还没排版（或不在实例页），等下一次尺寸变化
+
+        _vm.InstanceColumns = Math.Max(1, (int)((w + InstanceGutter) / (InstanceCardMinWidth + InstanceGutter)));
+    }
+
+    /// <summary>
+    /// 「⋯」只是把卡片自己那条右键菜单就地开起来 —— 菜单只写一份，右键和按钮走同一个。
+    /// 往上找带 ContextMenu 的那个 Button（卡片本体）：Avalonia 的可视树在这一段是通的。
+    /// </summary>
+    private void OnInstanceMoreClick(object? sender, RoutedEventArgs e)
+    {
+        for (Visual? node = sender as Visual; node is not null; node = node.GetVisualParent())
+        {
+            if (node is not Button { ContextMenu: { } } card) continue;
+
+            card.ContextMenu.Open(card);
+            e.Handled = true;
+            return;
+        }
+    }
+
     private void OnInstConfigBackdropPointerPressed(object? sender, PointerPressedEventArgs e)
     {
         _vm?.CloseInstanceConfigCommand.Execute(null);
+    }
+
+    /// <summary>点询问窗外面 = 取消：关闭这种事不该有一个"点空白也能触发"的出口。</summary>
+    private void OnClosePromptBackdropPointerPressed(object? sender, PointerPressedEventArgs e)
+    {
+        _vm?.CancelCloseCommand.Execute(null);
     }
 
     private void OnWindowKeyDown(object? sender, KeyEventArgs e)
@@ -798,6 +850,13 @@ public partial class MainWindow : Window
         if (e.Key is Key.LeftShift or Key.RightShift)
         {
             SkinPreview.Sneaking = true;
+        }
+
+        // 关闭询问窗是拦在"退出"前面的一道，Esc 关它等于按取消 —— 不能让 Esc 顺带把窗口也关了。
+        if (e.Key == Key.Escape && _vm is { IsClosePromptOpen: true })
+        {
+            _vm.CancelCloseCommand.Execute(null);
+            e.Handled = true;
         }
     }
 
