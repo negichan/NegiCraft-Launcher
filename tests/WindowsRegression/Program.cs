@@ -3,8 +3,11 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
 using System.Windows.Threading;
+using MinecraftSkinRender;
 using NegiCraftLauncher.App.Controls;
 using NegiCraftLauncher.Pet;
+using NegiCraftLauncher.Raster;
+using NegiCraftLauncher.Raster.Rendering;
 
 internal static class Program
 {
@@ -39,6 +42,14 @@ internal static class Program
         PetWindow? pet = null;
         try
         {
+            var renderer = new SkinRenderSoftware { Width = 110, Height = 171 };
+            renderer.SetSkin(SkinTexture.Decode(DefaultSkins.Bytes(false))!);
+            var pose = new SkinPoseDriver(renderer);
+            pose.Reset();
+            pose.Reset();
+            pose.Update(0);
+            Check("repeated reset preserves initial yaw", ModelYawMatches(renderer, pose.CurrentYawDeg));
+
             {
                 host = new Window { Width = 420, Height = 320, ShowActivated = false, ShowInTaskbar = false };
                 var panel = new Grid();
@@ -116,6 +127,14 @@ internal static class Program
             }
             finally { done(); }
         }
+    }
+
+    private static bool ModelYawMatches(SkinRenderSoftware renderer, float yaw)
+    {
+        var matrix = renderer.DebugMatrices().Model;
+        var radians = yaw * MathF.PI / 180;
+        return Math.Abs(matrix.M11 - MathF.Cos(radians)) < 1e-5
+            && Math.Abs(matrix.M13 + MathF.Sin(radians)) < 1e-5;
     }
 
     private static bool IsRendering(FrameworkElement pop)
