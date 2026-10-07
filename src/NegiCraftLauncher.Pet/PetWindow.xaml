@@ -29,9 +29,9 @@
            Panel                → Grid（单格，子元素默认重叠）
            IsVisible="False"    → Visibility="Collapsed"
            materialIcons:MaterialIcon Kind="X" → 同名，但可见性走 Visibility
-           PointerPressed / Moved / Released / CaptureLost / ContextRequested / DoubleTapped
+           PointerPressed / Moved / Released / CaptureLost / ContextRequested
                                 → MouseLeftButtonDown / MouseMove / MouseLeftButtonUp /
-                                  LostMouseCapture / ContextMenuOpening / ClickCount==2
+                                  LostMouseCapture / ContextMenuOpening
 
          右键菜单这里**不**手动开：WPF 的 ContextMenu 挂在元素上就会自动右键弹出，
          只要在 ContextMenuOpening 里判断"刚才是在拖动旋转"就 e.Handled 掉，行为与 Avalonia 一致。

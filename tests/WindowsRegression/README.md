@@ -8,8 +8,14 @@ From the repository root:
 dotnet run --project tests/WindowsRegression -c Release
 ```
 
-The executable exits nonzero on failure. It checks immediate popover interaction, interrupted animations, unload/reload subscription cleanup, simulated movement/release in software and GPU modes, and the existing physics self-test.
+The executable exits nonzero on failure. It checks immediate popover interaction, interrupted animations, unload/reload subscription cleanup, pet mouse gestures, simulated movement/release in software and GPU modes, and the existing physics self-test.
 
-This suite covers only the performance changes and runs against upstream `main` without the settings-window fix in PR #1. Settings ownership, topmost synchronization, and save/cancel tests are outside its scope.
+Mouse checks raise routed events on the real WPF pet root, including double-click counts,
+drag threshold crossing, normal release and capture loss. Mouse gestures must not toggle
+manual sneak, and explicit menu/Shift crouching must remain intact. The test offsets the
+recorded press position to trigger a drag without moving the user's cursor.
+
+Settings ownership, topmost synchronization, and save/cancel tests are outside its scope.
+Avalonia mouse bindings are not exercised by this WPF suite.
 
 The movement checks are not keyboard-to-display latency measurements. Check fast real A/D + Space input, animated popover clicks, and multi-monitor DPI transitions before merging the performance PR.
