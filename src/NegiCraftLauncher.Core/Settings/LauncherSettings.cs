@@ -37,6 +37,13 @@ public sealed class LauncherSettings
 
     public bool HideOnLaunch { get; set; }
 
+    /// <summary>
+    /// What the close button does: "ask" prompts every time, "tray" hides the window to the
+    /// notification area, "exit" shuts the launcher down. Kept as a code rather than the label
+    /// the UI shows, so rewording a button never invalidates a saved config.
+    /// </summary>
+    public string CloseWindowBehavior { get; set; } = "ask";
+
     public bool IsDark { get; set; } = true;
 
     public string? CustomBackgroundPath { get; set; }

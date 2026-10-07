@@ -1,4 +1,4 @@
-using System.Collections.ObjectModel;
+﻿using System.Collections.ObjectModel;
 using System.Diagnostics;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -127,13 +127,21 @@ public partial class MainWindowViewModel : ViewModelBase
     partial void OnCurrentPageChanged(string value)
     {
         OnPropertyChanged(nameof(IsOnHome));
-        OnPropertyChanged(nameof(ShowVideoSoundButton));
-        RaiseFramingVisibility();
         CloseAllPopovers();
     }
 
     [RelayCommand]
-    private void Go(string page) => CurrentPage = page;
+    private void Go(string page)
+    {
+        CurrentPage = page;
+
+        // 从游戏回来「最近游玩」该变了：进实例页顺手重读一遍模型，
+        // 比在启动流程里到处插通知省事（LastPlayed 是 GameLauncher 写的，这边只读）。
+        if (page == "instances")
+        {
+            foreach (var i in Instances) i.Refresh();
+        }
+    }
 
     // ==========================================================
     // Background & appearance
@@ -243,10 +251,10 @@ public partial class MainWindowViewModel : ViewModelBase
     }
 
     /// <summary>
-    /// 右上角那个喇叭按钮是否出现。<b>只有"首页 + 视频背景"才成立</b> —— 背景只在首页可见，
-    /// 在别的页面上留一个管不着的按钮没有意义。
+    /// 右上角那个喇叭按钮是否出现。<b>只看"是不是视频背景"</b> —— 背景现在每一页都在，
+    /// 音频也是一整条，所以喇叭跟着背景走，不再跟着页走。
     /// </summary>
-    public bool ShowVideoSoundButton => IsVideoBackground && IsOnHome;
+    public bool ShowVideoSoundButton => IsVideoBackground;
 
     /// <summary>
     /// 喇叭底下那条竖排音量条是否展开。视图侧靠鼠标进出驱动（悬停喇叭就展开），
@@ -271,13 +279,13 @@ public partial class MainWindowViewModel : ViewModelBase
 
     /// <summary>
     /// 取景手势层（拖背景平移 + 滚轮缩放）与提示胶囊 / 画中画 / 底部说明是否出现 ——
-    /// <b>只在调节窗开着、在首页、而且有自选内容可调的时候</b>。
+    /// <b>只在调节窗开着、而且有自选内容可调的时候</b>。
     ///
     /// <para>平常状态背景就该只是一张背景：按住不该能拖，滚轮更不该被"缩放背景"吃掉。
-    /// 挂 <see cref="IsOnHome" /> 是因为背景本身只在首页可见（<c>BgRoot</c> 的可见性就是它），
-    /// 调节的东西不在屏幕上，控件就该一起退场。</para>
+    /// 以前这里还挂一个 <see cref="IsOnHome" />，因为背景只在首页露出；现在背景每页都在，
+    /// 取景跟着调节窗走就对了，在哪一页都能取景。</para>
     /// </summary>
-    public bool IsFramingVisible => IsBgTuningOpen && IsOnHome && HasCustomBackground;
+    public bool IsFramingVisible => IsBgTuningOpen && HasCustomBackground;
 
     partial void OnIsBgTuningOpenChanged(bool value) => RaiseFramingVisibility();
 
@@ -975,10 +983,66 @@ public partial class MainWindowViewModel : ViewModelBase
     [ObservableProperty]
     private string _instanceSearch = "";
 
+    /// <summary>加载器筛选，「全部」= 不筛。</summary>
+    [ObservableProperty]
+    private string _instanceLoader = LoaderOptionModel.AllName;
+
+    /// <summary>排序：最近游玩（默认，没启动过的沉底）或名称。</summary>
+    [ObservableProperty]
+    private string _instanceSort = "最近游玩";
+
+    /// <summary>
+    /// 视图按页宽算出来的列数 —— UniformGrid 吃它才能既自适应拉伸又保证同一行的卡片等高。
+    /// 这是个布局量，不是设置，不落盘。
+    /// </summary>
+    [ObservableProperty]
+    private int _instanceColumns = 3;
+
     public bool HasInstances => Instances.Count > 0;
 
+    /// <summary>筛选下拉的选项：「全部」+ 实例里真出现过的加载器（去重、按名字排）。</summary>
+    public ObservableCollection<LoaderOptionModel> LoaderChoices { get; } = new();
+
+    /// <summary>标题旁那串计数：没筛就是「7 个」，筛了就「2 / 7 个」。</summary>
+    public string InstanceCountText =>
+        VisibleInstances.Count == Instances.Count ? $"{Instances.Count} 个" : $"{VisibleInstances.Count} / {Instances.Count} 个";
+
+    /// <summary>有没有条件在筛（决定空状态说哪句话）。</summary>
+    public bool HasInstanceFilter => InstanceSearch.Trim().Length > 0 || InstanceLoader != LoaderOptionModel.AllName;
+
+    /// <summary>有实例，但被搜索/筛选筛到一条不剩 —— 空状态要换一套话术。</summary>
+    public bool HasNoInstanceMatches => HasInstances && VisibleInstances.Count == 0;
+
+    /// <summary>筛空了那句提示，把当前生效的条件原样念回去，省得用户以为实例被删了。</summary>
+    public string InstanceEmptyHint
+    {
+        get
+        {
+            var bits = new List<string>();
+            if (InstanceSearch.Trim().Length > 0) bits.Add($"「{InstanceSearch.Trim()}」");
+            if (InstanceLoader != LoaderOptionModel.AllName) bits.Add(InstanceLoader);
+            return bits.Count > 0 ? $"换个关键词，或把筛选清掉（当前：{string.Join(" · ", bits)}）" : "换个关键词试试";
+        }
+    }
+
+    /// <summary>加载器筛选的下拉。选项来自 <see cref="LoaderChoices" />，所以列表比"所有存在的加载器"短得多。</summary>
+    [ObservableProperty]
+    private bool _isLoaderPopOpen;
+
+    /// <summary>筛选下拉显示的那句：「全部加载器」而不是光秃秃一个「全部」。</summary>
+    public string InstanceLoaderLabel => InstanceLoader == LoaderOptionModel.AllName ? "全部加载器" : InstanceLoader;
+
+    [RelayCommand]
+    private void ToggleLoaderPop()
+    {
+        IsLoaderPopOpen = !IsLoaderPopOpen;
+        IsAccPopOpen = false;
+        IsInstPopOpen = false;
+        IsDlPopOpen = false;
+    }
+
     /// <summary>Drives the transparent overlay that closes a popover when the user clicks elsewhere.</summary>
-    public bool HasOpenPopover => IsAccPopOpen || IsInstPopOpen || IsDlPopOpen;
+    public bool HasOpenPopover => IsAccPopOpen || IsInstPopOpen || IsDlPopOpen || IsLoaderPopOpen;
 
     partial void OnIsAccPopOpenChanged(bool value) => OnPropertyChanged(nameof(HasOpenPopover));
 
@@ -986,13 +1050,74 @@ public partial class MainWindowViewModel : ViewModelBase
 
     partial void OnIsDlPopOpenChanged(bool value) => OnPropertyChanged(nameof(HasOpenPopover));
 
+    partial void OnIsLoaderPopOpenChanged(bool value) => OnPropertyChanged(nameof(HasOpenPopover));
+
     partial void OnCurrentInstanceChanged(InstanceModel? value)
     {
         foreach (var i in Instances) i.IsCurrent = ReferenceEquals(i, value);
         OnPropertyChanged(nameof(CanLaunch));
+        OnPropertyChanged(nameof(IsEditingCurrentInstance));
     }
 
     partial void OnInstanceSearchChanged(string value) => ApplyInstanceFilter();
+
+    partial void OnInstanceLoaderChanged(string value)
+    {
+        ApplyInstanceFilter();
+        OnPropertyChanged(nameof(InstanceLoaderLabel));
+        MarkLoaderSelected();
+    }
+
+    private void MarkLoaderSelected()
+    {
+        foreach (var option in LoaderChoices) option.IsSelected = option.Name == InstanceLoader;
+    }
+
+    partial void OnInstanceSortChanged(string value) => ApplyInstanceFilter();
+
+    /// <summary>
+    /// 卡片本体点击 = 设为当前，但不跳页。
+    /// 停靠浮层那条 <see cref="SelectInstance" /> 会顺手回首页（那里选完就是要启动），
+    /// 实例页选完还要接着看列表，所以两条路分开。
+    /// </summary>
+    [RelayCommand]
+    private void MakeCurrentInstance(InstanceModel instance)
+    {
+        CurrentInstance = instance;
+        _launcher.SelectInstance(instance.Source);
+    }
+
+    /// <summary>卡片上的「启动」：先设成当前，再走首页那条一模一样的启动流程（不另起一份实现）。</summary>
+    [RelayCommand]
+    private async Task LaunchInstanceAsync(InstanceModel instance)
+    {
+        MakeCurrentInstance(instance);
+        await LaunchGameAsync();
+    }
+
+    /// <summary>
+    /// 存档文件夹。隔离实例就在实例目录里；没隔离的在公共根目录下。
+    /// 没生成过存档时目录还不存在，那就开它上一层 —— 报错不如让人看见东西。
+    /// </summary>
+    [RelayCommand]
+    private void OpenInstanceSaves(InstanceModel instance)
+    {
+        var root = _launcher.Instances.GameDirectoryFor(instance.Source);
+        OpenFolder(Directory.Exists(Path.Combine(root, "saves")) ? Path.Combine(root, "saves") : root);
+    }
+
+    [RelayCommand]
+    private void SelectInstanceLoader(string loader)
+    {
+        IsLoaderPopOpen = false;
+        if (!string.IsNullOrEmpty(loader)) InstanceLoader = loader;
+    }
+
+    [RelayCommand]
+    private void SelectInstanceSort(string sort)
+    {
+        if (!string.IsNullOrEmpty(sort)) InstanceSort = sort;
+    }
 
     [RelayCommand]
     private void ToggleInstPop()
@@ -1016,6 +1141,7 @@ public partial class MainWindowViewModel : ViewModelBase
         IsAccPopOpen = false;
         IsInstPopOpen = false;
         IsDlPopOpen = false;
+        IsLoaderPopOpen = false;
         IsInstConfigOpen = false;
         IsVolumePopOpen = false;
     }
@@ -1059,6 +1185,53 @@ public partial class MainWindowViewModel : ViewModelBase
     public string GlobalMemoryGbSummary => $"{MaxMemoryGb} GB";
     public string GlobalJavaSummary => string.IsNullOrWhiteSpace(JavaLabel) ? "自动" : JavaLabel;
 
+    /// <summary>配置弹窗当前那一页：概览 / Java / 内存 / 目录。</summary>
+    [ObservableProperty]
+    private string _configTab = "概览";
+
+    [RelayCommand]
+    private void SelectConfigTab(string tab)
+    {
+        if (!string.IsNullOrEmpty(tab)) ConfigTab = tab;
+    }
+
+    /// <summary>正在编辑的就是当前实例时，底部那颗「设为当前」不该出现。</summary>
+    public bool IsEditingCurrentInstance => EditingInstance is not null && ReferenceEquals(EditingInstance, CurrentInstance);
+
+    /// <summary>目录页那两行路径。没开隔离时"实例文件夹"就是公共游戏根目录，照实显示。</summary>
+    public string EditingGameDirectory =>
+        EditingInstance is { } i ? _launcher.Instances.GameDirectoryFor(i.Source) : "";
+
+    public string EditingSavesDirectory =>
+        EditingInstance is { } i ? Path.Combine(_launcher.Instances.GameDirectoryFor(i.Source), "saves") : "";
+
+    partial void OnEditingInstanceChanged(InstanceModel? value)
+    {
+        OnPropertyChanged(nameof(IsEditingCurrentInstance));
+        OnPropertyChanged(nameof(EditingGameDirectory));
+        OnPropertyChanged(nameof(EditingSavesDirectory));
+    }
+
+    /// <summary>弹窗底部「设为当前」：设完就关窗，改的东西已经先存过了，不留着一个"改了没保存"的歧义。</summary>
+    [RelayCommand]
+    private void MakeEditingInstanceCurrent()
+    {
+        if (EditingInstance is not { } instance) return;
+
+        MakeCurrentInstance(instance);
+        CloseInstanceConfig();
+    }
+
+    /// <summary>目录页那颗「删除」：先关窗再走列表里同一条确认删除流程，不写第二份。</summary>
+    [RelayCommand]
+    private async Task DeleteEditingInstanceAsync()
+    {
+        if (EditingInstance is not { } instance) return;
+
+        CloseInstanceConfig();
+        await DeleteInstanceAsync(instance);
+    }
+
     [RelayCommand]
     private void OpenInstanceConfig(InstanceModel instance)
     {
@@ -1075,6 +1248,7 @@ public partial class MainWindowViewModel : ViewModelBase
 
         RefreshInstJavaOptions();
         IsInstJavaChooserOpen = false;
+        ConfigTab = "概览";
         IsInstConfigOpen = true;
     }
 
@@ -1230,6 +1404,18 @@ public partial class MainWindowViewModel : ViewModelBase
         }
 
         CurrentInstance = Instances.FirstOrDefault(i => i.Id == currentId) ?? Instances.FirstOrDefault();
+
+        // 下拉只列真出现过的加载器：种类再多也撑不爆工具条，没装过的也不摆出来碍事。
+        LoaderChoices.Clear();
+        LoaderChoices.Add(new LoaderOptionModel(LoaderOptionModel.AllName));
+        foreach (var loader in Instances.Select(i => i.Loader)
+                     .Distinct(StringComparer.Ordinal)
+                     .Where(x => x != LoaderOptionModel.AllName)
+                     .OrderBy(x => x, StringComparer.CurrentCulture))
+        {
+            LoaderChoices.Add(new LoaderOptionModel(loader));
+        }
+        MarkLoaderSelected();
         OnPropertyChanged(nameof(HasInstances));
         ApplyInstanceFilter();
     }
@@ -1238,16 +1424,24 @@ public partial class MainWindowViewModel : ViewModelBase
     {
         var query = InstanceSearch.Trim();
 
+        var hits = Instances.Where(m =>
+            (InstanceLoader == LoaderOptionModel.AllName || m.Loader == InstanceLoader) &&
+            (query.Length == 0 ||
+             m.Name.Contains(query, StringComparison.OrdinalIgnoreCase) ||
+             m.MetaText.Contains(query, StringComparison.OrdinalIgnoreCase)));
+
+        // 默认按最近游玩排：没启动过的当成"最久远"沉到底，而不是插在最前面。
+        var sorted = InstanceSort == "名称"
+            ? hits.OrderBy(m => m.Name, StringComparer.CurrentCulture)
+            : hits.OrderByDescending(m => m.Source.LastPlayed ?? DateTime.MinValue);
+
         VisibleInstances.Clear();
-        foreach (var model in Instances)
-        {
-            if (query.Length == 0 ||
-                model.Name.Contains(query, StringComparison.OrdinalIgnoreCase) ||
-                model.MetaText.Contains(query, StringComparison.OrdinalIgnoreCase))
-            {
-                VisibleInstances.Add(model);
-            }
-        }
+        foreach (var model in sorted) VisibleInstances.Add(model);
+
+        OnPropertyChanged(nameof(InstanceCountText));
+        OnPropertyChanged(nameof(HasInstanceFilter));
+        OnPropertyChanged(nameof(HasNoInstanceMatches));
+        OnPropertyChanged(nameof(InstanceEmptyHint));
     }
 
     private PixelBuffer IconFor(Instance instance)
@@ -1840,6 +2034,10 @@ public partial class MainWindowViewModel : ViewModelBase
     [ObservableProperty]
     private bool _hideOnLaunch;
 
+    /// <summary>"ask" | "tray" | "exit" — see <c>LauncherSettings.CloseWindowBehavior</c>.</summary>
+    [ObservableProperty]
+    private string _closeWindowBehavior = "ask";
+
     [ObservableProperty]
     private string _downloadSource = "自动";
 
@@ -1876,6 +2074,67 @@ public partial class MainWindowViewModel : ViewModelBase
     partial void OnVersionIsolationChanged(bool value) => PersistSettings();
 
     partial void OnHideOnLaunchChanged(bool value) => PersistSettings();
+
+    partial void OnCloseWindowBehaviorChanged(string value) => PersistSettings();
+
+    /// <summary>
+    /// Raised when the window has to actually leave: the tray menu's exit item and the close
+    /// prompt's "直接退出". Hiding is <see cref="HideWindowRequested"/>; this one is the real shutdown.
+    /// </summary>
+    public event Action? ExitApplicationRequested;
+
+    [ObservableProperty]
+    private bool _isClosePromptOpen;
+
+    [ObservableProperty]
+    private bool _closePromptRemember;
+
+    /// <summary>
+    /// Every way of leaving the window — the ✕ button, Alt+F4, the taskbar's close item — funnels
+    /// through here so one policy covers all three.
+    /// </summary>
+    public void RequestClose()
+    {
+        switch (CloseWindowBehavior)
+        {
+            case "tray":
+                HideWindowRequested?.Invoke();
+                break;
+            case "exit":
+                ExitApplicationRequested?.Invoke();
+                break;
+            default:
+                ClosePromptRemember = false;
+                IsClosePromptOpen = true;
+                break;
+        }
+    }
+
+    /// <summary>
+    /// One command for both buttons of the prompt; the parameter says which one was pressed.
+    /// Ticking 不再询问 promotes this choice into the setting, so the next close skips the dialog.
+    /// </summary>
+    [RelayCommand]
+    private void AnswerClose(string action)
+    {
+        if (ClosePromptRemember) CloseWindowBehavior = action;
+
+        IsClosePromptOpen = false;
+        ClosePromptRemember = false;
+
+        if (action == "tray") HideWindowRequested?.Invoke();
+        else ExitApplicationRequested?.Invoke();
+    }
+
+    [RelayCommand]
+    private void CancelClose()
+    {
+        IsClosePromptOpen = false;
+        ClosePromptRemember = false;
+    }
+
+    [RelayCommand]
+    private void SetCloseWindowBehavior(string code) => CloseWindowBehavior = code;
 
     partial void OnDownloadThreadsChanged(int value)
     {
@@ -2000,6 +2259,7 @@ public partial class MainWindowViewModel : ViewModelBase
             MaxMemoryGb = Math.Clamp(settings.MaxMemoryMb / 1024, 1, 32);
             VersionIsolation = settings.VersionIsolation;
             HideOnLaunch = settings.HideOnLaunch;
+            CloseWindowBehavior = settings.CloseWindowBehavior;
             DownloadThreads = settings.DownloadThreads;
             DownloadSource = settings.DownloadSource switch
             {
@@ -2068,6 +2328,7 @@ public partial class MainWindowViewModel : ViewModelBase
         settings.MaxMemoryMb = MaxMemoryGb * 1024;
         settings.VersionIsolation = VersionIsolation;
         settings.HideOnLaunch = HideOnLaunch;
+        settings.CloseWindowBehavior = CloseWindowBehavior;
         settings.DownloadThreads = DownloadThreads;
         settings.IsDark = IsDark;
         settings.CustomBackgroundPath = CustomBackgroundPath;
