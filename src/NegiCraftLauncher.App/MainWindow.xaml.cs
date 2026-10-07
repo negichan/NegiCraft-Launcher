@@ -80,6 +80,9 @@ public partial class MainWindow : Window
         PageHome.SizeChanged += (_, _) => LayoutHomeSkinPreview();
         SkinPreview.PositionDragged += OnHomeSkinPreviewDragged;
 
+        // 实例页的列数按页宽算（UniformGrid 只吃列数，不会自己算）。
+        PageInstances.SizeChanged += (_, _) => UpdateInstanceColumns();
+
         // 背景调节窗跟着主窗口的可见性走：主窗口最小化或收进托盘时它不能一个人留在桌面上，
         // 还原时又得自己回来。挂在事件上而不是挂在 OnMinimizeClick / OnCloseClick 里 ——
         // "启动后隐藏启动器"那条路是 VM 直接调 Hide() 的，只盯按钮会漏。
@@ -212,6 +215,43 @@ public partial class MainWindow : Window
     public void DragHomeSkinPreviewForDebug(double dx, double dy) => OnHomeSkinPreviewDragged(dx, dy);
 
     // ==========================================================
+    // 实例页：列数、⋯ 菜单
+    // ==========================================================
+
+    /// <summary>卡片的最小宽度（稿子里的 <c>minmax(268px,1fr)</c>）。放不下就少一列，不硬缩。</summary>
+    private const double InstanceCardMinWidth = 268;
+    private const double InstanceGutter = 12;
+
+    /// <summary>
+    /// 按页宽算列数交给 UniformGrid：卡片既要等宽（自适应拉伸）又要等高
+    /// （底行那句「最近游玩」是贴底摆的），WrapPanel 两样都给不了。
+    /// </summary>
+    private void UpdateInstanceColumns()
+    {
+        var w = PageInstances.ActualWidth;
+        if (_vm is null || w <= 0) return;   // 还没排版（或不在实例页），等下一次尺寸变化
+
+        _vm.InstanceColumns = Math.Max(1, (int)((w + InstanceGutter) / (InstanceCardMinWidth + InstanceGutter)));
+    }
+
+    /// <summary>
+    /// 「⋯」只是把卡片自己那条右键菜单就地开起来 —— 菜单只写一份，右键和按钮走同一个。
+    /// 往上找带 ContextMenu 的那个 Button（卡片本体），逻辑树在这一段是通的。
+    /// </summary>
+    private void OnInstanceMoreClick(object sender, RoutedEventArgs e)
+    {
+        for (FrameworkElement? node = sender as FrameworkElement; node is not null; node = node.Parent as FrameworkElement)
+        {
+            if (node is not Button { ContextMenu: { } } card) continue;
+
+            card.ContextMenu.PlacementTarget = card;
+            card.ContextMenu.IsOpen = true;
+            e.Handled = true;
+            return;
+        }
+    }
+
+    // ==========================================================
     // 托盘
     // ==========================================================
 
@@ -300,8 +340,11 @@ public partial class MainWindow : Window
         // 点关闭只是收进托盘；真正退出走 ExitApplication。
         if (!_isExplicitExit)
         {
+            // Alt+F4 和任务栏缩略图上那扇"关闭窗口"绕不开 OnClosing，所以策略挂在这里：
+            // 这一趟一律先拦下，去向交给 VM 的 RequestClose（托盘 / 退出 / 弹询问窗）。
+            // ✕ 按钮也走同一个入口，两条路不会分出两种行为。
             e.Cancel = true;
-            Hide();
+            _vm?.RequestClose();
             return;
         }
 
@@ -516,8 +559,9 @@ public partial class MainWindow : Window
     /// </summary>
     private void UpdateWindowButtonTone()
     {
-        // 不在首页（背景不可见）、窗口收进了托盘、或者还没量出尺寸 ⇒ 一律按深色算。
-        if (_vm?.IsOnHome != true || !IsVisible || BgRoot.ActualWidth < 1)
+        // 窗口收进了托盘、或者还没量出尺寸 ⇒ 一律按深色算。背景现在每页都在，
+        // 所以这里不再问"在不在首页"。
+        if (!IsVisible || BgRoot.ActualWidth < 1)
         {
             SetWindowButtonTone(false);
             return;
@@ -815,18 +859,12 @@ public partial class MainWindow : Window
     /// <summary>
     /// 播放器该不该在跑。
     ///
-    /// <para><b>声音开着就不能因为切页而停</b>：背景画面只在首页露出，但音频是一整条 ——
-    /// 之前一律按 <c>IsOnHome</c> 暂停，切到设置页音乐就断了。所以这里分开两件事：
-    /// 画面要不要画，和播放器要不要跑。</para>
-    ///
-    /// <para>代价是"不在首页 + 声音开着"时解码器继续跑（不是白烧：那正是声音的来源）。
-    /// 窗口收进托盘时仍然暂停 —— 那时候没人看也没人听。</para>
+    /// <para>背景画面现在每一页都在，"在不在首页"就不再是暂停的理由了；只剩一条：
+    /// 窗口收进托盘时暂停 —— 那时候没人看也没人听。</para>
     /// </summary>
     private void UpdateVideoPlayback()
     {
-        // 在首页要画面，开着声音要音频；两者都没有才值得暂停。
-        var wanted = _vm is { IsOnHome: true } || _vm is { VideoBackgroundSound: true };
-        _videoBackground.SetActive(IsVisible && wanted);
+        _videoBackground.SetActive(IsVisible);
     }
 
     private void OnVideoBackgroundFailed(string message) =>
@@ -842,6 +880,7 @@ public partial class MainWindow : Window
         {
             _vm.HideWindowRequested -= Hide;
             _vm.ShowWindowRequested -= Restore;
+            _vm.ExitApplicationRequested -= ExitApplication;
             _vm.OpenPetRequested -= OnOpenPetRequested;
             _vm.RecallPetRequested -= ClosePetWindow;
             _vm.PropertyChanged -= OnViewModelPropertyChanged;
@@ -854,6 +893,7 @@ public partial class MainWindow : Window
         {
             _vm.HideWindowRequested += Hide;
             _vm.ShowWindowRequested += Restore;
+            _vm.ExitApplicationRequested += ExitApplication;
             _vm.OpenPetRequested += OnOpenPetRequested;
             _vm.RecallPetRequested += ClosePetWindow;
             _vm.PropertyChanged += OnViewModelPropertyChanged;
@@ -1023,23 +1063,12 @@ public partial class MainWindow : Window
         }
 
         // 音量（含"静音 = 音量 0"那一格）：只改播放器音量，不用重新换片。
-        // 但它也决定"离开首页要不要继续播"，所以播放门控要跟着重算一遍。
         // VideoBackgroundSound 现在只是音量的别名，VM 会连着发一声 —— 两个名字走同一条分支，
         // 省得"一个更新了另一个没更新"再分叉一次。
         if (e.PropertyName is nameof(MainWindowViewModel.VideoBackgroundVolume)
                          or nameof(MainWindowViewModel.VideoBackgroundSound))
         {
             _videoBackground.Volume = _vm?.VideoBackgroundVolume ?? 0;
-            UpdateVideoPlayback();
-            return;
-        }
-
-        // 首页才有背景，离开首页就把视频暂停。
-        if (e.PropertyName == nameof(MainWindowViewModel.IsOnHome))
-        {
-            UpdateVideoPlayback();
-            // 背景可见性刚变，图标色要立刻跟上，不能等下一个 600ms 的采样节拍。
-            UpdateWindowButtonTone();
             return;
         }
 
@@ -1114,6 +1143,7 @@ public partial class MainWindow : Window
     {
         if (e.LeftButton != MouseButtonState.Pressed) return;
 
+        BeginDragPerfHold();
         // DragMove 会一路阻塞到松开左键；拖动中抛异常会被 WPF 吞掉，所以包一层。
         try
         {
@@ -1122,11 +1152,50 @@ public partial class MainWindow : Window
         catch (InvalidOperationException)
         {
         }
+        finally
+        {
+            EndDragPerfHold();
+        }
+    }
+
+    /// <summary>
+    /// 拖动这一段的"每帧重画"按住不动：视频来一帧 ⇒ 压在它上面的两层 BlurEffect 跟着跑
+    /// ⇒ 分层窗口整面重呈现。所以掐三个源头——播放器、亮度采样（它自己会用 VisualBrush
+    /// 把整棵 BgRoot 再渲染一遍）、音量悬停轮询（这时鼠标被 DragMove 捕获，问不出东西）。
+    ///
+    /// <para>拆成两个方法是为了让调试桥能走**同一对调用**：脚本不能真去按鼠标拖窗口，
+    /// 而"暂停中那一帧还在不在屏上"恰恰只有看图能判。</para>
+    /// </summary>
+    public void BeginDragPerfHold()
+    {
+        _videoBackground.FreezeForDrag();
+        _bgToneTimer.Stop();
+        _volumeHoverTimer.Stop();
+
+        // 拖动中别去更新头的朝向：窗口的可视变换在移动过程中是旧的，而光标位置是新的，
+        // 两者相减得到的偏移会让头先拧到一个错方向、下一帧再纠正 —— 看着就是"闪一下朝向"。
+        SkinPreview.SuspendPointerLook = true;
+    }
+
+    /// <summary>
+    /// 松手恢复。刻意不在这里同步补采一次亮度：整段拖动里上屏的一直是同一帧，
+    /// 图标色不可能变；而补采要用 <c>VisualBrush</c> 把整棵 <c>BgRoot</c>（含视频）
+    /// 离屏再渲染一遍 —— 在松手那一刻做一次视频面的重新获取，正是"背景黑一下"的现场。
+    /// 600ms 的轮询本来就会跟上，晚一拍没有任何代价。
+    /// </summary>
+    public void EndDragPerfHold()
+    {
+        SkinPreview.SuspendPointerLook = false;
+        _bgToneTimer.Start();
+        _volumeHoverTimer.Start();
+
+        // 恢复播放也推到本轮渲染之后：松手那一帧不该还有别的事做。
+        Dispatcher.BeginInvoke(_videoBackground.ResumeAfterDrag, DispatcherPriority.Background);
     }
 
     private void OnMinimizeClick(object sender, RoutedEventArgs e) => WindowState = WindowState.Minimized;
 
-    private void OnCloseClick(object sender, RoutedEventArgs e) => Hide();
+    private void OnCloseClick(object sender, RoutedEventArgs e) => _vm?.RequestClose();
 
     // ==========================================================
     // 背景拖动平移（弹层打开时，在那块全窗口背板上）
@@ -1358,9 +1427,21 @@ public partial class MainWindow : Window
     /// 主窗口被拖走时带着调节窗一起走 —— 但<b>只限用户没自己摆过</b>的那次自动贴位。
     /// 摆过的话它的位置是用户定的，再跟着跑就是跟丢了。
     /// </summary>
+    private bool _followQueued;
+
     private void FollowMainWindowIfNotPlaced()
     {
-        if (_vm?.BgTuningX is null && _bgTuning is { IsVisible: true } win) PlaceBackgroundTuningWindow(win);
+        if (_vm?.BgTuningX is not null || _bgTuning is not { IsVisible: true }) return;
+
+        // 拖动中 LocationChanged 每帧都来，而摆位只关心最终值 ⇒ 合到本轮排版之后摆一次：
+        // 一帧最多一次，落下来的是最后那个位置。
+        if (_followQueued) return;
+        _followQueued = true;
+        Dispatcher.BeginInvoke(() =>
+        {
+            _followQueued = false;
+            if (_vm?.BgTuningX is null && _bgTuning is { IsVisible: true } win) PlaceBackgroundTuningWindow(win);
+        }, DispatcherPriority.Loaded);
     }
 
     private void OnPopoverBackdropMouseDown(object sender, MouseButtonEventArgs e) =>
@@ -1372,6 +1453,10 @@ public partial class MainWindow : Window
 
     private void OnInstConfigBackdropMouseDown(object sender, MouseButtonEventArgs e) =>
         _vm?.CloseInstanceConfigCommand.Execute(null);
+
+    /// <summary>点询问窗外面 = 取消：关闭这种事不该有一个"点空白也能触发"的出口。</summary>
+    private void OnClosePromptBackdropMouseDown(object sender, MouseButtonEventArgs e) =>
+        _vm?.CancelCloseCommand.Execute(null);
 
     // ==========================================================
     // 文件选择
@@ -1448,6 +1533,13 @@ public partial class MainWindow : Window
     private void OnWindowKeyDown(object sender, KeyEventArgs e)
     {
         if (e.Key is Key.LeftShift or Key.RightShift) SkinPreview.Sneaking = true;
+
+        // 关闭询问窗是拦在"退出"前面的一道，Esc 关它等于按取消 —— 不能让 Esc 顺带把窗口也关了。
+        if (e.Key == Key.Escape && _vm is { IsClosePromptOpen: true })
+        {
+            _vm.CancelCloseCommand.Execute(null);
+            e.Handled = true;
+        }
     }
 
     private void OnWindowKeyUp(object sender, KeyEventArgs e)
