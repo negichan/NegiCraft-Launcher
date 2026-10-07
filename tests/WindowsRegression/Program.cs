@@ -9,6 +9,7 @@ using NegiCraftLauncher.Pet;
 internal static class Program
 {
     private static int _failed;
+    private static int _checked;
 
     [STAThread]
     private static int Main()
@@ -24,11 +25,13 @@ internal static class Program
         Dispatcher.PushFrame(frame);
         run.GetAwaiter().GetResult();
         app.Shutdown();
+        Console.WriteLine($"RESULT: {_checked - _failed}/{_checked} passed");
         return _failed == 0 ? 0 : 1;
     }
 
     private static void Check(string name, bool ok)
     {
+        _checked++;
         Console.WriteLine($"{(ok ? "PASS" : "FAIL")} {name}");
         if (!ok) _failed++;
     }
@@ -79,9 +82,19 @@ internal static class Program
                 host = null;
             }
 
+            var barePet = new PetWindow();
+            try
+            {
+                Check("bare pet defaults to no interception", !barePet.InteractSwallowClicks);
+                Check("bare pet interception icon is hidden",
+                    ((UIElement)barePet.FindName("MenuInteractSwallowIcon")).Visibility == Visibility.Collapsed);
+            }
+            finally { barePet.Close(); }
+
             pet = new PetWindow("", null) { Left = 500, Top = 300 };
             pet.ApplySkin(NegiCraftLauncher.Raster.DefaultSkins.Bytes(false));
             pet.Show();
+            await CheckPetInterception(pet);
             {
                 pet.IsControlMode = true;
                 foreach (var gpu in new[] { false, true })
@@ -104,7 +117,7 @@ internal static class Program
         }
         catch (Exception ex)
         {
-            _failed++;
+            Check("regression run completed without exception", false);
             Console.WriteLine(ex);
         }
         finally
@@ -115,6 +128,70 @@ internal static class Program
                 host?.Close();
             }
             finally { done(); }
+        }
+    }
+
+    private static async Task CheckPetInterception(PetWindow pet)
+    {
+        var modeMenu = (MenuItem)pet.FindName("MenuInteractMode");
+        var swallowMenu = (MenuItem)pet.FindName("MenuInteractSwallow");
+        var swallowIcon = (UIElement)pet.FindName("MenuInteractSwallowIcon");
+
+        bool OutsideClickIsSwallowed()
+        {
+            var click = new NegiCraftLauncher.Pet.Services.GlobalMouseHook.LeftClickEventArgs();
+            // Exercise the real hook handler without injecting a click into another application.
+            click.GetType().GetProperty(nameof(click.ScreenX))!.SetValue(click, -100000);
+            click.GetType().GetProperty(nameof(click.ScreenY))!.SetValue(click, -100000);
+            typeof(PetWindow).GetMethod("OnGlobalLeftButtonDown", BindingFlags.Instance | BindingFlags.NonPublic)!
+                .Invoke(pet, new object?[] { null, click });
+            return click.Swallow;
+        }
+
+        async Task ToggleShortcut()
+        {
+            typeof(PetWindow).GetMethod("OnToggleInterceptModePressed", BindingFlags.Instance | BindingFlags.NonPublic)!
+                .Invoke(pet, new object?[] { null, EventArgs.Empty });
+            await pet.Dispatcher.InvokeAsync(() => { }, DispatcherPriority.Background);
+        }
+
+        try
+        {
+            Check("initialized pet defaults to no interception", !pet.InteractSwallowClicks);
+            Check("initial interception icon is hidden", swallowIcon.Visibility == Visibility.Collapsed);
+            Check("interception menu disabled without interaction", !swallowMenu.IsEnabled);
+            await ToggleShortcut();
+            Check("shortcut ignored without interaction", !pet.InteractSwallowClicks);
+
+            modeMenu.RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));
+            Check("interaction menu installs mouse hook", pet.IsInteractMode && pet.IsInteractHookInstalled);
+            Check("enabling interaction keeps interception off", !pet.InteractSwallowClicks);
+            Check("interception menu enabled with interaction", swallowMenu.IsEnabled);
+            Check("default interaction passes outside clicks through", !OutsideClickIsSwallowed());
+
+            swallowMenu.RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));
+            Check("menu explicitly enables interception", pet.InteractSwallowClicks);
+            Check("enabled interception icon is visible", swallowIcon.Visibility == Visibility.Visible);
+            Check("explicit interception swallows outside clicks", OutsideClickIsSwallowed());
+            await ToggleShortcut();
+            Check("shortcut disables interception", !pet.InteractSwallowClicks);
+            Check("shortcut updates interception icon", swallowIcon.Visibility == Visibility.Collapsed);
+            Check("disabled interception passes outside clicks through", !OutsideClickIsSwallowed());
+            await ToggleShortcut();
+            Check("shortcut enables interception", pet.InteractSwallowClicks);
+
+            swallowMenu.RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));
+            Check("menu explicitly disables interception", !pet.InteractSwallowClicks);
+            modeMenu.RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));
+            Check("disabling interaction removes mouse hook", !pet.IsInteractMode && !pet.IsInteractHookInstalled);
+            Check("interception menu disabled again", !swallowMenu.IsEnabled);
+            modeMenu.RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));
+            Check("reenabling interaction preserves interception off", pet.IsInteractMode && !pet.InteractSwallowClicks);
+        }
+        finally
+        {
+            pet.IsInteractMode = false;
+            pet.InteractSwallowClicks = false;
         }
     }
 
