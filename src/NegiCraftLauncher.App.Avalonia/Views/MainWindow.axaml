@@ -796,32 +796,10 @@
                         </Grid>
 
                         <!-- .list -->
-                        <Border Grid.Row="1" Background="#111114" BorderBrush="#26262b" BorderThickness="1" CornerRadius="14" ClipToBounds="True"
-                                IsVisible="{Binding HasResources}">
-                                <ListBox x:Name="ResourceList" ItemsSource="{Binding FilteredResources}"
-                                         Background="Transparent" BorderThickness="0" Padding="0"
-                                         ScrollViewer.HorizontalScrollBarVisibility="Disabled">
-                                    <ListBox.ItemsPanel>
-                                        <ItemsPanelTemplate>
-                                            <VirtualizingStackPanel />
-                                        </ItemsPanelTemplate>
-                                    </ListBox.ItemsPanel>
-                                    <ListBox.ItemContainerTheme>
-                                        <ControlTheme TargetType="ListBoxItem">
-                                            <Setter Property="Padding" Value="0"/>
-                                            <Setter Property="Height" Value="61"/>
-                                            <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
-                                            <Setter Property="Focusable" Value="False"/>
-                                            <Setter Property="Template">
-                                                <ControlTemplate>
-                                                    <ContentPresenter Content="{TemplateBinding Content}"
-                                                                      ContentTemplate="{TemplateBinding ContentTemplate}"
-                                                                      HorizontalContentAlignment="Stretch"/>
-                                                </ControlTemplate>
-                                            </Setter>
-                                        </ControlTheme>
-                                    </ListBox.ItemContainerTheme>
-                                    <ListBox.ItemTemplate>
+                        <ScrollViewer Grid.Row="1" IsVisible="{Binding HasResources}">
+                            <Border Background="#111114" BorderBrush="#26262b" BorderThickness="1" CornerRadius="14" ClipToBounds="True" VerticalAlignment="Top">
+                                <ItemsControl ItemsSource="{Binding FilteredResources}">
+                                    <ItemsControl.ItemTemplate>
                                         <DataTemplate x:DataType="models:ResourceModel">
                                             <!-- .list-item -->
                                             <Border BorderBrush="#26262b" BorderThickness="0,0,0,1" Padding="16,12">
@@ -835,7 +813,7 @@
 
                                                     <!-- .grow: b + desc -->
                                                     <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
-                                                        <TextBlock Text="{Binding Name}" FontWeight="Bold" FontSize="13" Foreground="#fafafa" TextTrimming="CharacterEllipsis"/>
+                                                        <TextBlock Text="{Binding Name}" FontWeight="Bold" FontSize="13" Foreground="#fafafa"/>
                                                         <TextBlock Text="{Binding Desc}" FontSize="12" Foreground="#a1a1aa" TextTrimming="CharacterEllipsis"/>
                                                     </StackPanel>
 
@@ -853,9 +831,10 @@
                                                 </Grid>
                                             </Border>
                                         </DataTemplate>
-                                    </ListBox.ItemTemplate>
-                                </ListBox>
-                        </Border>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </Border>
+                        </ScrollViewer>
 
                         <StackPanel Grid.Row="1" IsVisible="{Binding !HasResources}"
                                     HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="12">

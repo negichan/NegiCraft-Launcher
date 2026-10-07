@@ -24,10 +24,11 @@ public partial class MainWindowViewModel : ViewModelBase
     private readonly ModrinthClient _modrinth = new();
     private ModrinthInstaller _modrinthInstaller = new();
     private readonly Dictionary<string, PixelBuffer> _iconCache = new(StringComparer.OrdinalIgnoreCase);
-    private readonly ResourceBrowserViewModel _resourceBrowser;
+    private readonly List<ResourceModel> _gameResources = new();
 
     private bool _applyingSettings;
     private CancellationTokenSource? _saveDebounce;
+    private CancellationTokenSource? _resourceLoad;
     private CancellationTokenSource? _bannerTimer;
     private TaskCompletionSource<string?>? _dialogTcs;
 
@@ -101,8 +102,6 @@ public partial class MainWindowViewModel : ViewModelBase
 
         _launcher = new Launcher();
         _launcher.Initialize();
-        _resourceBrowser = new ResourceBrowserViewModel(_modrinth);
-        _resourceBrowser.PropertyChanged += (_, e) => OnPropertyChanged(e);
 
         _bgArt = PixelArt.CreateBackground(_launcher.Settings.IsDark);
 
@@ -991,7 +990,6 @@ public partial class MainWindowViewModel : ViewModelBase
     {
         foreach (var i in Instances) i.IsCurrent = ReferenceEquals(i, value);
         OnPropertyChanged(nameof(CanLaunch));
-        _resourceBrowser.SetInstance(value?.Source);
     }
 
     partial void OnInstanceSearchChanged(string value) => ApplyInstanceFilter();
@@ -1513,25 +1511,63 @@ public partial class MainWindowViewModel : ViewModelBase
     // Resources
     // ==========================================================
 
-    public string CurrentResCategory
-    {
-        get => _resourceBrowser.CurrentResCategory;
-        set => _resourceBrowser.CurrentResCategory = value;
-    }
+    [ObservableProperty]
+    private string _currentResCategory = "game";
 
-    public string ResourceSearch
-    {
-        get => _resourceBrowser.ResourceSearch;
-        set => _resourceBrowser.ResourceSearch = value;
-    }
+    public ObservableCollection<ResourceModel> FilteredResources { get; } = new();
 
-    public IReadOnlyList<ResourceModel> FilteredResources => _resourceBrowser.FilteredResources;
-    public bool IsLoadingResources => _resourceBrowser.IsLoadingResources;
-    public string ResourceEmptyText => _resourceBrowser.ResourceEmptyText;
-    public bool HasResources => _resourceBrowser.HasResources;
+    [ObservableProperty]
+    private string _resourceSearch = "";
+
+    [ObservableProperty]
+    private bool _isLoadingResources;
+
+    [ObservableProperty]
+    private string _resourceEmptyText = "暂无内容";
+
+    public bool HasResources => FilteredResources.Count > 0;
+
+    partial void OnCurrentResCategoryChanged(string value) => UpdateFilteredResources();
+
+    partial void OnResourceSearchChanged(string value) => UpdateFilteredResources();
 
     [RelayCommand]
     private void SelectResCategory(string category) => CurrentResCategory = category;
+
+    private void UpdateFilteredResources()
+    {
+        _resourceLoad?.Cancel();
+        var token = (_resourceLoad = new CancellationTokenSource()).Token;
+
+        if (CurrentResCategory == "game")
+        {
+            IsLoadingResources = false;
+            ResourceEmptyText = _gameResources.Count == 0 ? "正在加载版本列表…" : "没有匹配的版本";
+            FillFiltered(_gameResources);
+            return;
+        }
+
+        _ = LoadModrinthAsync(CurrentResCategory, ResourceSearch.Trim(), token);
+    }
+
+    private void FillFiltered(IEnumerable<ResourceModel> source)
+    {
+        var query = ResourceSearch.Trim();
+
+        FilteredResources.Clear();
+        foreach (var item in source)
+        {
+            if (CurrentResCategory == "game" && query.Length > 0 &&
+                !item.Name.Contains(query, StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            FilteredResources.Add(item);
+        }
+
+        OnPropertyChanged(nameof(HasResources));
+    }
 
     private async Task LoadGameVersionsAsync()
     {
@@ -1545,11 +1581,11 @@ public partial class MainWindowViewModel : ViewModelBase
 
             var icon = PixelArt.CreateBlock("grass");
 
-            var resources = new List<ResourceModel>();
+            _gameResources.Clear();
             foreach (var version in manifest.Versions.Where(v => v.IsRelease).Take(200))
             {
                 var known = installed.Contains(version.Id);
-                resources.Add(new ResourceModel
+                _gameResources.Add(new ResourceModel
                 {
                     Name = version.Id,
                     Desc = version.Description,
@@ -1560,11 +1596,90 @@ public partial class MainWindowViewModel : ViewModelBase
                     IsActionEnabled = !known,
                 });
             }
-            _resourceBrowser.SetGameVersions(resources);
         }
         catch (Exception ex)
         {
-            _resourceBrowser.SetGameVersionError(ex.Message);
+            ResourceEmptyText = $"版本列表加载失败：{ex.Message}";
+        }
+
+        if (CurrentResCategory == "game") UpdateFilteredResources();
+    }
+
+    private async Task LoadModrinthAsync(string category, string query, CancellationToken ct)
+    {
+        IsLoadingResources = true;
+        ResourceEmptyText = "正在搜索…";
+        FilteredResources.Clear();
+
+        try
+        {
+            // Let typing settle before spending a request on every keystroke.
+            await Task.Delay(350, ct).ConfigureAwait(true);
+
+            if (CurrentInstance is not { } instance)
+            {
+                ResourceEmptyText = "先选择一个实例，才能按它的版本和加载器筛选。";
+                return;
+            }
+
+            var projectType = category switch
+            {
+                "mod" => ModrinthClient.ProjectTypeMod,
+                "rp" => ModrinthClient.ProjectTypeResourcePack,
+                "shader" => ModrinthClient.ProjectTypeShader,
+                _ => null,
+            };
+
+            if (projectType is null)
+            {
+                ResourceEmptyText = "整合包安装即将支持。";
+                return;
+            }
+
+            var loader = LoaderFacet(instance.Source.Loader);
+            var hits = await _modrinth.SearchAsync(projectType, query, 30, 0,
+                instance.Source.VersionId, loader, ct).ConfigureAwait(true);
+
+            if (ct.IsCancellationRequested || CurrentResCategory != category) return;
+
+            var icon = PixelArt.CreateBlock(category switch
+            {
+                "mod" => "dirt",
+                "shader" => "log",
+                _ => "stone",
+            });
+
+            FilteredResources.Clear();
+            foreach (var hit in hits)
+            {
+                FilteredResources.Add(new ResourceModel
+                {
+                    Name = hit.Title,
+                    Desc = hit.Description,
+                    Stat = FormatCount(hit.Downloads),
+                    Category = category,
+                    ProjectId = hit.Id,
+                    IconBitmap = icon,
+                });
+            }
+
+            ResourceEmptyText = query.Length == 0 ? "没有找到内容" : $"没有和「{query}」匹配的内容";
+        }
+        catch (OperationCanceledException)
+        {
+            // A newer search replaced this one.
+        }
+        catch (Exception ex)
+        {
+            ResourceEmptyText = $"加载失败：{ex.Message}";
+        }
+        finally
+        {
+            if (!ct.IsCancellationRequested)
+            {
+                IsLoadingResources = false;
+                OnPropertyChanged(nameof(HasResources));
+            }
         }
     }
 
@@ -1576,6 +1691,13 @@ public partial class MainWindowViewModel : ViewModelBase
         "Forge" => "forge",
         "NeoForge" => "neoforge",
         _ => null,
+    };
+
+    private static string FormatCount(int downloads) => downloads switch
+    {
+        >= 100_000_000 => $"{downloads / 100_000_000.0:0.#}亿",
+        >= 10_000 => $"{downloads / 10_000.0:0.#}万",
+        _ => downloads.ToString(),
     };
 
     [RelayCommand]
