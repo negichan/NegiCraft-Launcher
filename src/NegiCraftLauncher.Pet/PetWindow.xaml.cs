@@ -806,14 +806,6 @@ public partial class PetWindow : Window
             return;
         }
 
-        // 双击切换手动潜行（Avalonia 是 DoubleTapped；WPF 的 Grid 没有 DoubleClick 事件，看 ClickCount）。
-        if (e.ClickCount == 2)
-        {
-            _motion.ToggleManualSneak();
-            PetPreview.Sneaking = _motion.Sneaking;
-            MenuSneakIcon.Visibility = Vis(_motion.ManualSneakToggle);
-        }
-
         if (_motion.Mode == PetInteractionMode.NavigateToCoord)
         {
             ClearNavigation();

@@ -24,8 +24,7 @@
            PointerMoved="OnRootPointerMoved"
            PointerReleased="OnRootPointerReleased"
            PointerCaptureLost="OnRootPointerCaptureLost"
-           ContextRequested="OnRootContextRequested"
-           DoubleTapped="OnRootDoubleTapped">
+           ContextRequested="OnRootContextRequested">
         <Panel.ContextMenu>
             <ContextMenu x:Name="PetContextMenu">
                 <MenuItem Header="置顶显示" x:Name="MenuTopmost" Click="OnToggleTopmostClick">
