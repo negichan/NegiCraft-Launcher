@@ -864,7 +864,8 @@ public sealed class SkinPreviewControl : Grid
         //   是顺的，人物的小动作却一顿一顿。两条后端限速到同一个节拍，节奏才是整的。
         if (now < _nextDraw) return;
         _nextDraw += MinFrame;
-        if (_nextDraw < now) _nextDraw = now + MinFrame;   // 久停（切页 / 卡了一下）后重新对齐，不连补几帧
+        // Keep a small overshoot; resetting on every late callback skips the following frame.
+        if (now - _nextDraw >= MinFrame) _nextDraw = now + MinFrame;
 
         _lastFrame = now;
         _viewDirty = false;
