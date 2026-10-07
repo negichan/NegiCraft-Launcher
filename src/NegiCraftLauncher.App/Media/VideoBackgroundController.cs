@@ -244,16 +244,64 @@ internal sealed class VideoBackgroundController : IDisposable
     }
 
     /// <summary>
-    /// 只在首页且窗口可见时才播。背景只在首页显示，切到设置页还继续解码 4K 是白烧 CPU。
+    /// 播放器该不该在跑。窗口收进托盘时停，摆回屏幕就恢复 —— 不再跟"在哪一页"有关，
+    /// 背景现在每一页都在。
     /// </summary>
     public void SetActive(bool active)
     {
+        // 意图先记下来，再判"有没有片"：不然收进托盘时才 Load 完的视频会因为
+        // _wanted 还停在初值而偷偷开播。
+        _wanted = active;
         if (_disposed || _path is null) return;
 
         try
         {
-            if (active) _player.Play();
+            // 拖动期间（<see cref="_frozen" />）任何"该播"的指令都只记下意图，不真去 Play：
+            // 不然一个 600ms 的属性变化就能把刚按停的画面又放开。
+            if (active && !_frozen) _player.Play();
             else _player.Pause();
+        }
+        catch (Exception)
+        {
+        }
+    }
+
+    private bool _wanted = true;
+    private bool _frozen;
+
+    /// <summary>
+    /// 拖动窗口时把播放器按停。移动窗口不脏化可视树，所以"没有新帧"就等于"这块不再重画"——
+    /// 连带压在它上面的两层 <c>BlurEffect</c> 也不再每帧跑。
+    ///
+    /// <para>没有做"当前帧快照"那一步：那要重新对齐几何（<c>Viewbox</c> 是按帧原生尺寸算的）
+    /// 还要一次性分配整幅 RTB，而按停已经让 WPF 根本不重绘这块。<c>ScrubbingEnabled=true</c>
+    /// 保证暂停时最后那一帧仍然在屏上。</para>
+    /// </summary>
+    public void FreezeForDrag()
+    {
+        if (_frozen || _disposed || _path is null) return;
+
+        _frozen = true;
+        try
+        {
+            _player.Pause();
+        }
+        catch (Exception)
+        {
+        }
+    }
+
+    /// <summary>松手恢复。只有按停前"该播"才真播回去。</summary>
+    public void ResumeAfterDrag()
+    {
+        if (!_frozen) return;
+
+        _frozen = false;
+        if (_disposed || _path is null) return;
+
+        try
+        {
+            if (_wanted) _player.Play();
         }
         catch (Exception)
         {
@@ -277,13 +325,8 @@ internal sealed class VideoBackgroundController : IDisposable
         // 防御性再落一遍：成本为零，且不依赖"DP 值一定全程有效"这种假设。
         ApplySound();
 
-        try
-        {
-            _player.Play();
-        }
-        catch (Exception)
-        {
-        }
+        // 首播也走 SetActive：不然一次 MediaOpened 会绕过"窗口收进托盘"和"正在拖动"两道门。
+        SetActive(_wanted);
     }
 
     private void OnMediaFailed(object? sender, ExceptionEventArgs e)
@@ -301,7 +344,8 @@ internal sealed class VideoBackgroundController : IDisposable
         try
         {
             _player.Position = TimeSpan.Zero;
-            _player.Play();
+            // 循环重启也不能绕过那两道门（收进托盘 / 正在拖动）。松手时 ResumeAfterDrag 会从 0 接着播。
+            if (_wanted && !_frozen) _player.Play();
         }
         catch (Exception)
         {

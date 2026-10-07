@@ -117,6 +117,7 @@ public sealed class DebugBridge
                         // `pop bg` 现在开的是**独立那扇**调节窗（弹层整个搬走了）。
                         // 动词名留着不改，是为了 design/ 里那批抓图脚本不用跟着改。
                         _vm.IsBgTuningOpen = arg == "bg";
+                        _vm.IsLoaderPopOpen = arg == "loader";
                         if (arg == "cfg" && _vm.Instances.FirstOrDefault() is { } inst)
                         {
                             _vm.OpenInstanceConfigCommand.Execute(inst);
@@ -142,6 +143,69 @@ public sealed class DebugBridge
                         }
                     });
                     return "OK";
+                // 实例页的过滤/排序和配置弹窗的 tab —— 这些都是**只能靠看图判**的布局，
+                // 而脚本不能去点鼠标，所以给它们各留一个能拨的入口。
+                // 语法：`inst-filter search:zzz` / `sort:名称` / `loader:Fabric` / `tab:Java`。
+                case "inst-filter":
+                    await PetDebugMailbox.Ui(() =>
+                    {
+                        var head = arg.Split(':', 2);
+                        var value = head.Length > 1 ? head[1] : "";
+                        switch (head[0])
+                        {
+                            case "search":
+                                _vm.InstanceSearch = value;
+                                break;
+                            case "sort":
+                                _vm.InstanceSort = string.IsNullOrEmpty(value) ? "最近游玩" : value;
+                                break;
+                            case "loader":
+                                _vm.InstanceLoader = string.IsNullOrEmpty(value) ? LoaderOptionModel.AllName : value;
+                                break;
+                            case "tab":
+                                _vm.ConfigTab = string.IsNullOrEmpty(value) ? "概览" : value;
+                                break;
+                        }
+                    });
+                    return "OK";
+                // 关闭策略的三条出口都得能被脚本走一遍：真去点 ✕ 会抢焦点，而"退出"那条会把进程
+                // 一起带走，所以这里直接拨 VM —— behavior 改设置、request 走真策略、answer 走真命令。
+                case "close":
+                    await PetDebugMailbox.Ui(() =>
+                    {
+                        if (arg.StartsWith("behavior:", StringComparison.Ordinal))
+                        {
+                            _vm.CloseWindowBehavior = arg["behavior:".Length..];
+                        }
+                        else if (arg.StartsWith("answer:", StringComparison.Ordinal))
+                        {
+                            _vm.AnswerCloseCommand.Execute(arg["answer:".Length..]);
+                        }
+                        else if (arg == "remember:on")
+                        {
+                            _vm.ClosePromptRemember = true;
+                        }
+                        else if (arg == "remember:off")
+                        {
+                            _vm.ClosePromptRemember = false;
+                        }
+                        else if (arg == "request")
+                        {
+                            _vm.RequestClose();
+                        }
+                        else if (arg == "prompt")
+                        {
+                            _vm.IsClosePromptOpen = true;
+                        }
+                    });
+                    return $"OK behavior={_vm.CloseWindowBehavior} prompt={_vm.IsClosePromptOpen} remember={_vm.ClosePromptRemember}";
+                // 拖动性能档：脚本不能真按着鼠标拖窗口，而"暂停中那一帧还在不在屏上"
+                // 只有看图能判 —— 所以这里调的是和 OnDragAreaMouseDown 同一对方法。
+                case "drag":
+                    if (_window is not MainWindow dragHost) return "ERR not main window";
+                    if (arg == "begin") await PetDebugMailbox.Ui(() => dragHost.BeginDragPerfHold());
+                    else if (arg == "end") await PetDebugMailbox.Ui(() => dragHost.EndDragPerfHold());
+                    return $"OK {arg}";
                 case "pet":
                     // 启动器专属：开关进程内托管的桌宠窗口。
                     await PetDebugMailbox.Ui(() =>

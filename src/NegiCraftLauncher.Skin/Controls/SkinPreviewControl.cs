@@ -1055,10 +1055,17 @@ public sealed class SkinPreviewControl : Grid
         });
     }
 
+    /// <summary>
+    /// 临时不再更新头的朝向。宿主窗口正在被拖动时置 true：那段路上"窗口的可视变换"是旧的、
+    /// "光标在窗口内的位置"是新的，两者相减会让头先拧到错方向再纠正一下。
+    /// 只掐更新，不改朝向 —— 松手后下一次鼠标移动自然接上。
+    /// </summary>
+    public bool SuspendPointerLook { get; set; }
+
     private void OnHostMouseMove(object sender, MouseEventArgs e)
     {
         if (_dragging || _moving || _hostWindow is null) return;
-        if (!HeadFollowsHostMouse) return;
+        if (!HeadFollowsHostMouse || SuspendPointerLook) return;
         if (_pose.Walking) return;
 
         var headInWindow = TranslatePoint(new Point(StageWidth / 2, 52 + StageOffsetY), _hostWindow);

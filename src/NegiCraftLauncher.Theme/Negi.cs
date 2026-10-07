@@ -75,17 +75,6 @@ public static class Negi
 
     public static void SetDanger(DependencyObject element, bool value) => element.SetValue(DangerProperty, value);
 
-    /// <summary>
-    /// 侧栏"处在首页"的透光态。Avalonia 侧是一个后代选择器
-    /// （<c>Border.Sidebar.OnHome Button.NavBtn:not(.Active)</c>），WPF 里样式管不到后代，
-    /// 所以把这个状态也挂到每个导航按钮上，由样式自己判断。
-    /// </summary>
-    public static readonly DependencyProperty OnHomeProperty = RegisterState("OnHome");
-
-    public static bool GetOnHome(DependencyObject element) => (bool)element.GetValue(OnHomeProperty);
-
-    public static void SetOnHome(DependencyObject element, bool value) => element.SetValue(OnHomeProperty, value);
-
     private static DependencyProperty RegisterState(string name) =>
         DependencyProperty.RegisterAttached(
             name,
