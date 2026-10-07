@@ -68,7 +68,7 @@
                 </MenuItem>
                 <MenuItem Header="拦截模式（左Alt+CapsLock切换）" x:Name="MenuInteractSwallow" Click="OnToggleInteractSwallowClick" IsEnabled="False">
                     <MenuItem.Icon>
-                        <materialIcons:MaterialIcon x:Name="MenuInteractSwallowIcon" Kind="Check" Width="16" Height="16" IsVisible="False"/>
+                        <materialIcons:MaterialIcon x:Name="MenuInteractSwallowIcon" Kind="Check" Width="16" Height="16" IsVisible="True"/>
                     </MenuItem.Icon>
                 </MenuItem>
                 <Separator/>
