@@ -22,4 +22,7 @@
     <Project Path="libs/MinecraftSkinRender/MinecraftSkinRender.csproj" />
     <Project Path="libs/MinecraftSkinRender.Core/MinecraftSkinRender.Core.csproj" />
   </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/ResourceBrowserRegression/ResourceBrowserRegression.csproj" />
+  </Folder>
 </Solution>
