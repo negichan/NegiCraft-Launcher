@@ -96,7 +96,7 @@ public partial class PetWindow : Window
     private GlobalMouseHook? _interactHook;
     private GlobalKeyboardHook? _keyboardHook;
     private bool _isInteractMode;
-    private bool _interactSwallowClicks;
+    private bool _interactSwallowClicks = true;
 
     public bool IsInteractMode
     {
