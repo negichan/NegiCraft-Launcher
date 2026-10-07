@@ -1125,7 +1125,7 @@
                                 <TextBox neg:Negi.CornerRadius="10"
                                          Background="#111114" BorderBrush="#26262b"
                                          neg:Negi.Placeholder="搜索"
-                                         Text="{Binding ResourceSearch}"
+                                         Text="{Binding ResourceSearch, UpdateSourceTrigger=PropertyChanged}"
                                          Padding="34,0,10,0" VerticalAlignment="Stretch" />
                                 <materialIcons:MaterialIcon Kind="Magnify" Width="16" Height="16"
                                                             Foreground="#a1a1aa"
@@ -1135,10 +1135,42 @@
                         </neg:NegiGrid>
 
                         <!-- .list -->
-                        <ScrollViewer Grid.Row="1" Visibility="{Binding HasResources, Converter={StaticResource BoolToVis}}">
-                            <Border Background="#111114" BorderBrush="#26262b" BorderThickness="1" CornerRadius="14" ClipToBounds="True" VerticalAlignment="Top">
-                                <ItemsControl ItemsSource="{Binding FilteredResources}">
-                                    <ItemsControl.ItemTemplate>
+                        <Border Grid.Row="1" Background="#111114" BorderBrush="#26262b" BorderThickness="1" CornerRadius="14" ClipToBounds="True"
+                                Visibility="{Binding HasResources, Converter={StaticResource BoolToVis}}">
+                                <ListBox x:Name="ResourceList" ItemsSource="{Binding FilteredResources}"
+                                         Background="Transparent" BorderThickness="0" Padding="0"
+                                         ScrollViewer.CanContentScroll="True"
+                                         VirtualizingPanel.IsVirtualizing="True"
+                                         VirtualizingPanel.VirtualizationMode="Recycling"
+                                         VirtualizingPanel.ScrollUnit="Pixel">
+                                    <ListBox.Template>
+                                        <ControlTemplate TargetType="{x:Type ListBox}">
+                                            <ScrollViewer CanContentScroll="True" HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
+                                                <ItemsPresenter />
+                                            </ScrollViewer>
+                                        </ControlTemplate>
+                                    </ListBox.Template>
+                                    <ListBox.ItemsPanel>
+                                        <ItemsPanelTemplate>
+                                            <VirtualizingStackPanel />
+                                        </ItemsPanelTemplate>
+                                    </ListBox.ItemsPanel>
+                                    <ListBox.ItemContainerStyle>
+                                        <Style TargetType="{x:Type ListBoxItem}">
+                                            <Setter Property="Padding" Value="0" />
+                                            <Setter Property="Height" Value="61" />
+                                            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                                            <Setter Property="Focusable" Value="False" />
+                                            <Setter Property="Template">
+                                                <Setter.Value>
+                                                    <ControlTemplate TargetType="{x:Type ListBoxItem}">
+                                                        <ContentPresenter HorizontalAlignment="Stretch" />
+                                                    </ControlTemplate>
+                                                </Setter.Value>
+                                            </Setter>
+                                        </Style>
+                                    </ListBox.ItemContainerStyle>
+                                    <ListBox.ItemTemplate>
                                         <DataTemplate>
                                             <!-- .list-item -->
                                             <Border BorderBrush="#26262b" BorderThickness="0,0,0,1" Padding="16,12">
@@ -1152,7 +1184,7 @@
 
                                                     <!-- .grow：名字 + 说明 -->
                                                     <neg:NegiStackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
-                                                        <TextBlock Text="{Binding Name}" FontWeight="Bold" FontSize="13" Foreground="#fafafa" />
+                                                        <TextBlock Text="{Binding Name}" FontWeight="Bold" FontSize="13" Foreground="#fafafa" TextTrimming="CharacterEllipsis" />
                                                         <TextBlock Text="{Binding Desc}" FontSize="12" Foreground="#a1a1aa" TextTrimming="CharacterEllipsis" />
                                                     </neg:NegiStackPanel>
 
@@ -1170,10 +1202,9 @@
                                                 </neg:NegiGrid>
                                             </Border>
                                         </DataTemplate>
-                                    </ItemsControl.ItemTemplate>
-                                </ItemsControl>
-                            </Border>
-                        </ScrollViewer>
+                                    </ListBox.ItemTemplate>
+                                </ListBox>
+                        </Border>
 
                         <neg:NegiStackPanel Grid.Row="1" Visibility="{Binding HasResources, Converter={StaticResource BoolToVis}, ConverterParameter=invert}"
                                             HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="12">
