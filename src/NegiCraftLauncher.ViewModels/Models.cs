@@ -35,7 +35,7 @@ public partial class InstanceModel : ObservableObject
     ///
     /// <para>从没启动过时只说「未启动过」，不加"最近游玩"前缀 ——「最近游玩 未启动过」读着像坏了。</para>
     /// </summary>
-    public string LastPlayedText => Source.LastPlayed is { } when ? "最近游玩 " + RelativeTime(when) : "未启动过";
+    public string LastPlayedText => Source.LastPlayed is { } played ? "最近游玩 " + RelativeTime(played) : "未启动过";
 
     /// <summary>刚刚 / N 分钟前 / N 小时前 / 昨天 / N 天前 / N 周前。跨天用"昨天"而不是"1 天前"，是人的说法。</summary>
     private static string RelativeTime(DateTime when)
@@ -88,7 +88,8 @@ public partial class LoaderOptionModel : ObservableObject
     private bool _isSelected;
 }
 
-public partial class AccountModel : ObservableObject{
+public partial class AccountModel : ObservableObject
+{
     public AccountModel(GameAccount source) => Source = source;
 
     public GameAccount Source { get; }
