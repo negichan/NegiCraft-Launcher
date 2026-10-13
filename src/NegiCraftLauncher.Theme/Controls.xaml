@@ -184,6 +184,7 @@
 
     <!-- ============ Button ============ -->
     <Style TargetType="{x:Type Button}">
+        <Setter Property="FocusVisualStyle" Value="{x:Null}" />
         <Setter Property="Background" Value="Transparent" />
         <Setter Property="Foreground" Value="{DynamicResource ForegroundBrush}" />
         <Setter Property="BorderBrush" Value="Transparent" />
@@ -226,7 +227,7 @@
         <Setter Property="Foreground" Value="{DynamicResource ForegroundBrush}" />
         <Setter Property="BorderBrush" Value="{DynamicResource BorderLineBrush}" />
         <Setter Property="BorderThickness" Value="1" />
-        <Setter Property="Padding" Value="12,0" />
+        <Setter Property="Padding" Value="10,0" />
         <Setter Property="MinHeight" Value="36" />
         <Setter Property="VerticalContentAlignment" Value="Center" />
         <Setter Property="CaretBrush" Value="{DynamicResource ForegroundBrush}" />
@@ -243,29 +244,52 @@
                             CornerRadius="{Binding Path=(neg:Negi.CornerRadius), RelativeSource={RelativeSource TemplatedParent}}"
                             MinHeight="{TemplateBinding MinHeight}"
                             TextElement.Foreground="{TemplateBinding Foreground}">
-                        <Grid>
-                            <!-- 水印。Avalonia 的 Watermark 由 TextBox 自己画；WPF 要自己搭，
-                                 并靠下面 Text="" 的触发器显隐。 -->
-                            <TextBlock x:Name="Watermark"
-                                       Text="{Binding Path=(neg:Negi.Placeholder), RelativeSource={RelativeSource TemplatedParent}}"
-                                       Foreground="{DynamicResource MutedForegroundBrush}"
-                                       HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
-                                       VerticalAlignment="{TemplateBinding VerticalContentAlignment}"
-                                       Margin="{TemplateBinding Padding}"
-                                       IsHitTestVisible="False"
-                                       Visibility="Collapsed" />
-                            <!-- WPF 的 TextBox 模板**必须**有一个叫 PART_ContentHost 的
-                                 ScrollViewer 或 AdornerDecorator，否则输入区不显示。 -->
-                            <ScrollViewer x:Name="PART_ContentHost"
-                                          Margin="{TemplateBinding Padding}"
-                                          Focusable="False"
-                                          HorizontalScrollBarVisibility="{TemplateBinding ScrollViewer.HorizontalScrollBarVisibility}"
-                                          VerticalScrollBarVisibility="{TemplateBinding ScrollViewer.VerticalScrollBarVisibility}" />
+                        <!-- 照 ShadUI 的 TextBox 模板结构：Border → Grid「左槽 * 文字」，
+                             Padding 只挂在整行上。左槽（neg:Negi.LeadingIcon，对应 Avalonia 的
+                             InnerLeftContent）有内容时文字被布局推开，槽是空的就整列 Collapsed。
+                             以前图标是叠在控件外面 + 手调一个 padding-left，于是图标位置和文字
+                             起始位是两条互不相干的数，改一处就得重新量另一处。 -->
+                        <Grid Margin="{TemplateBinding Padding}">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <ContentControl x:Name="LeadingIcon" Grid.Column="0"
+                                            Content="{Binding Path=(neg:Negi.LeadingIcon), RelativeSource={RelativeSource TemplatedParent}}"
+                                            VerticalAlignment="Center" Focusable="False" IsTabStop="False"
+                                            IsHitTestVisible="False"
+                                            Margin="0,0,6,0" />
+                            <Grid Grid.Column="1">
+                                <!-- 水印。Avalonia 的 Watermark 由 TextBox 自己画；WPF 要自己搭，
+                                     并靠下面 Text="" 的触发器显隐。内缩已经由外层那一格管了，这里不再吃 Padding。 -->
+                                <TextBlock x:Name="Watermark"
+                                           Text="{Binding Path=(neg:Negi.Placeholder), RelativeSource={RelativeSource TemplatedParent}}"
+                                           Foreground="{DynamicResource MutedForegroundBrush}"
+                                           HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                           VerticalAlignment="{TemplateBinding VerticalContentAlignment}"
+                                           IsHitTestVisible="False"
+                                           Visibility="Collapsed" />
+                                <!-- WPF 的 TextBox 模板**必须**有一个叫 PART_ContentHost 的
+                                     ScrollViewer 或 AdornerDecorator，否则输入区不显示。 -->
+                                <ScrollViewer x:Name="PART_ContentHost"
+                                              Focusable="False"
+                                              VerticalAlignment="{TemplateBinding VerticalContentAlignment}"
+                                              HorizontalScrollBarVisibility="{TemplateBinding ScrollViewer.HorizontalScrollBarVisibility}"
+                                              VerticalScrollBarVisibility="{TemplateBinding ScrollViewer.VerticalScrollBarVisibility}" />
+                            </Grid>
                         </Grid>
                     </Border>
                     <ControlTemplate.Triggers>
                         <Trigger Property="Text" Value="">
                             <Setter TargetName="Watermark" Property="Visibility" Value="Visible" />
+                        </Trigger>
+                        <!-- 槽是空的就整列收掉，不然那 8 的间距会白占位，把全站没有图标的输入框
+                             文字都往右推一格。
+                             ⚠️ 只能这么写（模板级 Trigger + TargetName）。写成 ContentControl 自己的
+                             Style + DataTrigger{RelativeSource Self} 时，值明明是 MaterialIcon 却判成
+                             null，图标整个不见了 —— 症状还不报错，量出来才发现。 -->
+                        <Trigger Property="neg:Negi.LeadingIcon" Value="{x:Null}">
+                            <Setter TargetName="LeadingIcon" Property="Visibility" Value="Collapsed" />
                         </Trigger>
                         <Trigger Property="IsMouseOver" Value="True">
                             <Setter TargetName="Border" Property="BorderBrush" Value="{DynamicResource RingBrush}" />
@@ -273,6 +297,114 @@
                         <Trigger Property="IsKeyboardFocusWithin" Value="True">
                             <Setter TargetName="Border" Property="BorderBrush" Value="{DynamicResource RingBrush}" />
                         </Trigger>
+                        <Trigger Property="IsEnabled" Value="False">
+                            <Setter Property="Opacity" Value="0.5" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- ============ SearchBox（专用搜索输入框，含搜索图标、占位符与一键清空按钮） ============ -->
+    <Style x:Key="SearchBoxStyle" TargetType="{x:Type TextBox}">
+        <Setter Property="Background" Value="#111114" />
+        <Setter Property="Foreground" Value="#fafafa" />
+        <Setter Property="BorderBrush" Value="#26262b" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="Padding" Value="21,0,24,0" />
+        <Setter Property="Height" Value="32" />
+        <Setter Property="MinHeight" Value="32" />
+        <Setter Property="VerticalContentAlignment" Value="Center" />
+        <Setter Property="CaretBrush" Value="#fafafa" />
+        <Setter Property="SelectionBrush" Value="{DynamicResource RingBrush}" />
+        <Setter Property="FontSize" Value="12.5" />
+        <Setter Property="neg:Negi.CornerRadius" Value="8" />
+        <Setter Property="neg:Negi.Placeholder" Value="搜索..." />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="{x:Type TextBox}">
+                    <Border x:Name="Border"
+                            Background="{TemplateBinding Background}"
+                            BorderBrush="{TemplateBinding BorderBrush}"
+                            BorderThickness="{TemplateBinding BorderThickness}"
+                            CornerRadius="{Binding Path=(neg:Negi.CornerRadius), RelativeSource={RelativeSource TemplatedParent}}"
+                            Height="{TemplateBinding Height}"
+                            MinHeight="{TemplateBinding MinHeight}">
+                        <Grid>
+                            <!-- 左侧放大镜图标：距左 6px，宽 13px，与文字紧凑贴合（视觉间距 ~5px）；IsHitTestVisible="False" 防击穿 -->
+                            <Path x:Name="SearchIcon"
+                                  Data="M9.5,3A6.5,6.5 0 0,1 16,9.5C16,11.11 15.41,12.59 14.44,13.73L14.71,14H15.5L20.5,19L19,20.5L14,15.5V14.71L13.73,14.44C12.59,15.41 11.11,16 9.5,16A6.5,6.5 0 0,1 3,9.5A6.5,6.5 0 0,1 9.5,3M9.5,5C7,5 5,7 5,9.5C5,12 7,14 9.5,14C12,14 14,12 14,9.5C14,7 12,5 9.5,5Z"
+                                  Fill="#71717a" Width="13" Height="13" Stretch="Uniform"
+                                  HorizontalAlignment="Left" VerticalAlignment="Center"
+                                  Margin="6,0,0,0" IsHitTestVisible="False" />
+
+                            <!-- 水印文字：左留 21px 避开图标，右留 24px 避开清空按钮 -->
+                            <TextBlock x:Name="Watermark"
+                                       Text="{Binding Path=(neg:Negi.Placeholder), RelativeSource={RelativeSource TemplatedParent}}"
+                                       Foreground="#71717a"
+                                       FontSize="{TemplateBinding FontSize}"
+                                       HorizontalAlignment="Left"
+                                       VerticalAlignment="{TemplateBinding VerticalContentAlignment}"
+                                       Margin="{TemplateBinding Padding}"
+                                       IsHitTestVisible="False"
+                                       Visibility="Collapsed" />
+
+                            <!-- 输入宿主：铺满整个横向，Padding 内缩留给图标和清空按钮；点左空白直接把光标置于首位 -->
+                            <ScrollViewer x:Name="PART_ContentHost"
+                                          Focusable="False"
+                                          Padding="{TemplateBinding Padding}"
+                                          VerticalAlignment="{TemplateBinding VerticalContentAlignment}"
+                                          HorizontalScrollBarVisibility="Hidden"
+                                          VerticalScrollBarVisibility="Hidden" />
+
+                            <!-- 右侧一键清空按钮：有文字时显现，点击清除文本并重新聚焦 -->
+                            <Button x:Name="PART_ClearButton"
+                                    Command="neg:Negi.ClearTextCommand"
+                                    Focusable="False" IsTabStop="False"
+                                    Cursor="Hand"
+                                    HorizontalAlignment="Right"
+                                    VerticalAlignment="Center"
+                                    Margin="0,0,6,0"
+                                    Width="20" Height="20"
+                                    ToolTip="清空">
+                                <Button.Template>
+                                    <ControlTemplate TargetType="{x:Type Button}">
+                                        <Border x:Name="BtnBorder" Background="Transparent" CornerRadius="4" Width="20" Height="20">
+                                            <Path x:Name="IconPath"
+                                                  Data="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"
+                                                  Fill="#71717a" Width="12" Height="12" Stretch="Uniform"
+                                                  HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                        </Border>
+                                        <ControlTemplate.Triggers>
+                                            <Trigger Property="IsMouseOver" Value="True">
+                                                <Setter TargetName="BtnBorder" Property="Background" Value="#27272a" />
+                                                <Setter TargetName="IconPath" Property="Fill" Value="#fafafa" />
+                                            </Trigger>
+                                            <Trigger Property="IsPressed" Value="True">
+                                                <Setter TargetName="BtnBorder" Property="Background" Value="#3f3f46" />
+                                            </Trigger>
+                                        </ControlTemplate.Triggers>
+                                    </ControlTemplate>
+                                </Button.Template>
+                            </Button>
+                        </Grid>
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <!-- 无文字时：显示占位符，收起清空按钮 -->
+                        <Trigger Property="Text" Value="">
+                            <Setter TargetName="Watermark" Property="Visibility" Value="Visible" />
+                            <Setter TargetName="PART_ClearButton" Property="Visibility" Value="Collapsed" />
+                        </Trigger>
+                        <!-- 悬停态：边框微亮 -->
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="Border" Property="BorderBrush" Value="#3f3f46" />
+                        </Trigger>
+                        <!-- 聚焦态：边框亮起（shadcn 风格） -->
+                        <Trigger Property="IsKeyboardFocusWithin" Value="True">
+                            <Setter TargetName="Border" Property="BorderBrush" Value="{DynamicResource RingBrush}" />
+                        </Trigger>
+                        <!-- 禁用态 -->
                         <Trigger Property="IsEnabled" Value="False">
                             <Setter Property="Opacity" Value="0.5" />
                         </Trigger>

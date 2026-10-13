@@ -1,4 +1,5 @@
 using System.Windows;
+using System.Windows.Input;
 using System.Windows.Media;
 
 namespace NegiCraftLauncher.Theme;
@@ -47,6 +48,25 @@ public static class Negi
     public static void SetPlaceholder(DependencyObject element, string value) =>
         element.SetValue(PlaceholderProperty, value);
 
+    /// <summary>
+    /// 输入框左边的图标槽 —— 对应 Avalonia <c>TextBox.InnerLeftContent</c>（ShadUI 的搜索框就是用它放的放大镜）。
+    ///
+    /// <para>为什么要有这个东西：没有槽，图标只能"叠在输入框上面 + 给文字手调一个左内边距"，
+    /// 于是图标位置和文字起始位是两条互不相干的数 —— 调一处就得重新量另一处，实例页那颗搜索框
+    /// 就是这么来回改了三版 padding。槽在模板里排成一列，间距由布局给，padding 只管自己那 12。</para>
+    /// </summary>
+    public static readonly DependencyProperty LeadingIconProperty =
+        DependencyProperty.RegisterAttached(
+            "LeadingIcon",
+            typeof(object),
+            typeof(Negi),
+            new FrameworkPropertyMetadata(null));
+
+    public static object? GetLeadingIcon(DependencyObject element) => element.GetValue(LeadingIconProperty);
+
+    public static void SetLeadingIcon(DependencyObject element, object? value) =>
+        element.SetValue(LeadingIconProperty, value);
+
     /// <summary>对应 Avalonia 的 <c>Classes="... Active"</c>（导航按钮的选中态）。</summary>
     public static readonly DependencyProperty ActiveProperty = RegisterState("Active");
 
@@ -75,6 +95,36 @@ public static class Negi
 
     public static void SetDanger(DependencyObject element, bool value) => element.SetValue(DangerProperty, value);
 
+    /// <summary>清空文本框内容的路由命令（配合搜索框清空按钮使用）。</summary>
+    public static readonly RoutedUICommand ClearTextCommand =
+        new("ClearText", "ClearText", typeof(Negi));
+
+    static Negi()
+    {
+        CommandManager.RegisterClassCommandBinding(
+            typeof(System.Windows.Controls.TextBox),
+            new CommandBinding(ClearTextCommand, OnClearTextExecuted, OnClearTextCanExecute));
+    }
+
+    private static void OnClearTextCanExecute(object sender, CanExecuteRoutedEventArgs e)
+    {
+        if (sender is System.Windows.Controls.TextBox tb)
+        {
+            e.CanExecute = !string.IsNullOrEmpty(tb.Text);
+            e.Handled = true;
+        }
+    }
+
+    private static void OnClearTextExecuted(object sender, ExecutedRoutedEventArgs e)
+    {
+        if (sender is System.Windows.Controls.TextBox tb)
+        {
+            tb.Text = string.Empty;
+            tb.Focus();
+            e.Handled = true;
+        }
+    }
+
     private static DependencyProperty RegisterState(string name) =>
         DependencyProperty.RegisterAttached(
             name,
@@ -82,3 +132,4 @@ public static class Negi
             typeof(Negi),
             new FrameworkPropertyMetadata(false, FrameworkPropertyMetadataOptions.AffectsRender));
 }
+

@@ -64,6 +64,37 @@ public static class Pop
 
     public static void SetAnchor(DependencyObject element, string value) => element.SetValue(AnchorProperty, value);
 
+    /// <summary>
+    /// 落点改成跟着触发控件算，不再手写 Margin：<c>UnderLeft</c> / <c>UnderCenter</c> / <c>UnderRight</c>。
+    /// 空着就用 XAML 的 Margin（老弹层都这么摆）。
+    ///
+    /// <para>为什么要这个：Margin 是**布局坐标**，触发控件却由一整排东西决定位置 ——
+    /// 搜索框宽度、标题字号、内容列内边距动一个，写死的数字就偏一次，而偏了只有看图才发现，
+    /// 看图发现了还得重新量。稿子那边这两个浮层都是运行时按按钮矩形摆的，这里照做。</para>
+    /// </summary>
+    public static readonly DependencyProperty PinProperty =
+        DependencyProperty.RegisterAttached(
+            "Pin",
+            typeof(string),
+            typeof(Pop),
+            new PropertyMetadata(""));
+
+    public static string GetPin(DependencyObject element) => (string)element.GetValue(PinProperty);
+
+    public static void SetPin(DependencyObject element, string value) => element.SetValue(PinProperty, value);
+
+    /// <summary>卡片上沿与触发控件下沿之间的间隙（DIP）。稿子的下拉都是 6。</summary>
+    public static readonly DependencyProperty PinGapProperty =
+        DependencyProperty.RegisterAttached(
+            "PinGap",
+            typeof(double),
+            typeof(Pop),
+            new PropertyMetadata(6.0));
+
+    public static double GetPinGap(DependencyObject element) => (double)element.GetValue(PinGapProperty);
+
+    public static void SetPinGap(DependencyObject element, double value) => element.SetValue(PinGapProperty, value);
+
     private static void OnIsOpenChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
     {
         if (d is not FrameworkElement element) return;
@@ -111,6 +142,10 @@ public static class Pop
         private double _reveal0;   // 行程开始时可见的高度（屏幕单位）
         private double _anchorY = 1;
 
+        // Pop.Pin 打开后卡片停的那次平移（相对 XAML 的 Margin）。落定期间一直挂着，
+        // 所以 Rest() 之外的每一段矩阵都得把它加进平移里。
+        private double _pinX, _pinY;
+
         // 打开时间线上的位置（ms）：被打断时从卡片当前所在处接着走。
         private double _p;
         private double _from;
@@ -133,6 +168,7 @@ public static class Pop
 
         public void Open()
         {
+            _pinX = _pinY = 0;
             if (!Measure())
             {
                 _scale0 = FallbackScale;
@@ -219,7 +255,7 @@ public static class Pop
             {
                 StopRendering();
                 _p = TotalMs;
-                _target.RenderTransform = null;
+                SetRestTransform();
                 _target.Clip = null;
                 // 这里 Avalonia 是 ClearValue 回落到 .Open 类；WPF 没有类选择器，只能显式写。
                 _target.IsHitTestVisible = true;
@@ -244,7 +280,7 @@ public static class Pop
                 ? Smooth(Peak, Dip, q / dipEnds)
                 : Smooth(Dip, 1, (q - dipEnds) / (1 - dipEnds));
 
-            _transform.Matrix = new Matrix(scale, 0, 0, scale, 0, 0);
+            _transform.Matrix = new Matrix(scale, 0, 0, scale, _pinX, _pinY);
             _target.RenderTransform = _transform;
             _target.Opacity = 1;
             _target.Clip = null;
@@ -260,10 +296,20 @@ public static class Pop
             var scale = Lerp(_scale0, top, e);
             var local = Lerp(_reveal0 / _scale0, _popH, e);
 
-            _transform.Matrix = new Matrix(scale, 0, 0, scale, _offsetX * (1 - e), _offsetY * (1 - e));
+            _transform.Matrix = new Matrix(scale, 0, 0, scale,
+                                          _offsetX * (1 - e) + _pinX, _offsetY * (1 - e) + _pinY);
             _target.RenderTransform = _transform;
             _target.Opacity = 1;
             _target.Clip = ClipFor(local);
+        }
+
+        // 落定时的变换：Pop.Pin 用的是 RenderTransform，它不影响布局，所以要一路挂着 ——
+        // 撤成 null 卡片就弹回 XAML 的 Margin 那个位置（等于白挪）。
+        private void SetRestTransform()
+        {
+            _target.RenderTransform = _pinX == 0 && _pinY == 0
+                ? null
+                : new MatrixTransform(new Matrix(1, 0, 0, 1, _pinX, _pinY));
         }
 
         private void Rest()
@@ -353,18 +399,44 @@ public static class Pop
             _offsetX = triggerAnchor.X - popAnchor.X;
             _offsetY = triggerAnchor.Y - popAnchor.Y;
             _reveal0 = Math.Min(th, _popH);
+
+            var pin = GetPin(_target);
+            if (pin.Length > 0)
+            {
+                // 触发控件与卡片各自的左上角（锚点减去同一偏移，省一次 TransformToVisual）。
+                var tLeft = new Point(triggerAnchor.X - fx * tw, triggerAnchor.Y - fy * th);
+                var pLeft = new Point(popAnchor.X - fx * w, popAnchor.Y - fy * h);
+                var gap = GetPinGap(_target);
+                var wantX = pin switch
+                {
+                    "UnderCenter" => tLeft.X + (tw - _popW) / 2,
+                    "UnderRight" => tLeft.X + tw - _popW,
+                    _ => tLeft.X,
+                };
+                // 别飞出宿主右边缘（稿子里那两个浮层也是这么夹的：贴左摆，摆不下了往回收）。
+                var maxX = Math.Max(12, host.ActualWidth - _popW - 12);
+                wantX = Math.Clamp(wantX, 12, maxX);
+
+                _pinX = wantX - pLeft.X;
+                _pinY = tLeft.Y + th + gap - pLeft.Y;
+
+                // 行程从**贴好之后**的位置起算，起点仍然是触发控件那一角。
+                _offsetX -= _pinX;
+                _offsetY -= _pinY;
+            }
+
             return true;
         }
 
-        // ⚠️ 这张表要与 Avalonia 版**逐字一致**：那边没有 "TopLeft" 分支，
-        // 写 Anchor="TopLeft" 会落到 `_` 变成 BottomLeft。这里也不补 —— 补了就出现
-        // "同一份 XAML 两个平台表现不同"的隐性分歧。要支持得两边一起加。
+        // ⚠️ 这张表要与 Avalonia 版**逐字一致** —— 两边差一个分支就会出现"同一份 XAML 两个平台
+        // 表现不同"的隐性分歧（浮层会跑到完全不同的角落）。要加分支得两边一起加。
         private static (double X, double Y) AnchorFraction(string anchor) => anchor switch
         {
             "BottomRight" => (1, 1),
             "BottomCenter" => (0.5, 1),
             "TopRight" => (1, 0),
             "TopCenter" => (0.5, 0),
+            "TopLeft" => (0, 0),
             "Center" => (0.5, 0.5),
             _ => (0, 1),
         };

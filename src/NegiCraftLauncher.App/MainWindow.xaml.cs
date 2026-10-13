@@ -1,6 +1,8 @@
 using System.ComponentModel;
 using System.Globalization;
 using System.IO;
+using System.Linq;
+using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
@@ -235,10 +237,10 @@ public partial class MainWindow : Window
     }
 
     /// <summary>
-    /// 「⋯」只是把卡片自己那条右键菜单就地开起来 —— 菜单只写一份，右键和按钮走同一个。
-    /// 往上找带 ContextMenu 的那个 Button（卡片本体），逻辑树在这一段是通的。
+    /// 「⋯」只是把这一行自己那条右键菜单就地开起来 —— 菜单只写一份，右键和按钮走同一个。
+    /// 往上找带 ContextMenu 的那个 Button（卡片本体 / 列表行 / 目录行都是它），逻辑树在这一段是通的。
     /// </summary>
-    private void OnInstanceMoreClick(object sender, RoutedEventArgs e)
+    private void OnRowMoreClick(object sender, RoutedEventArgs e)
     {
         for (FrameworkElement? node = sender as FrameworkElement; node is not null; node = node.Parent as FrameworkElement)
         {
@@ -886,6 +888,8 @@ public partial class MainWindow : Window
             _vm.PropertyChanged -= OnViewModelPropertyChanged;
             _vm.ThemeChanged -= OnThemeChanged;
             _vm.BackgroundFramingChanged -= ApplyBackgroundFraming;
+            _vm.RequestAddModFile -= OnRequestAddModFile;
+            _vm.RequestAddResourcePackFile -= OnRequestAddResourcePackFile;
         }
 
         _vm = DataContext as MainWindowViewModel;
@@ -901,6 +905,8 @@ public partial class MainWindow : Window
 
             // 取景只改变换、不碰像素，所以单独一条事件：拖动平移时一次调色都不该发生。
             _vm.BackgroundFramingChanged += ApplyBackgroundFraming;
+            _vm.RequestAddModFile += OnRequestAddModFile;
+            _vm.RequestAddResourcePackFile += OnRequestAddResourcePackFile;
 
             // 设置里存着视频壁纸的话，DataContext 一到就该把它挂上。
             ApplyVideoBackground();
@@ -1139,6 +1145,94 @@ public partial class MainWindow : Window
         Activate();
     }
 
+    /// <summary>
+    /// 拖边缘改大小。<b>无边框 + AllowsTransparency 的窗口没有原生边框可拖</b>：壳子外面那 60px
+    /// 是全透明像素，系统按 alpha 把点击直接放行给桌面，"边框"在这个窗口上并不存在。
+    /// 所以在 <c>WM_NCHITTEST</c> 上把**壳子那一圈**报成 HTLEFT / HTTOPRIGHT …，交回系统跑它自己的
+    /// 尺寸循环 —— 光标、Aero 贴边、MinWidth/MinHeight 全归系统管，比在 PointerMove 里自己改矩形干净。
+    /// 只在壳子边缘 ±6 DIP 内接管，别处一律放行，否则会把内容区的点击吃掉。
+    /// </summary>
+    protected override void OnSourceInitialized(EventArgs e)
+    {
+        base.OnSourceInitialized(e);
+        if (PresentationSource.FromVisual(this) is HwndSource source) source.AddHook(ResizeHitTestHook);
+    }
+
+    private IntPtr ResizeHitTestHook(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
+    {
+        const int wmNcHitTest = 0x0084;
+        if (msg != wmNcHitTest || WindowState != WindowState.Normal) return IntPtr.Zero;
+
+        // lParam 是两个带符号 16 位（屏幕物理像素）。
+        var packed = (long)lParam;
+        var screen = new Point(unchecked((short)(packed & 0xFFFF)), unchecked((short)((packed >> 16) & 0xFFFF)));
+        var code = ResizeHitCode(LocalFromScreen(screen));
+        if (code == 0) return IntPtr.Zero;
+
+        handled = true;
+        return new IntPtr(code);
+    }
+
+    /// <summary>屏幕物理点 → 本窗口内 DIP 坐标。无边框窗口没有非客户区，所以窗口原点就是客户区原点。</summary>
+    private Point LocalFromScreen(Point screen)
+    {
+        if (PresentationSource.FromVisual(this)?.CompositionTarget is not CompositionTarget target)
+        {
+            return new Point(-1e9, -1e9);
+        }
+
+        var dip = target.TransformFromDevice.Transform(screen);
+        return new Point(dip.X - Left, dip.Y - Top);
+    }
+
+    /// <summary>这个窗口内坐标落在壳子的哪条改大小把手上；0 = 不在把手上（交回系统照常处理）。</summary>
+    private int ResizeHitCode(Point local)
+    {        var shell = new Rect(Shell.TranslatePoint(new Point(0, 0), this), Shell.RenderSize);
+        const double grip = 6;
+        var left = local.X >= shell.Left - grip && local.X <= shell.Left + grip;
+        var right = local.X >= shell.Right - grip && local.X <= shell.Right + grip;
+        var top = local.Y >= shell.Top - grip && local.Y <= shell.Top + grip;
+        var bottom = local.Y >= shell.Bottom - grip && local.Y <= shell.Bottom + grip;
+
+        // HT 码：10 左 11 右 12 上 13 左上 14 右上 15 下 16 左下 17 右下。
+        return (left, right, top, bottom) switch
+        {
+            (true, _, true, _) => 13,
+            (_, true, true, _) => 14,
+            (true, _, _, true) => 16,
+            (_, true, _, true) => 17,
+            (true, _, _, _) => 10,
+            (_, true, _, _) => 11,
+            (_, _, true, _) => 12,
+            (_, _, _, true) => 15,
+            _ => 0,
+        };
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct NativePoint
+    {
+        public int X;
+        public int Y;
+    }
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool GetCursorPos(out NativePoint point);
+
+    /// <summary>光标的屏幕物理坐标 —— 与 WM_NCHITTEST 的 lParam 同一个口径，用来验换算。</summary>
+    private static bool NativeCursor(out Point screen)
+    {
+        if (!GetCursorPos(out var p))
+        {
+            screen = default;
+            return false;
+        }
+
+        screen = new Point(p.X, p.Y);
+        return true;
+    }
+
     private void OnDragAreaMouseDown(object sender, MouseButtonEventArgs e)
     {
         if (e.LeftButton != MouseButtonState.Pressed) return;
@@ -1156,6 +1250,65 @@ public partial class MainWindow : Window
         {
             EndDragPerfHold();
         }
+    }
+
+    /// <summary>
+    /// 调试桥的 <c>hit</c>：报一个点（窗口内 DIP，写成 <c>hit 220,90</c>）落在哪几颗控件的矩形里，
+    /// <c>hit bounds</c> 则只报矩形。脚本不能摸鼠标，"探针该扎哪儿""这块到底是谁的"就靠这个对。
+    /// 答的是**几何**包含关系、不含 z 序 —— 谁真收点击由排版顺序决定（拖拽带就在内容层之下）。
+    /// </summary>
+    public string HitDebug(string arg)
+    {
+        var probes = new (string Name, FrameworkElement? Element)[]
+        {
+            ("band", DragBand), ("pill", FolderPillBtn), ("loader", LoaderFilterBtn),
+            ("search", SearchBox), ("folderPop", FolderPop), ("loaderPop", LoaderPop)
+        };
+
+        if (arg == "bounds")
+        {
+            return string.Join(" ", probes.Select(p => $"{p.Name}=[{RectText(p.Element)}]")) +
+                   $" win=[{Left:0.#},{Top:0.#} {ActualWidth:0.#}x{ActualHeight:0.#} scale={VisualTreeHelper.GetDpi(this).DpiScaleX:0.##}]";
+        }
+
+        // `hit map`：拿真实光标位置对一遍"钩子里那套换算"和"WPF 自己认为的光标在哪"。
+        // 跨进程 SendMessage 造出来的 WM_NCHITTEST 走不到真实 DPI 管线，只能这样验换算。
+        if (arg == "map")
+        {
+            if (!NativeCursor(out var cur)) return "ERR no cursor";
+            var local = LocalFromScreen(cur);
+            var wpf = Mouse.GetPosition(this);
+            return $"cur=({cur.X:0.#},{cur.Y:0.#}) local=({local.X:0.#},{local.Y:0.#}) wpf=({wpf.X:0.#},{wpf.Y:0.#}) " +
+                   $"shell=[{RectText(Shell)}] ht={ResizeHitCode(local)}";
+        }
+
+        var bits = arg.Split(',', StringSplitOptions.RemoveEmptyEntries);
+        if (bits.Length < 2 ||
+            !double.TryParse(bits[0], NumberStyles.Float, CultureInfo.InvariantCulture, out var x) ||
+            !double.TryParse(bits[1], NumberStyles.Float, CultureInfo.InvariantCulture, out var y))
+        {
+            return "ERR usage: hit <x>,<y> | hit bounds";
+        }
+
+        var point = new Point(x, y);
+        var on = probes.Where(p => WindowRect(p.Element).Contains(point)).Select(p => p.Name);
+        return $"hit by={(on.Any() ? string.Join(",", on) : "none")} ht={ResizeHitCode(point)}";
+    }
+
+    /// <summary>元素在窗口 DIP 坐标系里的矩形。<c>TranslatePoint</c> 是带上 RenderTransform 的，
+    /// 所以浮层开着时读到的是它真正停住的位置（Pop.Pin 那次平移也算在内）。</summary>
+    private Rect WindowRect(FrameworkElement? element)
+    {
+        if (element is null) return Rect.Empty;
+        var at = element.TranslatePoint(new Point(0, 0), this);
+        return new Rect(at, new Size(element.ActualWidth, element.ActualHeight));
+    }
+
+    private string RectText(FrameworkElement? element)
+    {
+        if (element is null) return "n/a";
+        var r = WindowRect(element);
+        return $"{r.X:0.#},{r.Y:0.#} {r.Width:0.#}x{r.Height:0.#}";
     }
 
     /// <summary>
@@ -1524,6 +1677,159 @@ public partial class MainWindow : Window
         };
 
         if (dialog.ShowDialog(this) == true) _vm?.SetInstJavaPathCommand.Execute(dialog.FileName);
+    }
+
+    private void OnRequestAddModFile()
+    {
+        var vm = _vm;
+        if (vm is null) return;
+
+        var dlg = new Microsoft.Win32.OpenFileDialog
+        {
+            Title = "选择要添加的模组 (.jar)",
+            Filter = "Minecraft 模组 (*.jar)|*.jar|所有文件 (*.*)|*.*",
+            Multiselect = true
+        };
+        if (dlg.ShowDialog(this) == true && dlg.FileNames.Length > 0)
+        {
+            var targetDir = vm.EditingModsDirectory;
+            try
+            {
+                Directory.CreateDirectory(targetDir);
+                foreach (var file in dlg.FileNames)
+                {
+                    var dest = Path.Combine(targetDir, Path.GetFileName(file));
+                    File.Copy(file, dest, overwrite: true);
+                }
+                vm.RefreshInstanceManageDataCommand.Execute(null);
+                vm.ShowBanner($"已添加 {dlg.FileNames.Length} 个模组。");
+            }
+            catch (Exception ex)
+            {
+                vm.ShowBanner($"添加模组失败：{ex.Message}");
+            }
+        }
+    }
+
+    private void OnRequestAddResourcePackFile()
+    {
+        var vm = _vm;
+        if (vm is null) return;
+
+        var dlg = new Microsoft.Win32.OpenFileDialog
+        {
+            Title = "选择要添加的资源包 (.zip)",
+            Filter = "Minecraft 资源包 (*.zip)|*.zip|所有文件 (*.*)|*.*",
+            Multiselect = true
+        };
+        if (dlg.ShowDialog(this) == true && dlg.FileNames.Length > 0)
+        {
+            var targetDir = vm.EditingResourcePacksDirectory;
+            try
+            {
+                Directory.CreateDirectory(targetDir);
+                foreach (var file in dlg.FileNames)
+                {
+                    var dest = Path.Combine(targetDir, Path.GetFileName(file));
+                    File.Copy(file, dest, overwrite: true);
+                }
+                vm.RefreshInstanceManageDataCommand.Execute(null);
+                vm.ShowBanner($"已添加 {dlg.FileNames.Length} 个资源包。");
+            }
+            catch (Exception ex)
+            {
+                vm.ShowBanner($"添加资源包失败：{ex.Message}");
+            }
+        }
+    }
+
+    // ==========================================================
+    // 实例页：游戏目录与整合包
+    // ==========================================================
+
+    /// <summary>点外面 = 取消。导入这条路一旦跑起来就在任务列表里，不必靠这张对话框盯。</summary>
+    private void OnPackBackdropMouseDown(object sender, MouseButtonEventArgs e) =>
+        _vm?.ClosePackImportCommand.Execute(null);
+
+    private void OnAddFolderBackdropMouseDown(object sender, MouseButtonEventArgs e) =>
+        _vm?.CloseAddFolderCommand.Execute(null);
+
+    private void OnPickPackFileClick(object sender, MouseButtonEventArgs e)
+    {
+        var dialog = new Microsoft.Win32.OpenFileDialog
+        {
+            Title = "选择整合包",
+            Filter = "整合包|*.mrpack;*.zip|Modrinth (.mrpack)|*.mrpack|压缩包 (.zip)|*.zip|所有文件|*.*",
+            Multiselect = false,
+        };
+
+        if (dialog.ShowDialog(this) == true) _vm?.OfferPackFile(dialog.FileName);
+    }
+
+    /// <summary>.NET 8 起 WPF 自己有目录选择框，不必再拼 SHBrowseForFolder。</summary>
+    private void OnPickGameFolderClick(object sender, RoutedEventArgs e)
+    {
+        var dialog = new Microsoft.Win32.OpenFolderDialog { Title = "选择已有的游戏目录" };
+        if (dialog.ShowDialog(this) == true) _vm?.OfferNewFolder(dialog.FolderName);
+    }
+
+    private void OnCopyFolderPath(object sender, RoutedEventArgs e)
+    {
+        if (sender is not FrameworkElement { DataContext: GameFolderModel folder }) return;
+
+        try
+        {
+            Clipboard.SetText(folder.Path);
+        }
+        catch (Exception)
+        {
+            // 剪贴板被别的进程占住是 Windows 上的常事，复制不成不值得弹一句错。
+        }
+    }
+
+    /// <summary>
+    ///     拖文件进窗口 = 导入整合包。
+    ///
+    ///     <para><b>DragOver 每动一下就来一次</b>，所以遮罩只在该亮的时候亮着写；真正判"离开了"要看
+    ///     指针是不是出了窗口边界 —— 子元素之间穿来穿去也会发 DragLeave，直接熄就会一路闪。</para>
+    /// </summary>
+    private void OnWindowDragOver(object sender, DragEventArgs e)
+    {
+        if (_vm is not { } vm) return;
+
+        if (!e.Data.GetDataPresent(DataFormats.FileDrop))
+        {
+            e.Effects = DragDropEffects.None;
+            return;
+        }
+
+        vm.IsDropOverlayVisible = true;
+        e.Effects = DragDropEffects.Copy;
+        e.Handled = true;
+    }
+
+    private void OnWindowDragLeave(object sender, DragEventArgs e)
+    {
+        if (_vm is not { } vm) return;
+
+        var point = e.GetPosition(this);
+        if (point.X < 0 || point.Y < 0 || point.X > ActualWidth || point.Y > ActualHeight)
+        {
+            vm.IsDropOverlayVisible = false;
+        }
+    }
+
+    private void OnWindowDrop(object sender, DragEventArgs e)
+    {
+        if (_vm is not { } vm) return;
+
+        vm.IsDropOverlayVisible = false;
+
+        // 只接第一个文件：一次拖进来五个包，串行导入要排十分钟，不如让人再拖一次。
+        if (e.Data.GetData(DataFormats.FileDrop) is not string[] { Length: > 0 } files) return;
+
+        vm.OfferPackFile(files[0]);
+        e.Handled = true;
     }
 
     // ==========================================================

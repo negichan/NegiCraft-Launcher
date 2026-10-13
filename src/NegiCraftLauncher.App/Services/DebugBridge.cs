@@ -118,6 +118,12 @@ public sealed class DebugBridge
                         // 动词名留着不改，是为了 design/ 里那批抓图脚本不用跟着改。
                         _vm.IsBgTuningOpen = arg == "bg";
                         _vm.IsLoaderPopOpen = arg == "loader";
+                        // 目录浮层 / 导入对话框 / 添加目录对话框 / 拖放遮罩：全都是"点了才出现"的面，
+                        // 脚本不能真去点，所以这里一并留了拨的地方（遮罩平时只有拖着文件掠过才亮）。
+                        _vm.IsFolderPopOpen = arg == "folder";
+                        _vm.IsPackImportOpen = arg == "pack";
+                        _vm.IsAddFolderOpen = arg == "addfolder";
+                        _vm.IsDropOverlayVisible = arg == "drop";
                         if (arg == "cfg" && _vm.Instances.FirstOrDefault() is { } inst)
                         {
                             _vm.OpenInstanceConfigCommand.Execute(inst);
@@ -168,6 +174,52 @@ public sealed class DebugBridge
                         }
                     });
                     return "OK";
+                // 实例页的两种排法：列表模式是整模板换掉，只有看图能判它抄对没抄对。
+                case "inst-view":
+                    await PetDebugMailbox.Ui(() => _vm.InstanceViewMode = arg == "list" ? "list" : "grid");
+                    return $"OK {_vm.InstanceViewMode}";
+                // 按序号切目录（脚本不知道用户盘上有哪些路径，序号稳定）。
+                // `folder add:<路径>|<别名>` 走的是"选完目录、点了确认"之后那条真路 ——
+                // 目录选择框本身要人点，脚本不抢鼠标，所以从 OfferNewFolder 之后开始演。
+                // 分隔符用 | 不用 :，因为 Windows 路径自己就带冒号。
+                case "folder":
+                    return await PetDebugMailbox.Ui(() =>
+                    {
+                        if (arg.StartsWith("add:", StringComparison.Ordinal))
+                        {
+                            var bits = arg[4..].Split('|', 2);
+                            _vm.OfferNewFolder(bits[0]);
+                            if (bits.Length > 1) _vm.NewFolderName = bits[1];
+                            _vm.ConfirmAddFolderCommand.Execute(null);
+                            return $"OK added={_vm.Folders.Count} active={_vm.ActiveFolderName}";
+                        }
+
+                        if (int.TryParse(arg, out var index) && index >= 0 && index < _vm.Folders.Count)
+                        {
+                            _vm.SelectFolderCommand.Execute(_vm.Folders[index].Path);
+                        }
+
+                        return $"OK {_vm.ActiveFolderName} folders={_vm.Folders.Count}";
+                    });
+                // 导入整合包要真跑一遍才看得出解析对不对，而文件选择框只能人点。
+                // `pack file:<路径>` 把视图选完文件之后的那一步拨过去，`pack run` 点「开始导入」。
+                case "pack":
+                    return await PetDebugMailbox.Ui(() =>
+                    {
+                        if (arg.StartsWith("file:", StringComparison.Ordinal))
+                        {
+                            _vm.OfferPackFile(arg[5..]);
+                            return $"OK source={_vm.PackSourceName} target={_vm.PackTargetFolder}";
+                        }
+
+                        if (arg == "run")
+                        {
+                            _vm.StartPackImportCommand.Execute(null);
+                            return "OK started";
+                        }
+
+                        return $"OK open={_vm.IsPackImportOpen} busy={_vm.IsPackImportBusy} stage={_vm.PackStageText}";
+                    });
                 // 关闭策略的三条出口都得能被脚本走一遍：真去点 ✕ 会抢焦点，而"退出"那条会把进程
                 // 一起带走，所以这里直接拨 VM —— behavior 改设置、request 走真策略、answer 走真命令。
                 case "close":
@@ -383,6 +435,10 @@ public sealed class DebugBridge
                     });
                 case "state":
                     return await PetDebugMailbox.Ui(State);
+                // 命中测试：脚本不能摸鼠标，而"这块区域到底吃不吃点击"只有可视树自己知道。
+                // `hit 160,40`（窗口内 DIP）回最上面一层的元素链，以及拖拽带跳过自己之后底下的按钮。
+                case "hit":
+                    return await PetDebugMailbox.Ui(() => (_window as MainWindow)?.HitDebug(arg) ?? "ERR not main window");
                 case "skinsnap":
                     return await PetDebugMailbox.Ui(() =>
                     {
