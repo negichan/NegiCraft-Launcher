@@ -137,6 +137,10 @@ public partial class MainWindowViewModel : ViewModelBase
     [RelayCommand]
     private void Go(string page)
     {
+        // WPF hosts settings as a dialog; other hosts retain the existing settings page.
+        var navigation = NavigationRequested;
+        navigation?.Invoke(page);
+        if (page == "settings" && navigation is not null) return;
         CurrentPage = page;
 
         // 从游戏回来「最近游玩」该变了：进实例页顺手重读一遍模型，
@@ -146,6 +150,8 @@ public partial class MainWindowViewModel : ViewModelBase
             foreach (var i in Instances) i.Refresh();
         }
     }
+
+    public event Action<string>? NavigationRequested;
 
     // ==========================================================
     // Background & appearance

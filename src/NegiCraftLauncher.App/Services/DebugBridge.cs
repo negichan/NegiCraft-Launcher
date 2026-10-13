@@ -90,7 +90,7 @@ public sealed class DebugBridge
             switch (verb)
             {
                 case "page":
-                    await PetDebugMailbox.Ui(() => _vm.CurrentPage = arg);
+                    await PetDebugMailbox.Ui(() => _vm.GoCommand.Execute(arg));
                     return "OK";
                 case "account":
                     await PetDebugMailbox.Ui(() =>
