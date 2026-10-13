@@ -1,5 +1,7 @@
 using System;
+using System.IO;
 using System.Globalization;
+using System.Linq;
 using System.Threading.Tasks;
 using Avalonia;
 using Avalonia.Controls;
@@ -8,6 +10,7 @@ using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Media;
 using Avalonia.Platform;
+using Avalonia.Input.Platform;
 using Avalonia.Platform.Storage;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
@@ -62,6 +65,12 @@ public partial class MainWindow : Window
         {
             if (e.Property == BoundsProperty) UpdateInstanceColumns();
         };
+
+        // 拖文件进窗口 = 导入整合包。Avalonia 的这三个是 routed event（WPF 那边是窗口的普通事件），
+        // 而事件是从命中的那颗控件往上冒的 —— 挂在窗口上才能不管落在哪一层都收到（AllowDrop 在 XAML 里）。
+        AddHandler(DragDrop.DragOverEvent, OnWindowDragOver);
+        AddHandler(DragDrop.DragLeaveEvent, OnWindowDragLeave);
+        AddHandler(DragDrop.DropEvent, OnWindowDrop, handledEventsToo: true);
 
         // 头几趟布局里 TranslatePoint 还给不出稳定的页内坐标（首页那圈 -100/-22 的负边距还没进到
         // 变换链），障碍会量歪 —— 而一旦把锚点当成"压到侧栏"推开，之后就再没人把它摆回来。
@@ -558,6 +567,8 @@ public partial class MainWindow : Window
             _vm.ExitApplicationRequested += ExitApplication;
             _vm.OpenPetRequested += OnOpenPetRequested;
             _vm.RecallPetRequested += ClosePetWindow;
+            _vm.RequestAddModFile += OnRequestAddModFile;
+            _vm.RequestAddResourcePackFile += OnRequestAddResourcePackFile;
             _vm.PropertyChanged += OnViewModelPropertyChanged;
 
             // 取景只改变换、不碰像素，所以单独一条事件：拖动平移时一次调色都不该发生。
@@ -707,6 +718,68 @@ public partial class MainWindow : Window
         }
     }
 
+    /// <summary>
+    ///     拖边缘改大小：八条把手按下之后交给 <see cref="Window.BeginResizeDrag" />，
+    ///     尺寸循环由系统跑（最小尺寸走 MinWidth/MinHeight）。把手的 Tag 写的是
+    ///     <c>WindowEdge</c> 的成员名（Avalonia 12 是 Left / TopLeft …，没有 "Edge" 前缀）。
+    /// </summary>
+    private void OnResizeGripPressed(object? sender, PointerPressedEventArgs e)
+    {
+        // Tag 挂在 TemplatedControl 上（Border 就是它的派生），裸 object 上没有这个属性。
+        if (sender is not global::Avalonia.Controls.Primitives.TemplatedControl { Tag: string name }) return;
+        if (!Enum.TryParse<WindowEdge>(name, out var edge)) return;
+        if (e.GetCurrentPoint(this).Properties.IsLeftButtonPressed) BeginResizeDrag(edge, e);
+    }
+
+    /// <summary>
+    ///     Debug bridge <c>hit</c>: which of the probed rects contain a point (window DIPs, e.g.
+    ///     <c>hit 220,90</c>); <c>hit bounds</c> just reports the rects. Scripts can't touch the
+    ///     mouse, so this is how "where should the probe go" and "whose area is this" get checked.
+    ///     It answers geometry only — who actually receives the click is the z-order's business
+    ///     (which is why the drag band sits under the content layer).
+    /// </summary>
+    public string HitDebug(string arg)
+    {
+        var probes = new (string Name, Control? Element)[]
+        {
+            ("band", DragBand), ("pill", FolderPillBtn), ("loader", LoaderFilterBtn),
+            ("search", SearchBox), ("folderPop", FolderPop), ("loaderPop", LoaderPop)
+        };
+
+        if (arg == "bounds")
+        {
+            return string.Join(" ", probes.Select(p => $"{p.Name}=[{RectOf(p.Element)}]"));
+        }
+
+        var bits = arg.Split(',', StringSplitOptions.RemoveEmptyEntries);
+        if (bits.Length < 2 ||
+            !double.TryParse(bits[0], NumberStyles.Float, CultureInfo.InvariantCulture, out var x) ||
+            !double.TryParse(bits[1], NumberStyles.Float, CultureInfo.InvariantCulture, out var y))
+        {
+            return "ERR usage: hit <x>,<y> | hit bounds";
+        }
+
+        var point = new Point(x, y);
+        var on = probes.Where(p => WindowRect(p.Element).Contains(point)).Select(p => p.Name);
+        return $"hit by={(on.Any() ? string.Join(",", on) : "none")}";
+    }
+
+    /// <summary>Rect in window DIPs. <c>TranslatePoint</c> follows RenderTransform, so an open
+    /// popover reports where it actually parked (the Pop.Pin translation included).</summary>
+    private Rect WindowRect(Control? element)
+    {
+        if (element is null) return default;
+        var at = element.TranslatePoint(new Point(), this) ?? default;
+        return new Rect(at, element.Bounds.Size);
+    }
+
+    private string RectOf(Control? element)
+    {
+        if (element is null) return "n/a";
+        var r = WindowRect(element);
+        return $"{r.X:0.#},{r.Y:0.#} {r.Width:0.#}x{r.Height:0.#}";
+    }
+
     private void OnMinimizeClick(object? sender, RoutedEventArgs e)
     {
         WindowState = WindowState.Minimized;
@@ -819,10 +892,11 @@ public partial class MainWindow : Window
     }
 
     /// <summary>
-    /// 「⋯」只是把卡片自己那条右键菜单就地开起来 —— 菜单只写一份，右键和按钮走同一个。
-    /// 往上找带 ContextMenu 的那个 Button（卡片本体）：Avalonia 的可视树在这一段是通的。
+    /// 「⋯」只是把这一行自己那条右键菜单就地开起来 —— 菜单只写一份，右键和按钮走同一个。
+    /// 往上找带 ContextMenu 的那个 Button（卡片本体 / 列表行 / 目录行都是它）：
+    /// Avalonia 的可视树在这一段是通的。
     /// </summary>
-    private void OnInstanceMoreClick(object? sender, RoutedEventArgs e)
+    private void OnRowMoreClick(object? sender, RoutedEventArgs e)
     {
         for (Visual? node = sender as Visual; node is not null; node = node.GetVisualParent())
         {
@@ -831,6 +905,187 @@ public partial class MainWindow : Window
             card.ContextMenu.Open(card);
             e.Handled = true;
             return;
+        }
+    }
+
+    // ==========================================================
+    // 实例页：游戏目录与整合包 —— 与 App/MainWindow.xaml.cs 逐段对照
+    // ==========================================================
+
+    /// <summary>点外面 = 取消。导入这条路一旦跑起来就在任务列表里，不必靠这张对话框盯。</summary>
+    private void OnPackBackdropPointerPressed(object? sender, PointerPressedEventArgs e) =>
+        _vm?.ClosePackImportCommand.Execute(null);
+
+    private void OnAddFolderBackdropPointerPressed(object? sender, PointerPressedEventArgs e) =>
+        _vm?.CloseAddFolderCommand.Execute(null);
+
+    /// <summary>拖拽区那格点一下 = 浏览文件，和把文件拖进窗口是同一件事（都走 <see cref="MainWindowViewModel.OfferPackFile"/>）。</summary>
+    private async void OnPickPackFileClick(object? sender, PointerReleasedEventArgs e)
+    {
+        if (_vm is null) return;
+
+        var files = await StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
+        {
+            Title = "选择整合包",
+            AllowMultiple = false,
+            FileTypeFilter = new[]
+            {
+                new FilePickerFileType("整合包") { Patterns = new[] { "*.mrpack", "*.zip" } },
+                new FilePickerFileType("Modrinth (.mrpack)") { Patterns = new[] { "*.mrpack" } },
+                new FilePickerFileType("压缩包 (.zip)") { Patterns = new[] { "*.zip" } },
+                new FilePickerFileType("所有文件") { Patterns = new[] { "*" } },
+            }
+        });
+
+        if (files.Count > 0) _vm.OfferPackFile(files[0].Path.LocalPath);
+    }
+
+    /// <summary>
+    /// 选一个已经存在的游戏目录。WPF 侧用的是 <c>Microsoft.Win32.OpenFolderDialog</c>，
+    /// Avalonia 这边只有存储层那套：<c>OpenFolderPickerAsync</c> 回的是 <c>IStorageFolder</c>，
+    /// 取 <c>Path.LocalPath</c> 就是同一条盘上路径。
+    /// </summary>
+    private async void OnPickGameFolderClick(object? sender, RoutedEventArgs e)
+    {
+        if (_vm is null) return;
+
+        var folders = await StorageProvider.OpenFolderPickerAsync(new FolderPickerOpenOptions
+        {
+            Title = "选择已有的游戏目录",
+            AllowMultiple = false,
+        });
+
+        if (folders.Count > 0) _vm.OfferNewFolder(folders[0].Path.LocalPath);
+    }
+
+    private async void OnCopyFolderPath(object? sender, RoutedEventArgs e)
+    {
+        if (sender is not StyledElement { DataContext: GameFolderModel folder }) return;
+        if (Clipboard is not { } clipboard) return;
+
+        try
+        {
+            await clipboard.SetTextAsync(folder.Path);
+        }
+        catch (Exception)
+        {
+            // 剪贴板被别的进程占住是 Windows 上的常事，复制不成不值得弹一句错。
+        }
+    }
+
+    /// <summary>
+    ///     拖文件进窗口 = 导入整合包。
+    ///
+    ///     <para><b>DragOver 每动一下就来一次</b>，所以遮罩只在该亮的时候亮着写；真正判"离开了"要看
+    ///     指针是不是出了窗口边界 —— 子元素之间穿来穿去也会发 DragLeave，直接熄就会一路闪。</para>
+    /// </summary>
+    private void OnWindowDragOver(object? sender, DragEventArgs e)
+    {
+        if (_vm is not { } vm) return;
+
+        if (e.DataTransfer.TryGetFiles() is not { Length: > 0 })
+        {
+            e.DragEffects = DragDropEffects.None;
+            return;
+        }
+
+        vm.IsDropOverlayVisible = true;
+        e.DragEffects = DragDropEffects.Copy;
+        e.Handled = true;
+    }
+
+    private void OnWindowDragLeave(object? sender, DragEventArgs e)
+    {
+        if (_vm is not { } vm) return;
+
+        var point = e.GetPosition(this);
+        if (point.X < 0 || point.Y < 0 || point.X > Bounds.Width || point.Y > Bounds.Height)
+        {
+            vm.IsDropOverlayVisible = false;
+        }
+    }
+
+    private void OnWindowDrop(object? sender, DragEventArgs e)
+    {
+        if (_vm is not { } vm) return;
+
+        vm.IsDropOverlayVisible = false;
+
+        // 只接第一个文件：一次拖进来五个包，串行导入要排十分钟，不如让人再拖一次。
+        if (e.DataTransfer.TryGetFiles() is not { Length: > 0 } files) return;
+        if (files[0].TryGetLocalPath() is not { Length: > 0 } path) return;
+
+        vm.OfferPackFile(path);
+        e.Handled = true;
+    }
+
+    private async void OnRequestAddModFile()
+    {
+        if (_vm is null) return;
+        var files = await StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
+        {
+            Title = "添加模组",
+            AllowMultiple = true,
+            FileTypeFilter = new[]
+            {
+                new FilePickerFileType("Minecraft 模组 (*.jar)") { Patterns = new[] { "*.jar" } },
+                new FilePickerFileType("所有文件") { Patterns = new[] { "*" } },
+            }
+        });
+
+        if (files.Count > 0 && !string.IsNullOrEmpty(_vm.EditingModsDirectory))
+        {
+            Directory.CreateDirectory(_vm.EditingModsDirectory);
+            int added = 0;
+            foreach (var f in files)
+            {
+                var src = f.Path.LocalPath;
+                if (!File.Exists(src)) continue;
+                var dest = Path.Combine(_vm.EditingModsDirectory, Path.GetFileName(src));
+                try
+                {
+                    File.Copy(src, dest, true);
+                    added++;
+                }
+                catch { }
+            }
+            _vm.RefreshInstanceManageDataCommand.Execute(null);
+            _vm.ShowBanner($"已添加 {added} 个模组。");
+        }
+    }
+
+    private async void OnRequestAddResourcePackFile()
+    {
+        if (_vm is null) return;
+        var files = await StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
+        {
+            Title = "添加资源包",
+            AllowMultiple = true,
+            FileTypeFilter = new[]
+            {
+                new FilePickerFileType("资源包 (*.zip)") { Patterns = new[] { "*.zip" } },
+                new FilePickerFileType("所有文件") { Patterns = new[] { "*" } },
+            }
+        });
+
+        if (files.Count > 0 && !string.IsNullOrEmpty(_vm.EditingResourcePacksDirectory))
+        {
+            Directory.CreateDirectory(_vm.EditingResourcePacksDirectory);
+            int added = 0;
+            foreach (var f in files)
+            {
+                var src = f.Path.LocalPath;
+                if (!File.Exists(src)) continue;
+                var dest = Path.Combine(_vm.EditingResourcePacksDirectory, Path.GetFileName(src));
+                try
+                {
+                    File.Copy(src, dest, true);
+                    added++;
+                }
+                catch { }
+            }
+            _vm.RefreshInstanceManageDataCommand.Execute(null);
+            _vm.ShowBanner($"已添加 {added} 个资源包。");
         }
     }
 

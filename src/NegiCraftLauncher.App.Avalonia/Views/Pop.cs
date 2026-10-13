@@ -52,6 +52,27 @@ public class Pop
 
     public static void SetIsOpen(Control control, bool value) => control.SetValue(IsOpenProperty, value);
 
+    /// <summary>
+    ///     Resting position derived from the trigger instead of a hand-written Margin:
+    ///     <c>UnderLeft</c> / <c>UnderCenter</c> / <c>UnderRight</c>. Empty keeps the XAML Margin.
+    ///     A written-down Margin is a layout coordinate while the trigger moves with everything
+    ///     around it, so every change to a neighbour silently misplaces the card.
+    /// </summary>
+    public static readonly AttachedProperty<string> PinProperty =
+        AvaloniaProperty.RegisterAttached<Pop, Control, string>("Pin", "", false, BindingMode.OneTime);
+
+    /// <summary>Gap between the trigger's bottom edge and the card's top edge, in DIPs.</summary>
+    public static readonly AttachedProperty<double> PinGapProperty =
+        AvaloniaProperty.RegisterAttached<Pop, Control, double>("PinGap", 6.0, false, BindingMode.OneTime);
+
+    public static string GetPin(Control control) => control.GetValue(PinProperty);
+
+    public static void SetPin(Control control, string value) => control.SetValue(PinProperty, value);
+
+    public static double GetPinGap(Control control) => control.GetValue(PinGapProperty);
+
+    public static void SetPinGap(Control control, double value) => control.SetValue(PinGapProperty, value);
+
     private static void OnIsOpenChanged(Control control, AvaloniaPropertyChangedEventArgs args)
     {
         var runner = Runners.GetValue(control, static c => new Runner(c));
@@ -96,6 +117,10 @@ public class Pop
         private double _reveal0;   // visible height, in screen units, at the start of the travel
         private double _anchorY = 1;
 
+        // The translation Pop.Pin leaves behind. It rides on RenderTransform, so it has to stay
+        // applied while the card rests — dropping the transform would snap it back to the Margin.
+        private double _pinX, _pinY;
+
         // Position on the open timeline, in ms: interrupts resume from wherever the card is.
         private double _p;
         private double _from;
@@ -111,6 +136,7 @@ public class Pop
 
         public void Open()
         {
+            _pinX = _pinY = 0;
             if (!Measure())
             {
                 _scale0 = FallbackScale;
@@ -174,7 +200,7 @@ public class Pop
             {
                 _timer.Stop();
                 _p = TotalMs;
-                _target.RenderTransform = null;
+                SetRestTransform();
                 _target.Clip = null;
                 _target.ClearValue(InputElement.IsHitTestVisibleProperty);
                 return;
@@ -198,7 +224,7 @@ public class Pop
                 ? Smooth(Peak, Dip, q / dipEnds)
                 : Smooth(Dip, 1, (q - dipEnds) / (1 - dipEnds));
 
-            _target.RenderTransform = new MatrixTransform(new Matrix(scale, 0, 0, scale, 0, 0));
+            _target.RenderTransform = new MatrixTransform(new Matrix(scale, 0, 0, scale, _pinX, _pinY));
             _target.Opacity = 1;
             _target.Clip = null;
         }
@@ -214,9 +240,19 @@ public class Pop
             var scale = Lerp(_scale0, top, e);
             var local = Lerp(_reveal0 / _scale0, _popH, e);
 
-            _target.RenderTransform = new MatrixTransform(new Matrix(scale, 0, 0, scale, _offsetX * (1 - e), _offsetY * (1 - e)));
+            _target.RenderTransform = new MatrixTransform(new Matrix(scale, 0, 0, scale,
+                _offsetX * (1 - e) + _pinX, _offsetY * (1 - e) + _pinY));
             _target.Opacity = 1;
             _target.Clip = ClipFor(local);
+        }
+
+        // What the card keeps while it rests: Pop.Pin moves it with a RenderTransform, so unlike
+        // the old null-this-everything behaviour it has to survive the settle.
+        private void SetRestTransform()
+        {
+            _target.RenderTransform = _pinX == 0 && _pinY == 0
+                ? null
+                : new MatrixTransform(new Matrix(1, 0, 0, 1, _pinX, _pinY));
         }
 
         private void Rest()
@@ -294,6 +330,30 @@ public class Pop
             _offsetX = triggerAnchor.X - popAnchor.X;
             _offsetY = triggerAnchor.Y - popAnchor.Y;
             _reveal0 = Math.Min(th, pop.Height);
+
+            // ⚠️ Same rule as the WPF Runner: the card is parked on the trigger by a translation
+            // that survives the settle, and the travel starts from the trigger's corner anyway.
+            var pin = GetPin(_target);
+            if (pin.Length > 0)
+            {
+                var tLeft = new Point(triggerAnchor.X - fx * tw, triggerAnchor.Y - fy * th);
+                var pLeft = new Point(popAnchor.X - fx * pop.Width, popAnchor.Y - fy * pop.Height);
+                var gap = GetPinGap(_target);
+                var wantX = pin switch
+                {
+                    "UnderCenter" => tLeft.X + (tw - _popW) / 2,
+                    "UnderRight" => tLeft.X + tw - _popW,
+                    _ => tLeft.X
+                };
+                var maxX = Math.Max(12, host.Bounds.Width - _popW - 12);
+                wantX = Math.Clamp(wantX, 12, maxX);
+
+                _pinX = wantX - pLeft.X;
+                _pinY = tLeft.Y + th + gap - pLeft.Y;
+                _offsetX -= _pinX;
+                _offsetY -= _pinY;
+            }
+
             return true;
         }
 
@@ -303,6 +363,7 @@ public class Pop
             "BottomCenter" => (0.5, 1),
             "TopRight" => (1, 0),
             "TopCenter" => (0.5, 0),
+            "TopLeft" => (0, 0),
             "Center" => (0.5, 0.5),
             _ => (0, 1)
         };
