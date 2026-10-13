@@ -19,3 +19,19 @@ Settings ownership, topmost synchronization, and save/cancel tests are outside i
 Avalonia mouse bindings are not exercised by this WPF suite.
 
 The movement checks are not keyboard-to-display latency measurements. Check fast real A/D + Space input, animated popover clicks, and multi-monitor DPI transitions before merging the performance PR.
+
+Button checks use the real theme template and assert a stable hit area, continuous
+press/release poses, and clock cleanup. Page checks cover repeated visibility changes,
+nested transitions, unload/reload, and restoration of existing opacity and bitmap caches.
+Popover checks include interrupted closing, temporary cache cleanup, and pinned alignment.
+
+For a visible-window frame-pacing report, build the WPF app in Release and run:
+
+```powershell
+src/NegiCraftLauncher.App/bin/Release/net10.0-windows/NegiCraftLauncher.exe --ui-performance --report bin/ui-performance/after.json
+```
+
+Run it separately from the regression suite. The probe reports unique WPF rendering
+callbacks and input dispatcher delays at the actual window size and DPI; it is not
+an independent measurement of displayed FPS. Optional `--no-effects` and
+`--no-static-cache` switches are diagnostic comparisons only.

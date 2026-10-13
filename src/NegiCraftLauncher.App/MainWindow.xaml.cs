@@ -51,6 +51,9 @@ public partial class MainWindow : Window
     /// 优先级压到 <c>Background</c>，永远不跟渲染抢。
     /// </summary>
     private readonly DispatcherTimer _bgToneTimer;
+    private bool _bgToneDirty = true;
+    private bool _bgToneQueued;
+    private bool _dragPerfHold;
 
     /// <summary>图标现在是不是亮底档（深色图标）。</summary>
     private bool _winCtrlLight;
@@ -70,7 +73,11 @@ public partial class MainWindow : Window
 
         _videoBackground.Failed += OnVideoBackgroundFailed;
         // 视频的原生尺寸要等 MediaOpened 才可信，那一刻重算一次画中画（之前是 16:9 占位）。
-        _videoBackground.Opened += UpdateBackgroundShot;
+        _videoBackground.Opened += () =>
+        {
+            UpdateBackgroundShot();
+            InvalidateWindowButtonTone();
+        };
         IsVisibleChanged += (_, _) => UpdateVideoPlayback();
 
         // 音量浮层是"喇叭中心 − 浮层宽/2"算出来的，窗口一改尺寸那个中心就变了。
@@ -97,7 +104,8 @@ public partial class MainWindow : Window
             Interval = TimeSpan.FromMilliseconds(600),
         };
         _bgToneTimer.Tick += (_, _) => UpdateWindowButtonTone();
-        _bgToneTimer.Start();
+        IsVisibleChanged += (_, _) => SyncToneSampling();
+        StateChanged += (_, _) => SyncToneSampling();
 
         _volumeHoverTimer = new DispatcherTimer(DispatcherPriority.Background)
         {
@@ -106,7 +114,7 @@ public partial class MainWindow : Window
         _volumeHoverTimer.Tick += (_, _) => CheckVolumeHover();
 
         // 首帧就要定色，不能等第一个 tick —— 否则窗口会先闪一下错色的图标。
-        Loaded += (_, _) => UpdateWindowButtonTone();
+        Loaded += (_, _) => SyncToneSampling();
 
         // 首页小人的落点要在排版彻底落定之后再摆一次：障碍是量出来的，量得太早会把人推歪，
         // 而推开之后没人再把它摆回来（Avalonia 侧实测踩过，见那边 Opened 里的注释）。
@@ -353,6 +361,8 @@ public partial class MainWindow : Window
         // 真正退出才释放：收进托盘那条路只是 Hide，窗口还要复用。
         // 不 Close 掉 MediaPlayer 会留一个解码线程不放。
         _videoBackground.Dispose();
+        _bgToneTimer.Stop();
+        _volumeHoverTimer.Stop();
 
         base.OnClosing(e);
     }
@@ -376,6 +386,8 @@ public partial class MainWindow : Window
         SidebarVideo.Fill = brush;
 
         UpdateVideoPlayback();
+        InvalidateWindowButtonTone();
+        SyncToneSampling();
     }
 
     // ==========================================================
@@ -421,6 +433,7 @@ public partial class MainWindow : Window
 
         _videoBackground.SetFrame(shellW, shellH, vm.BgPanX, vm.BgPanY, vm.BgZoom);
         UpdateBackgroundShot();
+        InvalidateWindowButtonTone();
     }
 
     /// <summary>画中画那格的位图刷：整张图铺满，不带取景 —— 取景是白框负责表达的那部分。</summary>
@@ -559,6 +572,36 @@ public partial class MainWindow : Window
     /// <para>上下各留一段滞回（<c>0.22</c> / <c>0.15</c>）：视频里一闪而过的亮帧
     /// 不至于让图标抖个不停。</para>
     /// </summary>
+    private void InvalidateWindowButtonTone()
+    {
+        _bgToneDirty = true;
+        QueueWindowButtonTone();
+    }
+
+    private bool CanSampleTone => IsLoaded && IsVisible &&
+        WindowState != WindowState.Minimized && !_dragPerfHold;
+
+    private void SyncToneSampling()
+    {
+        if (_bgToneTimer is null) return;
+        if (CanSampleTone && _vm?.IsVideoBackground == true)
+            _bgToneTimer.Start();
+        else
+            _bgToneTimer.Stop();
+        QueueWindowButtonTone();
+    }
+
+    private void QueueWindowButtonTone()
+    {
+        if (_bgToneQueued || !_bgToneDirty || !CanSampleTone) return;
+        _bgToneQueued = true;
+        Dispatcher.BeginInvoke(() =>
+        {
+            _bgToneQueued = false;
+            if (_bgToneDirty && CanSampleTone) UpdateWindowButtonTone();
+        }, DispatcherPriority.Background);
+    }
+
     private void UpdateWindowButtonTone()
     {
         // 窗口收进了托盘、或者还没量出尺寸 ⇒ 一律按深色算。背景现在每页都在，
@@ -581,6 +624,7 @@ public partial class MainWindow : Window
         }
 
         _lastLum = l;
+        _bgToneDirty = false;
 
         if (_winCtrlLight)
         {
@@ -1053,6 +1097,15 @@ public partial class MainWindow : Window
 
     private void OnViewModelPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
+        if (e.PropertyName is nameof(MainWindowViewModel.BgArt)
+                         or nameof(MainWindowViewModel.BgBrightness)
+                         or nameof(MainWindowViewModel.BgBlur)
+                         or nameof(MainWindowViewModel.IsCustomBackground)
+                         or nameof(MainWindowViewModel.IsVideoBackground))
+        {
+            InvalidateWindowButtonTone();
+            SyncToneSampling();
+        }
         // 换图 / 调完色：像素换了，取景的余量取决于图片原生尺寸，也可能跟着换 ⇒ 重挂位图 + 重算取景。
         if (e.PropertyName == nameof(MainWindowViewModel.BgCustomArt))
         {
@@ -1080,7 +1133,7 @@ public partial class MainWindow : Window
 
         // 音量浮层每次**开**都要重新对一次喇叭：它横向位置是算出来的，而"算"这件事不能只挂在
         // 鼠标进入那一下 —— 从别的路径打开（调试动词、以后加快捷键）就会停在右边框上。
-        if (e.PropertyName == nameof(MainWindowViewModel.IsVolumePopOpen) && _vm.IsVolumePopOpen)
+        if (e.PropertyName == nameof(MainWindowViewModel.IsVolumePopOpen) && _vm?.IsVolumePopOpen == true)
         {
             RepositionVolumePanel();
             return;
@@ -1321,6 +1374,7 @@ public partial class MainWindow : Window
     /// </summary>
     public void BeginDragPerfHold()
     {
+        _dragPerfHold = true;
         _videoBackground.FreezeForDrag();
         _bgToneTimer.Stop();
         _volumeHoverTimer.Stop();
@@ -1338,8 +1392,9 @@ public partial class MainWindow : Window
     /// </summary>
     public void EndDragPerfHold()
     {
+        _dragPerfHold = false;
         SkinPreview.SuspendPointerLook = false;
-        _bgToneTimer.Start();
+        SyncToneSampling();
         _volumeHoverTimer.Start();
 
         // 恢复播放也推到本轮渲染之后：松手那一帧不该还有别的事做。

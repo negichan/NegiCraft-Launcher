@@ -60,6 +60,12 @@ public partial class App : Application
         // 必须赶在构造 VM 之前 —— VM 初始化时就会去拉皮肤与版本列表。
         ViewModels.AppDispatcher.Current = new Services.WpfUiDispatcher(Dispatcher);
 
+        if (Array.IndexOf(e.Args, "--ui-performance") >= 0)
+        {
+            UiPerformance.Run(e.Args);
+            return;
+        }
+
         // --ui：把真正的主窗口摆在屏幕外逐页出图（自己收尾，不在这里 Shutdown）。
         if (Array.IndexOf(e.Args, "--ui") >= 0)
         {

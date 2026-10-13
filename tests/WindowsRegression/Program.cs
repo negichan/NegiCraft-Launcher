@@ -11,6 +11,7 @@ using NegiCraftLauncher.Raster;
 using NegiCraftLauncher.Raster.Rendering;
 using NegiCraftLauncher.Skin.Controls;
 using NegiCraftLauncher.Skin.Rendering;
+using NegiCraftLauncher.Theme;
 
 internal static class Program
 {
@@ -112,30 +113,69 @@ internal static class Program
                 var transform = pop.RenderTransform;
                 await Task.Delay(70);
                 Check("animation reuses transform", ReferenceEquals(transform, pop.RenderTransform));
+                var before = transform.Value;
+                var opacity = pop.Opacity;
                 Pop.SetIsOpen(pop, false);
                 Check("closing disables hit testing", !pop.IsHitTestVisible);
+                Check("close preserves animated pose", Near(before, transform.Value));
+                Check("close preserves animated opacity", Math.Abs(pop.Opacity - opacity) < 0.02);
                 await Task.Delay(25);
+                before = transform.Value;
+                opacity = pop.Opacity;
                 Pop.SetIsOpen(pop, true);
                 Check("reopen during close interactive", pop.IsHitTestVisible);
+                Check("reopen preserves animated pose", Near(before, transform.Value));
+                Check("reopen preserves animated opacity", Math.Abs(pop.Opacity - opacity) < 0.02);
                 await Task.Delay(450);
                 Check("settled has no clip", pop.Clip is null);
-                Check("settled detaches Rendering", !IsRendering(pop));
+                Check("settled releases animation clocks", !HasClocks(pop, transform));
+                Check("settled releases temporary cache", pop.CacheMode is null);
                 Pop.SetIsOpen(pop, false);
                 await Task.Delay(220);
                 Check("closed opacity zero", pop.Opacity == 0);
-                Check("closed detaches Rendering", !IsRendering(pop));
+                Check("closed releases animation clocks", !HasClocks(pop, transform));
+                Check("closed releases temporary cache", pop.CacheMode is null);
                 Pop.SetIsOpen(pop, true);
                 panel.Children.Remove(pop);
                 await Task.Delay(100);
                 Check("unload disables hit testing", !pop.IsHitTestVisible);
-                Check("unload detaches Rendering", !IsRendering(pop));
+                Check("unload releases animation clocks", !HasClocks(pop, transform) && pop.CacheMode is null);
                 panel.Children.Add(pop);
                 await Task.Delay(450);
                 Check("reload restores open popover", pop.IsHitTestVisible && pop.Opacity == 1);
+
+                panel.Children.Remove(pop);
+                var trigger = new Button
+                {
+                    Width = 80, Height = 30, Margin = new Thickness(230, 20, 0, 0),
+                    HorizontalAlignment = HorizontalAlignment.Left, VerticalAlignment = VerticalAlignment.Top
+                };
+                pop.HorizontalAlignment = HorizontalAlignment.Left;
+                pop.VerticalAlignment = VerticalAlignment.Top;
+                pop.Margin = new Thickness(15, 50, 0, 0);
+                Pop.SetIsOpen(pop, false);
+                Pop.SetTrigger(pop, trigger);
+                Pop.SetPin(pop, "UnderRight");
+                Pop.SetPinGap(pop, 6);
+                panel.Children.Add(trigger);
+                panel.Children.Add(pop);
+                await Task.Delay(60);
+                Pop.SetIsOpen(pop, true);
+                await Task.Delay(280);
+                var expected = trigger.TranslatePoint(new Point(trigger.ActualWidth - pop.ActualWidth, trigger.ActualHeight + 6), panel);
+                var actual = pop.TranslatePoint(new Point(), panel);
+                Check($"pinned popover aligns under trigger (expected={expected}, actual={actual})", (expected - actual).Length < 0.1);
+                Pop.SetIsOpen(pop, false);
+                await Task.Delay(30);
+                Pop.SetIsOpen(pop, true);
+                await Task.Delay(280);
+                actual = pop.TranslatePoint(new Point(), panel);
+                Check($"interrupted pinned popover retains alignment (expected={expected}, actual={actual})", (expected - actual).Length < 0.1);
                 host.Close();
                 host = null;
             }
 
+            await CheckUiMotion();
             await CheckFoxSqueeze();
 
             pet = new PetWindow("", null) { Left = 500, Top = 300 };
@@ -176,6 +216,83 @@ internal static class Program
             }
             finally { done(); }
         }
+    }
+
+    private static async Task CheckUiMotion()
+    {
+        var button = new Button { Width = 150, Height = 40, Content = "Launch" };
+        var page = new Grid { Visibility = Visibility.Collapsed, Opacity = 0.85 };
+        var nested = new Grid();
+        page.Children.Add(nested);
+        PageTransition.SetEnabled(page, true);
+        PageTransition.SetEnabled(nested, true);
+        var panel = new Grid();
+        panel.Children.Add(page);
+        panel.Children.Add(button);
+        var host = new Window
+        {
+            Width = 400, Height = 260, Content = panel, ShowActivated = false, ShowInTaskbar = false
+        };
+        var pressedKey = (DependencyPropertyKey)typeof(System.Windows.Controls.Primitives.ButtonBase)
+            .GetField("IsPressedPropertyKey", BindingFlags.Static | BindingFlags.NonPublic)!.GetValue(null)!;
+        try
+        {
+            host.Show();
+            await Task.Delay(200);
+            var root = (FrameworkElement)button.Template.FindName("Root", button);
+            var transform = (TransformGroup)root.RenderTransform;
+            var scale = (ScaleTransform)transform.Children[0];
+            var size = button.RenderSize;
+            Check("standard button enables motion on template root", ButtonMotion.GetEnabled(root));
+            button.SetValue(pressedKey, true);
+            await Task.Delay(100);
+            Check("held button settles into press", Math.Abs(scale.ScaleX - 0.965) < 0.001);
+            Check("button hit area and layout stay fixed", button.RenderSize == size && button.RenderTransform.Value.IsIdentity);
+            var before = transform.Value;
+            button.SetValue(pressedKey, false);
+            if (SystemParameters.ClientAreaAnimation)
+                Check($"button release preserves current pose (before={before}, after={transform.Value})", Near(before, transform.Value));
+            await Task.Delay(200);
+            ButtonMotion.SetHovered(root, true);
+            await Task.Delay(160);
+            Check("button hover settles smoothly", Math.Abs(scale.ScaleX - 1.012) < 0.001);
+            Check("button releases completed clocks", !HasClocks(root, transform));
+            button.SetValue(pressedKey, true);
+            host.Hide();
+            Check("hidden button resets motion", scale.ScaleX == 1 && !HasClocks(root, transform));
+            button.SetValue(pressedKey, false);
+            ButtonMotion.SetHovered(root, false);
+            host.Show();
+            await Task.Delay(100);
+
+            var priorCache = new BitmapCache(1.25);
+            page.CacheMode = priorCache;
+            page.Visibility = Visibility.Visible;
+            if (SystemParameters.ClientAreaAnimation)
+            {
+                Check("page caches during transition", page.CacheMode is BitmapCache && !ReferenceEquals(page.CacheMode, priorCache));
+                Check("nested page avoids duplicate transition", nested.CacheMode is null && !nested.HasAnimatedProperties);
+            }
+            await Task.Delay(260);
+            Check("page restores prior cache", ReferenceEquals(page.CacheMode, priorCache));
+            Check("page preserves configured opacity", Math.Abs(page.Opacity - 0.85) < 0.001);
+            Check("page settles without clocks", !HasClocks(page, page.RenderTransform));
+            for (var i = 0; i < 4; i++)
+            {
+                page.Visibility = Visibility.Collapsed;
+                Check("hidden page releases transition", !HasClocks(page, page.RenderTransform) && ReferenceEquals(page.CacheMode, priorCache));
+                page.Visibility = Visibility.Visible;
+                await Task.Delay(25);
+            }
+            panel.Children.Remove(page);
+            await Task.Delay(50);
+            Check("unloaded page restores cache and opacity", ReferenceEquals(page.CacheMode, priorCache) &&
+                Math.Abs(page.Opacity - 0.85) < 0.001 && !HasClocks(page, page.RenderTransform));
+            panel.Children.Add(page);
+            await Task.Delay(260);
+            Check("reloaded page stays visible", Math.Abs(page.Opacity - 0.85) < 0.001 && !HasClocks(page, page.RenderTransform));
+        }
+        finally { host.Close(); }
     }
 
     private static async Task CheckFoxSqueeze()
@@ -390,12 +507,11 @@ internal static class Program
         }
     }
 
-    private static bool IsRendering(FrameworkElement pop)
-    {
-        var runners = typeof(Pop).GetField("Runners", BindingFlags.Static | BindingFlags.NonPublic)!.GetValue(null)!;
-        var lookup = new object?[] { pop, null };
-        runners.GetType().GetMethod("TryGetValue")!.Invoke(runners, lookup);
-        var runner = lookup[1]!;
-        return (bool)runner.GetType().GetField("_rendering", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(runner)!;
-    }
+    private static bool HasClocks(FrameworkElement target, Transform transform) =>
+        target.HasAnimatedProperties || transform.HasAnimatedProperties ||
+        transform is TransformGroup group && group.Children.Any(item => item.HasAnimatedProperties);
+
+    private static bool Near(Matrix a, Matrix b) =>
+        Math.Abs(a.M11 - b.M11) < 0.02 && Math.Abs(a.M22 - b.M22) < 0.02 &&
+        Math.Abs(a.OffsetX - b.OffsetX) < 0.1 && Math.Abs(a.OffsetY - b.OffsetY) < 0.1;
 }
