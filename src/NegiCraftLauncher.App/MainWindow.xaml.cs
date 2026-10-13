@@ -133,6 +133,7 @@ public partial class MainWindow : Window
     /// </summary>
     private void OnShellSizeChanged(object sender, SizeChangedEventArgs e)
     {
+        _settingsBackdropCache = null;
         Shell.Clip = new RectangleGeometry(new Rect(0, 0, e.NewSize.Width, e.NewSize.Height), 22, 22);
 
         // 取景的余量是按壳尺寸算的，尺寸一变就要重算（视频的 Viewport 也绑在这个尺寸上）。
@@ -578,7 +579,7 @@ public partial class MainWindow : Window
         QueueWindowButtonTone();
     }
 
-    private bool CanSampleTone => IsLoaded && IsVisible &&
+    private bool CanSampleTone => IsLoaded && IsVisible && LauncherScene.IsVisible &&
         WindowState != WindowState.Minimized && !_dragPerfHold;
 
     private void SyncToneSampling()
@@ -930,6 +931,7 @@ public partial class MainWindow : Window
             _vm.OpenPetRequested -= OnOpenPetRequested;
             _vm.RecallPetRequested -= ClosePetWindow;
             _vm.PropertyChanged -= OnViewModelPropertyChanged;
+            _vm.NavigationRequested -= OnSettingsNavigationRequested;
             _vm.ThemeChanged -= OnThemeChanged;
             _vm.BackgroundFramingChanged -= ApplyBackgroundFraming;
             _vm.RequestAddModFile -= OnRequestAddModFile;
@@ -945,6 +947,7 @@ public partial class MainWindow : Window
             _vm.OpenPetRequested += OnOpenPetRequested;
             _vm.RecallPetRequested += ClosePetWindow;
             _vm.PropertyChanged += OnViewModelPropertyChanged;
+            _vm.NavigationRequested += OnSettingsNavigationRequested;
             _vm.ThemeChanged += OnThemeChanged;
 
             // 取景只改变换、不碰像素，所以单独一条事件：拖动平移时一次调色都不该发生。
@@ -1097,6 +1100,14 @@ public partial class MainWindow : Window
 
     private void OnViewModelPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
+        if (e.PropertyName is not (nameof(MainWindowViewModel.CurrentSettingsTab)
+                                or nameof(MainWindowViewModel.IsJavaChooserOpen)
+                                or nameof(MainWindowViewModel.JavaOptions)))
+            _settingsBackdropCache = null;
+
+        if (e.PropertyName == nameof(MainWindowViewModel.CurrentSettingsTab))
+            SettingsScroll.ScrollToTop();
+
         if (e.PropertyName is nameof(MainWindowViewModel.BgArt)
                          or nameof(MainWindowViewModel.BgBrightness)
                          or nameof(MainWindowViewModel.BgBlur)
@@ -1850,6 +1861,12 @@ public partial class MainWindow : Window
     /// </summary>
     private void OnWindowDragOver(object sender, DragEventArgs e)
     {
+        if (PageSettings.Visibility == Visibility.Visible)
+        {
+            e.Effects = DragDropEffects.None;
+            e.Handled = true;
+            return;
+        }
         if (_vm is not { } vm) return;
 
         if (!e.Data.GetDataPresent(DataFormats.FileDrop))
@@ -1876,6 +1893,11 @@ public partial class MainWindow : Window
 
     private void OnWindowDrop(object sender, DragEventArgs e)
     {
+        if (PageSettings.Visibility == Visibility.Visible)
+        {
+            e.Handled = true;
+            return;
+        }
         if (_vm is not { } vm) return;
 
         vm.IsDropOverlayVisible = false;
@@ -1893,6 +1915,7 @@ public partial class MainWindow : Window
 
     private void OnWindowKeyDown(object sender, KeyEventArgs e)
     {
+        if (IsSettingsOpen && _vm is not { IsClosePromptOpen: true }) return;
         if (e.Key is Key.LeftShift or Key.RightShift) SkinPreview.Sneaking = true;
 
         // 关闭询问窗是拦在"退出"前面的一道，Esc 关它等于按取消 —— 不能让 Esc 顺带把窗口也关了。

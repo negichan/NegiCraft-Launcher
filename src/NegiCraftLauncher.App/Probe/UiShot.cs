@@ -47,7 +47,7 @@ internal static class UiShot
 
     private static readonly string[] SettingsTabs =
     [
-        "游戏", "Java", "下载", "外观", "关于",
+        "游戏", "Java", "下载", "外观", "桌宠", "关于",
 #if DEBUG
         // 设置页那块 Debug 分区只在 Debug 构建里存在（见 MainWindow.Debug.cs），探针也跟着多抓一张。
         "Debug",
@@ -89,6 +89,7 @@ internal static class UiShot
         log.AppendLine($"对照基准: Avalonia 版 design/_smoke.ps1 出的 %TEMP%\\ncl-smoke-<page>.png（{CanvasWidth}x{CanvasHeight}，同为直接渲染）");
         log.AppendLine("像素对照: python design/_diff.py <wpf.png> <smoke.png> --shift 6");
         log.AppendLine("（design/ 下的脚本是本地私有工具，不随源码分发 —— 见 design/README.md）");
+        SettingsBackdropAudit.Run(log);
 
         MainWindowViewModel vm;
         try
@@ -155,12 +156,27 @@ internal static class UiShot
         FindInRect(window, new Rect(1000, 40, 80, 70), log);
 
         vm.GoCommand.Execute("settings");
+        await AuditSettingsDialog((MainWindow)window, vm, log);
+        vm.GoCommand.Execute("settings");
         foreach (var tab in SettingsTabs)
         {
             vm.SelectSettingsTabCommand.Execute(tab);
             await Task.Delay(320);
             await Capture(window, $"ncl-wpf-settings-{tab}.png", log);
         }
+
+        foreach (var tab in SettingsTabs)
+        {
+            vm.SelectSettingsTabCommand.Execute(tab);
+            await Task.Delay(320);
+            await Capture(window, $"ncl-wpf-settings-{tab}-minimum.png", log, 1080, 740);
+            var scroll = (System.Windows.Controls.ScrollViewer)window.FindName("SettingsScroll");
+            log.AppendLine($"  {(scroll.ExtentWidth <= scroll.ViewportWidth + 1 && scroll.VerticalOffset < 1 ? "OK" : "!!")} settings={tab}: viewport={scroll.ViewportWidth:F0}x{scroll.ViewportHeight:F0}, extent={scroll.ExtentWidth:F0}x{scroll.ExtentHeight:F0}");
+        }
+        vm.SelectSettingsTabCommand.Execute("Java");
+        vm.IsJavaChooserOpen = true;
+        await Capture(window, "ncl-wpf-settings-Java-expanded-minimum.png", log, 1080, 740);
+        vm.IsJavaChooserOpen = false;
 
         // 弹层
         vm.GoCommand.Execute("home");
@@ -202,11 +218,64 @@ internal static class UiShot
         foreach (var name in PageContainerNames)
         {
             if (window.FindName(name) is not FrameworkElement element) continue;
-            if (element.Visibility == Visibility.Visible) visible.Add(name);
+            if (element.IsVisible) visible.Add(name);
         }
 
         var flag = visible.Count == 1 ? "OK" : "!!";
         log.AppendLine($"  {flag} page={currentPage}  可见容器: {string.Join(", ", visible)}");
+    }
+
+    private static async Task AuditSettingsDialog(MainWindow window, MainWindowViewModel vm, StringBuilder log)
+    {
+        void Check(string label, bool valid) => log.AppendLine($"  {(valid ? "OK" : "!!")} settings dialog: {label}");
+        await Task.Delay(300);
+        var originalPage = vm.CurrentPage;
+        var content = (FrameworkElement)window.FindName("MainContent");
+        var backdrop = (System.Windows.Controls.Image)window.FindName("SettingsBackdrop");
+        var dialog = (FrameworkElement)window.FindName("SettingsDialog");
+        Check("opens without replacing the current page", window.IsSettingsOpen && originalPage != "settings");
+        Check("background rendering and interaction are suspended", !content.IsVisible);
+        Check("backdrop is a frozen bitmap without a live effect", backdrop.Source is BitmapSource { IsFrozen: true } && backdrop.Effect is null);
+        Check("large dialog fits the launcher", dialog.ActualWidth > 850 && dialog.ActualHeight > 500);
+
+        ((System.Windows.Controls.Button)window.FindName("SettingsCloseButton"))
+            .RaiseEvent(new RoutedEventArgs(System.Windows.Controls.Primitives.ButtonBase.ClickEvent));
+        await Task.Delay(180);
+        Check("close button restores the original page and input", !window.IsSettingsOpen && vm.CurrentPage == originalPage && content.IsVisible && backdrop.Source is null);
+
+        vm.GoCommand.Execute("settings");
+        await Task.Delay(260);
+        var escape = new System.Windows.Input.KeyEventArgs(System.Windows.Input.Keyboard.PrimaryDevice,
+            PresentationSource.FromVisual(window)!, 0, System.Windows.Input.Key.Escape)
+        {
+            RoutedEvent = System.Windows.Input.Keyboard.PreviewKeyDownEvent,
+        };
+        dialog.RaiseEvent(escape);
+        await Task.Delay(180);
+        Check("Escape closes the dialog", !window.IsSettingsOpen && content.IsVisible);
+
+        vm.GoCommand.Execute("settings");
+        await Task.Delay(260);
+        var scrim = (FrameworkElement)window.FindName("SettingsScrim");
+        scrim.RaiseEvent(new System.Windows.Input.MouseButtonEventArgs(System.Windows.Input.Mouse.PrimaryDevice, 0, System.Windows.Input.MouseButton.Left)
+        {
+            RoutedEvent = System.Windows.Input.Mouse.MouseDownEvent,
+        });
+        await Task.Delay(180);
+        Check("clicking the backdrop closes the dialog", !window.IsSettingsOpen && content.IsVisible);
+
+        vm.GoCommand.Execute("settings");
+        window.IsSettingsOpen = false;
+        vm.GoCommand.Execute("settings");
+        await Task.Delay(300);
+        Check("rapid reopen survives pending close", window.IsSettingsOpen && !content.IsVisible && backdrop.Source is not null);
+        window.IsSettingsOpen = false;
+        await Task.Delay(180);
+        Check("rapid reopen restores state after final close", content.IsVisible && backdrop.Source is null);
+
+        var legacy = new MainWindowViewModel(new Services.WpfBitmapDecoder());
+        legacy.GoCommand.Execute("settings");
+        Check("hosts without a dialog retain settings navigation", legacy.CurrentPage == "settings");
     }
 
     /// <summary>把所有带 x:Name 的元素的实际尺寸/可见性列出来，样式没命中时一眼看得出来。</summary>
@@ -329,15 +398,17 @@ internal static class UiShot
     /// <c>Dispatcher.Yield(DispatcherPriority.Render)</c>。少了这一步，第一次截图拿到的是
     /// 上一轮排布的绘制内容，右边多出来的那 136px 会是空的。</para>
     /// </summary>
-    private static void ForceCanvas(Window window)
+    private static void ForceCanvas(Window window, int width = CanvasWidth, int height = CanvasHeight)
     {
         if (window.Content is not FrameworkElement content) return;
 
-        content.Measure(new Size(CanvasWidth, CanvasHeight));
-        content.Arrange(new Rect(0, 0, CanvasWidth, CanvasHeight));
+        window.Width = width;
+        window.Height = height;
+        content.Measure(new Size(width, height));
+        content.Arrange(new Rect(0, 0, width, height));
     }
 
-    private static async Task Capture(Window window, string fileName, StringBuilder log)
+    private static async Task Capture(Window window, string fileName, StringBuilder log, int canvasWidth = CanvasWidth, int canvasHeight = CanvasHeight)
     {
         if (window.Content is not FrameworkElement content)
         {
@@ -345,7 +416,7 @@ internal static class UiShot
             return;
         }
 
-        ForceCanvas(window);
+        ForceCanvas(window, canvasWidth, canvasHeight);
 
         // 排布改完之后必须让渲染管线跑一轮，再交给 RenderTargetBitmap。
         // 否则它拿到的还是**上一轮排布**留下的绘制内容 —— 表现是窗口比画布窄时，
@@ -360,9 +431,9 @@ internal static class UiShot
             log.AppendLine($"{fileName}: 布局尺寸 {width}x{height}，跳过");
             return;
         }
-        if (width != CanvasWidth || height != CanvasHeight)
+        if (width != canvasWidth || height != canvasHeight)
         {
-            log.AppendLine($"{fileName}: 警告 强制画布失败，实际 {width}x{height}（应为 {CanvasWidth}x{CanvasHeight}）");
+            log.AppendLine($"{fileName}: 警告 强制画布失败，实际 {width}x{height}（应为 {canvasWidth}x{canvasHeight}）");
         }
 
         var path = Path.Combine(Path.GetTempPath(), fileName);
