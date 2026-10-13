@@ -1294,9 +1294,24 @@
                     Padding="0,12"
                     Panel.ZIndex="20">
                 <neg:NegiGrid Rows="Auto * Auto Auto">
-                    <Image Grid.Row="0" Source="pack://application:,,,/Assets/app.png"
-                           Width="36" Height="36" Margin="0,0,0,8"
-                           HorizontalAlignment="Center" IsHitTestVisible="False" />
+                    <controls:SqueezeButton x:Name="FoxLogo" Grid.Row="0"
+                                            Width="42" Height="36" Margin="0,0,0,8"
+                                            HorizontalAlignment="Center"
+                                            Cursor="Hand" Background="Transparent"
+                                            BorderThickness="0" Padding="0"
+                                            AutomationProperties.Name="狐狸">
+                        <controls:SqueezeButton.Template>
+                            <ControlTemplate TargetType="{x:Type controls:SqueezeButton}">
+                                <Grid Background="Transparent">
+                                    <ContentPresenter HorizontalAlignment="Center"
+                                                      VerticalAlignment="Center" />
+                                </Grid>
+                            </ControlTemplate>
+                        </controls:SqueezeButton.Template>
+                        <Image Source="pack://application:,,,/Assets/app.png"
+                               Width="36" Height="36" IsHitTestVisible="False"
+                               RenderOptions.BitmapScalingMode="HighQuality" />
+                    </controls:SqueezeButton>
 
                     <!-- 中间导航：首页 / 实例 / 下载 -->
                     <neg:NegiStackPanel Grid.Row="1" VerticalAlignment="Center" Spacing="8" HorizontalAlignment="Center">
