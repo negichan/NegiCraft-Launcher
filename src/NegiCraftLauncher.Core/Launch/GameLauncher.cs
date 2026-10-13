@@ -53,7 +53,8 @@ public sealed class GameLauncher
             : new CallbackProgress<InstallProgress>(p =>
                 progress.Report(new InstallProgress(p.Stage, p.Fraction * InstallShare, p.Detail)));
 
-        var resolved = await _installer.InstallAsync(instance.Id, _source, scaled, ct).ConfigureAwait(false);
+        var resolved = await _installer.InstallAsync(
+            instance.Id, instance.VersionId, _source, scaled, ct).ConfigureAwait(false);
 
         progress?.Report(new InstallProgress("检查 Java", InstallShare));
         var java = JavaRuntimeLocator.FindSuitable(
@@ -90,6 +91,8 @@ public sealed class GameLauncher
             LoggingConfigPath = loggingConfig?.Path,
             LoggingArgument = loggingConfig?.Argument,
             LauncherVersion = _launcherVersion,
+            PreallocateMemory = instance.PreallocateMemory,
+            ExtraJvmArguments = SplitArguments(instance.ExtraJvmArguments),
         });
 
         progress?.Report(new InstallProgress("启动进程", 1));
@@ -130,6 +133,15 @@ public sealed class GameLauncher
         var path = Path.Combine(resolved.AssetsRoot, entry.File.Id);
         return File.Exists(path) ? (path, entry.Argument) : null;
     }
+
+    /// <summary>
+    ///     实例那行手写参数按空白切 token（<c>-XX:+UseG1GC -XX:MaxGCPauseMillis=200</c>）。
+    ///     <b>不吃引号</b> —— 值里带空格的 <c>-D</c> 会被切开，但那是脚本该管的事，配置框给的就是命令行参数。
+    /// </summary>
+    private static IReadOnlyList<string> SplitArguments(string? raw) =>
+        string.IsNullOrWhiteSpace(raw)
+            ? Array.Empty<string>()
+            : raw.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries);
 
     private static GameSession Start(LaunchPlan plan, Instance instance)
     {

@@ -23,6 +23,30 @@ public static class NclPaths
     public static readonly string VersionManifestCache =
         Path.Combine(CacheDirectory, "version_manifest_v2.json");
 
+    /// <summary>
+    ///     游戏目录路径的规范形：绝对路径、去掉尾部分隔符。<b>路径就是目录的身份</b>（重命名只改显示名），
+    ///     所以登记、比较、元数据分组都先过这里；比较一律 <c>OrdinalIgnoreCase</c>，Windows 不区分大小写，
+    ///     别的平台也不会因为大小写撞车。
+    ///
+    ///     <para>空路径或非法路径返回空串，调用方按"没有这个目录"处理；盘根（<c>D:\</c>）保留尾部分隔符，
+    ///     因为 <c>D:</c> 在 Windows 上是"D 盘当前目录"而不是 D 盘根。</para>
+    /// </summary>
+    public static string NormaliseGameRoot(string? path)
+    {
+        if (string.IsNullOrWhiteSpace(path)) return "";
+
+        try
+        {
+            var full = Path.GetFullPath(path.Trim().Trim('"'));
+            var trimmed = full.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+            return trimmed.Length == 2 && trimmed[1] == ':' ? trimmed + Path.DirectorySeparatorChar : trimmed;
+        }
+        catch (Exception)
+        {
+            return "";
+        }
+    }
+
     public static string VersionsDirectory(string gameRoot) => Path.Combine(gameRoot, "versions");
     public static string LibrariesDirectory(string gameRoot) => Path.Combine(gameRoot, "libraries");
     public static string AssetsDirectory(string gameRoot) => Path.Combine(gameRoot, "assets");

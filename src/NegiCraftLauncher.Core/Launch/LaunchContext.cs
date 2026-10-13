@@ -29,6 +29,9 @@ public sealed class LaunchContext
 
     public IReadOnlyList<string> ExtraJvmArguments { get; init; } = [];
     public IReadOnlyList<string> ExtraGameArguments { get; init; } = [];
+
+    /// <summary>预分配：<c>-Xms</c> 不再只申请 1 GB，而是直接顶到 <c>-Xmx</c>。</summary>
+    public bool PreallocateMemory { get; init; }
 }
 
 /// <summary>A ready-to-start process description.</summary>

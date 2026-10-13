@@ -65,6 +65,9 @@ public sealed class VersionRepository
 
     public VersionRepository(string gameRoot) => _gameRoot = gameRoot;
 
+    /// <summary>这个仓库管着的那棵 .minecraft；加载器安装要把内嵌 jar 搬进它的 libraries/。</summary>
+    public string GameRoot => _gameRoot;
+
     public string DirectoryOf(string versionId) => NclPaths.InstanceDirectory(_gameRoot, versionId);
 
     public string ProfilePathOf(string versionId) => NclPaths.InstanceVersionJson(_gameRoot, versionId);

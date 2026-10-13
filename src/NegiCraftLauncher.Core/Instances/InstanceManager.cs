@@ -10,10 +10,17 @@ namespace NegiCraftLauncher.Core.Instances;
 /// Instances are folders under <c>versions/</c>. Metadata that cannot live in the version JSON
 /// (display name, per-instance overrides) is kept beside the launcher's settings, so a folder created
 /// by another launcher is still picked up.
+///
+/// <para>One manager per game root — the launcher can watch several <c>.minecraft</c> trees at once.
+/// Metadata is scoped by that root inside <c>instances.json</c>, so two folders holding the same
+/// version id are two different instances, and a folder the launcher never saw still gets a card.</para>
 /// </summary>
 public sealed class InstanceManager
 {
     private static readonly char[] InvalidIdCharacters = Path.GetInvalidFileNameChars();
+
+    /// <summary>mods/ 里算"一个模组"的后缀；禁用的模组常被改名成 <c>.jar.disabled</c>，那不算。</summary>
+    private static readonly string[] ModFileExtensions = { ".jar", ".zip", ".litemod" };
 
     private readonly string _gameRoot;
     private readonly string _metadataPath;
@@ -24,9 +31,9 @@ public sealed class InstanceManager
 
     public InstanceManager(string gameRoot, string? metadataPath = null)
     {
-        _gameRoot = gameRoot;
+        _gameRoot = NclPaths.NormaliseGameRoot(gameRoot);
         _metadataPath = metadataPath ?? NclPaths.InstancesFile;
-        _repository = new VersionRepository(gameRoot);
+        _repository = new VersionRepository(_gameRoot);
     }
 
     public string GameRoot => _gameRoot;
@@ -45,13 +52,64 @@ public sealed class InstanceManager
         }
 
         _instances.Sort((a, b) => string.Compare(a.DisplayName, b.DisplayName, StringComparison.CurrentCulture));
+
+        foreach (var instance in _instances)
+        {
+            instance.ModCount = CountMods(GameDirectoryFor(instance));
+        }
     }
 
     public void Save()
     {
-        var document = new MetadataDocument { Instances = _instances.ToList() };
+        var document = ReadDocument();
+
+        var scoped = document.Folders.FirstOrDefault(f =>
+            string.Equals(NclPaths.NormaliseGameRoot(f.Path), _gameRoot, StringComparison.OrdinalIgnoreCase));
+
+        if (scoped is null)
+        {
+            scoped = new FolderMetadata { Path = _gameRoot };
+            document.Folders.Add(scoped);
+        }
+
+        scoped.Instances = _instances.ToList();
+
         Directory.CreateDirectory(Path.GetDirectoryName(_metadataPath)!);
         File.WriteAllText(_metadataPath, NclJson.Serialize(document));
+    }
+
+    /// <summary>
+    ///     目录列表之前，<c>instances.json</c> 是一整份不分目录的元数据。第一次带多目录的运行把它整份挂到
+    ///     <paramref name="gameRoot"/> 之下，之后就只按目录读写 —— 老文件里的自定义名字一个都不丢。
+    /// </summary>
+    public static void AdoptLegacyMetadata(string gameRoot, string? metadataPath = null)
+    {
+        metadataPath ??= NclPaths.InstancesFile;
+        if (!File.Exists(metadataPath)) return;
+
+        MetadataDocument? document;
+        try
+        {
+            document = NclJson.Deserialize<MetadataDocument>(File.ReadAllText(metadataPath));
+        }
+        catch (Exception)
+        {
+            return;
+        }
+
+        if (document is null || document.Folders.Count > 0 || document.Instances.Count == 0) return;
+
+        File.WriteAllText(metadataPath, NclJson.Serialize(new MetadataDocument
+        {
+            Folders =
+            {
+                new FolderMetadata
+                {
+                    Path = NclPaths.NormaliseGameRoot(gameRoot),
+                    Instances = document.Instances,
+                },
+            },
+        }));
     }
 
     public Instance? Find(string? id) =>
@@ -119,7 +177,8 @@ public sealed class InstanceManager
         return true;
     }
 
-    public bool Update(string id, string displayName, bool isolated, string? javaPath, int? maxMemoryMb)
+    public bool Update(string id, string displayName, bool isolated, string? javaPath, int? maxMemoryMb,
+        string? extraJvmArguments, bool preallocateMemory)
     {
         var instance = Find(id);
         if (instance is null || string.IsNullOrWhiteSpace(displayName)) return false;
@@ -128,6 +187,8 @@ public sealed class InstanceManager
         instance.Isolated = isolated;
         instance.JavaPath = string.IsNullOrWhiteSpace(javaPath) ? null : javaPath.Trim();
         instance.MaxMemoryMb = maxMemoryMb;
+        instance.ExtraJvmArguments = string.IsNullOrWhiteSpace(extraJvmArguments) ? null : extraJvmArguments.Trim();
+        instance.PreallocateMemory = preallocateMemory;
         Save();
         return true;
     }
@@ -192,6 +253,7 @@ public sealed class InstanceManager
 
             var resolved = _repository.Load(id);
             instance.VersionId = resolved.RootVersionId;
+            instance.Loader = WithLoaderVersion(instance.Loader, resolved);
         }
         catch (Exception)
         {
@@ -202,6 +264,31 @@ public sealed class InstanceManager
         if (File.Exists(icon)) instance.IconPath = icon;
 
         return instance;
+    }
+
+    /// <summary>
+    ///     卡片的 tag 写「Fabric 0.16.10」这样的整串，加载器筛选按种类分组，所以版本号纯粹是显示 ——
+    ///     库里没有那条坐标（比如只装了 OptiFine）就原样留着种类名。
+    /// </summary>
+    private static string WithLoaderVersion(string kind, ResolvedVersion resolved)
+    {
+        var coordinate = resolved.Profile.Libraries
+            .Select(l => l.Name)
+            .FirstOrDefault(n => n.Contains(":fabric-loader:", StringComparison.Ordinal) ||
+                                 n.Contains(":quilt_loader:", StringComparison.Ordinal) ||
+                                 n.Contains("neoforged:neoforge:", StringComparison.Ordinal) ||
+                                 n.Contains("minecraftforge:forge:", StringComparison.Ordinal));
+
+        if (coordinate is null) return kind;
+
+        var parts = coordinate.Split(':');
+        if (parts.Length < 3) return kind;
+
+        var version = parts[2];
+        var vanilla = resolved.RootVersionId + "-";
+        if (version.StartsWith(vanilla, StringComparison.OrdinalIgnoreCase)) version = version[vanilla.Length..];
+
+        return version.Length == 0 ? kind : $"{kind} {version}";
     }
 
     private static string DetectLoader(string id, string json)
@@ -227,22 +314,52 @@ public sealed class InstanceManager
         }
     }
 
-    private List<Instance> ReadMetadata()
+    private MetadataDocument ReadDocument()
     {
         try
         {
-            if (!File.Exists(_metadataPath)) return new List<Instance>();
-            return NclJson.Deserialize<MetadataDocument>(File.ReadAllText(_metadataPath))?.Instances
-                   ?? new List<Instance>();
+            if (!File.Exists(_metadataPath)) return new MetadataDocument();
+            return NclJson.Deserialize<MetadataDocument>(File.ReadAllText(_metadataPath)) ?? new MetadataDocument();
         }
         catch (Exception)
         {
-            return new List<Instance>();
+            return new MetadataDocument();
+        }
+    }
+
+    private List<Instance> ReadMetadata() =>
+        ReadDocument().Folders.FirstOrDefault(f => Owns(f.Path))?.Instances ?? new List<Instance>();
+
+    private bool Owns(string? path) =>
+        string.Equals(NclPaths.NormaliseGameRoot(path), _gameRoot, StringComparison.OrdinalIgnoreCase);
+
+    private static int CountMods(string gameDirectory)
+    {
+        var mods = Path.Combine(gameDirectory, "mods");
+        if (!Directory.Exists(mods)) return 0;
+
+        try
+        {
+            return Directory.GetFiles(mods, "*", SearchOption.TopDirectoryOnly)
+                .Count(file => ModFileExtensions.Contains(Path.GetExtension(file), StringComparer.OrdinalIgnoreCase));
+        }
+        catch (Exception)
+        {
+            return 0;
         }
     }
 
     private sealed class MetadataDocument
     {
+        /// <summary>旧格式：不分目录的一整份，只由 <see cref="AdoptLegacyMetadata"/> 读一次。</summary>
+        public List<Instance> Instances { get; set; } = new();
+
+        public List<FolderMetadata> Folders { get; set; } = new();
+    }
+
+    private sealed class FolderMetadata
+    {
+        public string Path { get; set; } = "";
         public List<Instance> Instances { get; set; } = new();
     }
 }
