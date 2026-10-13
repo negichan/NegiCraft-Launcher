@@ -13,11 +13,35 @@ public enum DownloadSource
 }
 
 /// <summary>
+/// 一个 .minecraft 式游戏目录。<b>路径就是它的身份</b> —— 重命名只改显示名，实例元数据与
+/// "当前实例"都按路径挂着，所以同一路径在列表里只能出现一次。
+/// </summary>
+public sealed class GameFolder
+{
+    public string Path { get; set; } = "";
+
+    /// <summary>用户起的别名；留空时按路径末段生成（见 <see cref="LauncherSettings.SuggestFolderName"/>）。</summary>
+    public string Name { get; set; } = "";
+
+    /// <summary>新建与下载默认落到的那一个；列表里恰好一个为 true。</summary>
+    public bool IsDefault { get; set; }
+
+    /// <summary>这个目录里当前选中的实例；各目录各记各的，切回来不用重选。</summary>
+    public string? CurrentInstanceId { get; set; }
+}
+
+/// <summary>
 /// Everything the settings page edits, persisted as a single JSON document.
 /// </summary>
 public sealed class LauncherSettings
 {
     public string GameRoot { get; set; } = NclPaths.DefaultGameRoot;
+
+    /// <summary>实例页可以来回切的游戏目录；<see cref="GameRoot"/> 是其中默认那一个的旧字段。</summary>
+    public List<GameFolder> GameFolders { get; set; } = new();
+
+    /// <summary>实例页正在看的那个目录的路径。</summary>
+    public string ActiveGameFolder { get; set; } = "";
 
     /// <summary>Explicit javaw.exe; null means pick one automatically per version.</summary>
     public string? JavaPath { get; set; }
@@ -31,6 +55,9 @@ public sealed class LauncherSettings
     ///     at most this many ranged segments.
     /// </summary>
     public int DownloadThreads { get; set; } = 16;
+
+    /// <summary>实例页的排法："grid" 卡片墙，"list" 紧凑列表。只是看法，不影响任何东西。</summary>
+    public string InstanceViewMode { get; set; } = "grid";
 
     /// <summary>When true each instance gets its own saves/mods/config under versions/&lt;id&gt;/.</summary>
     public bool VersionIsolation { get; set; } = true;
@@ -140,6 +167,10 @@ public sealed class LauncherSettings
     /// </summary>
     public int VideoBackgroundVolume { get; set; }
 
+    /// <summary>
+    ///     旧版那一个全局「当前实例」。<b>只在第一次读配置时用来给默认目录补上
+    ///     <see cref="GameFolder.CurrentInstanceId"/></b>，之后不再写 —— 现在每个目录各记各的。
+    /// </summary>
     public string? CurrentInstanceId { get; set; }
 
     /// <summary>桌宠独立自定义名称；为 null 或空时继承当前主账号名称。</summary>
@@ -158,6 +189,170 @@ public sealed class LauncherSettings
 
     public string EffectiveGameRoot =>
         string.IsNullOrWhiteSpace(GameRoot) ? NclPaths.DefaultGameRoot : GameRoot;
+
+    /// <summary>实例页正在看的那个目录；永远能在 <see cref="GameFolders"/> 里找到。</summary>
+    [JsonIgnore]
+    public GameFolder ActiveFolder => FindFolder(ActiveGameFolder) ?? GameFolders[0];
+
+    /// <summary>新建与下载落进去的那个目录。</summary>
+    [JsonIgnore]
+    public GameFolder DefaultFolder => GameFolders.FirstOrDefault(f => f.IsDefault) ?? GameFolders[0];
+
+    public GameFolder? FindFolder(string? path)
+    {
+        var key = NclPaths.NormaliseGameRoot(path ?? "");
+        return key.Length == 0 ? null : GameFolders.FirstOrDefault(f => SamePath(f.Path, key));
+    }
+
+    /// <summary>
+    /// 关联一个已有的游戏目录。<b>只登记，不动硬盘上的任何东西</b>；目录不存在或已经登记过都算失败，
+    /// 失败原因写进 <paramref name="error"/> 给 UI 直接显示。
+    /// </summary>
+    public bool TryAddFolder(string path, string? name, out GameFolder? folder, out string error)
+    {
+        folder = null;
+        error = "";
+
+        var key = NclPaths.NormaliseGameRoot(path);
+        if (key.Length == 0)
+        {
+            error = "请输入一个文件夹路径。";
+            return false;
+        }
+
+        if (!Directory.Exists(key))
+        {
+            error = $"「{key}」不存在，或者不是一个文件夹。";
+            return false;
+        }
+
+        if (FindFolder(key) is { } existing)
+        {
+            folder = existing;
+            error = $"「{existing.Name}」已经在列表里了。";
+            return false;
+        }
+
+        var added = new GameFolder
+        {
+            Path = key,
+            Name = string.IsNullOrWhiteSpace(name) ? SuggestFolderName(key) : name.Trim(),
+            // 列表还空着时（手改配置把默认项删了之类），第一个进来的就得当默认。
+            IsDefault = GameFolders.Count == 0,
+        };
+
+        GameFolders.Add(added);
+        folder = added;
+        error = "";
+        return true;
+    }
+
+    public bool TryRenameFolder(string path, string name)
+    {
+        if (FindFolder(path) is not { } folder || string.IsNullOrWhiteSpace(name)) return false;
+
+        folder.Name = name.Trim();
+        return true;
+    }
+
+    /// <summary>设为默认 = 新建与下载从此落在这里；默认标记整个列表只有一个。</summary>
+    public bool TrySetDefaultFolder(string path)
+    {
+        if (FindFolder(path) is not { } target) return false;
+
+        foreach (var folder in GameFolders) folder.IsDefault = ReferenceEquals(folder, target);
+        return true;
+    }
+
+    /// <summary>
+    /// 从列表里移除。<b>硬盘上的文件一个都不删</b>，实例元数据也留着 —— 再把同一个路径添加回来，
+    /// 别名和实例名都还在。默认那个目录不许移除，否则新建就没了去处。
+    /// </summary>
+    public bool TryRemoveFolder(string path, out string error)
+    {
+        error = "";
+
+        if (GameFolders.Count <= 1)
+        {
+            error = "至少要留一个游戏目录。";
+            return false;
+        }
+
+        if (FindFolder(path) is not { } folder) return false;
+
+        if (folder.IsDefault)
+        {
+            error = "默认目录不能移除，先把别的目录设为默认。";
+            return false;
+        }
+
+        GameFolders.Remove(folder);
+        return true;
+    }
+
+    public bool TrySetActiveFolder(string path)
+    {
+        if (FindFolder(path) is not { } folder) return false;
+
+        ActiveGameFolder = folder.Path;
+        return true;
+    }
+
+    /// <summary>没起别名时用的那个名字：路径末段（<c>…\.minecraft</c> 读作 <c>.minecraft</c>）。</summary>
+    public static string SuggestFolderName(string path)
+    {
+        var name = Path.GetFileName(NclPaths.NormaliseGameRoot(path));
+        return name.Length == 0 ? path : name;
+    }
+
+    private static bool SamePath(string left, string right) =>
+        string.Equals(NclPaths.NormaliseGameRoot(left), NclPaths.NormaliseGameRoot(right),
+            StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// 目录列表自愈：去掉空路径与重复项，没有就按 <see cref="GameRoot"/> 补一个默认，
+    /// 保证恰好一个默认、<see cref="ActiveGameFolder"/> 指得到人，并把 <see cref="GameRoot"/>
+    /// 跟着默认目录走 —— 旧版本读到这份文件时看的还是那一个树。
+    /// </summary>
+    private void NormalizeFolders()
+    {
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var folder in GameFolders)
+        {
+            folder.Path = NclPaths.NormaliseGameRoot(folder.Path);
+            folder.Name = string.IsNullOrWhiteSpace(folder.Name) ? SuggestFolderName(folder.Path) : folder.Name.Trim();
+        }
+
+        GameFolders.RemoveAll(f => f.Path.Length == 0 || !seen.Add(f.Path));
+
+        var legacy = NclPaths.NormaliseGameRoot(EffectiveGameRoot);
+        if (GameFolders.Count == 0)
+        {
+            GameFolders.Add(new GameFolder
+            {
+                Path = legacy,
+                Name = SuggestFolderName(legacy),
+                IsDefault = true,
+                // 旧配置只有一个全局当前实例，它属于默认目录。
+                CurrentInstanceId = CurrentInstanceId,
+            });
+        }
+
+        if (!GameFolders.Any(f => f.IsDefault))
+        {
+            GameFolders[0].IsDefault = true;
+        }
+        else if (GameFolders.Count(f => f.IsDefault) > 1)
+        {
+            var kept = GameFolders.First(f => f.IsDefault);
+            foreach (var folder in GameFolders) folder.IsDefault = ReferenceEquals(folder, kept);
+        }
+
+        if (FindFolder(ActiveGameFolder) is null) ActiveGameFolder = DefaultFolder.Path;
+
+        // GameRoot 是旧字段：跟着默认目录走，别的版本读到它时看的还是同一棵树。
+        GameRoot = DefaultFolder.Path;
+    }
 
     [JsonIgnore]
     public string FilePath { get; private set; } = NclPaths.SettingsFile;
@@ -195,6 +390,8 @@ public sealed class LauncherSettings
 
     private void Clamp()
     {
+        NormalizeFolders();
+        InstanceViewMode = InstanceViewMode == "list" ? "list" : "grid";
         MaxMemoryMb = Math.Clamp(MaxMemoryMb, 512, 65536);
         DownloadThreads = Math.Clamp(DownloadThreads, 1, 64);
         BackgroundBlur = Finite(BackgroundBlur, 0, 40, 0);

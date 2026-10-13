@@ -57,8 +57,23 @@ public sealed class VersionInstaller
     }
 
     /// <summary>Downloads a version's metadata and every file it needs, then returns the resolved profile.</summary>
-    public async Task<ResolvedVersion> InstallAsync(
+    public Task<ResolvedVersion> InstallAsync(
         string versionId,
+        IDownloadSource source,
+        IProgress<InstallProgress>? progress = null,
+        CancellationToken ct = default) =>
+        InstallAsync(versionId, versionId, source, progress, ct);
+
+    /// <summary>
+    ///     <paramref name="instanceId"/> 是落在 <c>versions/</c> 下的那个文件夹，
+    ///     <paramref name="manifestVersionId"/> 是去版本清单里查的那一个 —— 两者不一样就是
+    ///     "同一个版本装了第二份"：改了名的实例、整合包实例、加载器实例都属这一类。
+    ///     按文件夹名去清单里查会查无此人（清单只认 <c>1.21.4</c> 这种官方 id），
+    ///     所以那一步只在文件夹还没有元数据时才做。
+    /// </summary>
+    public async Task<ResolvedVersion> InstallAsync(
+        string instanceId,
+        string manifestVersionId,
         IDownloadSource source,
         IProgress<InstallProgress>? progress = null,
         CancellationToken ct = default)
@@ -70,17 +85,22 @@ public sealed class VersionInstaller
 
         progress?.Report(new InstallProgress("获取版本信息", 0));
 
-        var manifest = await Manifests.GetAsync(source, ct: ct).ConfigureAwait(false);
-        var summary = manifest.Find(versionId)
-            ?? throw new ArgumentException($"版本清单中不存在 {versionId}", nameof(versionId));
+        // 加载器实例的元数据是启动器自己写的（inheritsFrom 指向原版），清单里没有它，也不该有。
+        if (!Repository.ProfileExists(instanceId))
+        {
+            var manifest = await Manifests.GetAsync(source, ct: ct).ConfigureAwait(false);
+            var summary = manifest.Find(manifestVersionId)
+                ?? throw new ArgumentException($"版本清单中不存在 {manifestVersionId}", nameof(manifestVersionId));
 
-        await EnsureProfileAsync(versionId, summary, source, ct).ConfigureAwait(false);
+            await EnsureProfileAsync(instanceId, manifestVersionId, summary, source, ct).ConfigureAwait(false);
+        }
+
         progress?.Report(new InstallProgress("解析版本信息", MetadataWeight));
 
-        var resolved = Repository.Load(versionId);
+        var resolved = Repository.Load(instanceId);
         if (resolved.Profile.AssetIndex is null || string.IsNullOrEmpty(resolved.Profile.AssetIndex.Url))
         {
-            throw new NotSupportedException($"{versionId} 没有资源索引，1.7.2 以前的版本暂不支持");
+            throw new NotSupportedException($"{instanceId} 没有资源索引，1.7.2 以前的版本暂不支持");
         }
 
         await EnsureClientJarAsync(resolved, source, jarStart, JarWeight, progress, ct).ConfigureAwait(false);
@@ -92,10 +112,10 @@ public sealed class VersionInstaller
         return resolved;
     }
 
-    private async Task EnsureProfileAsync(string versionId, VersionSummary summary, IDownloadSource source,
-        CancellationToken ct)
+    private async Task EnsureProfileAsync(string instanceId, string manifestVersionId, VersionSummary summary,
+        IDownloadSource source, CancellationToken ct)
     {
-        if (Repository.ProfileExists(versionId)) return;
+        if (Repository.ProfileExists(instanceId)) return;
 
         var bytes = await HttpText.FetchBytesAsync(_http, source.Candidates(summary.Url), ct).ConfigureAwait(false);
 
@@ -104,11 +124,11 @@ public sealed class VersionInstaller
             var actual = Convert.ToHexString(SHA1.HashData(bytes)).ToLowerInvariant();
             if (!string.Equals(actual, summary.Sha1, StringComparison.OrdinalIgnoreCase))
             {
-                throw new IOException($"版本 {versionId} 的元数据校验失败，请更换下载源后重试");
+                throw new IOException($"版本 {manifestVersionId} 的元数据校验失败，请更换下载源后重试");
             }
         }
 
-        Repository.SaveRawJson(versionId, Encoding.UTF8.GetString(bytes));
+        Repository.SaveRawJson(instanceId, Encoding.UTF8.GetString(bytes));
     }
 
     private async Task EnsureClientJarAsync(ResolvedVersion resolved, IDownloadSource source,

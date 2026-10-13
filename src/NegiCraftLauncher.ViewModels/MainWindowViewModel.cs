@@ -1,4 +1,4 @@
-﻿using System.Collections.ObjectModel;
+using System.Collections.ObjectModel;
 using System.Diagnostics;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -13,6 +13,7 @@ using NegiCraftLauncher.Core.Versions;
 using NegiCraftLauncher.Core.WallpaperEngine;
 using NegiCraftLauncher.Raster;
 using SourceKind = NegiCraftLauncher.Core.Settings.DownloadSource;
+using GameFolder = NegiCraftLauncher.Core.Settings.GameFolder;
 
 namespace NegiCraftLauncher.ViewModels;
 
@@ -124,9 +125,12 @@ public partial class MainWindowViewModel : ViewModelBase
 
     public bool IsOnHome => CurrentPage == "home";
 
+    public bool IsInstancesActive => CurrentPage is "instances" or "instance_manage";
+
     partial void OnCurrentPageChanged(string value)
     {
         OnPropertyChanged(nameof(IsOnHome));
+        OnPropertyChanged(nameof(IsInstancesActive));
         CloseAllPopovers();
     }
 
@@ -1003,10 +1007,6 @@ public partial class MainWindowViewModel : ViewModelBase
     /// <summary>筛选下拉的选项：「全部」+ 实例里真出现过的加载器（去重、按名字排）。</summary>
     public ObservableCollection<LoaderOptionModel> LoaderChoices { get; } = new();
 
-    /// <summary>标题旁那串计数：没筛就是「7 个」，筛了就「2 / 7 个」。</summary>
-    public string InstanceCountText =>
-        VisibleInstances.Count == Instances.Count ? $"{Instances.Count} 个" : $"{VisibleInstances.Count} / {Instances.Count} 个";
-
     /// <summary>有没有条件在筛（决定空状态说哪句话）。</summary>
     public bool HasInstanceFilter => InstanceSearch.Trim().Length > 0 || InstanceLoader != LoaderOptionModel.AllName;
 
@@ -1042,7 +1042,7 @@ public partial class MainWindowViewModel : ViewModelBase
     }
 
     /// <summary>Drives the transparent overlay that closes a popover when the user clicks elsewhere.</summary>
-    public bool HasOpenPopover => IsAccPopOpen || IsInstPopOpen || IsDlPopOpen || IsLoaderPopOpen;
+    public bool HasOpenPopover => IsAccPopOpen || IsInstPopOpen || IsDlPopOpen || IsLoaderPopOpen || IsFolderPopOpen;
 
     partial void OnIsAccPopOpenChanged(bool value) => OnPropertyChanged(nameof(HasOpenPopover));
 
@@ -1087,11 +1087,12 @@ public partial class MainWindowViewModel : ViewModelBase
         _launcher.SelectInstance(instance.Source);
     }
 
-    /// <summary>卡片上的「启动」：先设成当前，再走首页那条一模一样的启动流程（不另起一份实现）。</summary>
+    /// <summary>卡片上的「启动」：先设成当前并跳回首页，再走启动流程。</summary>
     [RelayCommand]
     private async Task LaunchInstanceAsync(InstanceModel instance)
     {
         MakeCurrentInstance(instance);
+        CurrentPage = "home";
         await LaunchGameAsync();
     }
 
@@ -1142,12 +1143,408 @@ public partial class MainWindowViewModel : ViewModelBase
         IsInstPopOpen = false;
         IsDlPopOpen = false;
         IsLoaderPopOpen = false;
+        IsFolderPopOpen = false;
         IsInstConfigOpen = false;
         IsVolumePopOpen = false;
     }
 
     // ==========================================================
-    // Instance Configuration Dialog
+    // 游戏目录（实例页顶上那颗胶囊）
+    // ==========================================================
+
+    /// <summary>启动器认下的所有 .minecraft 式目录；实例页只看其中一个。</summary>
+    public ObservableCollection<GameFolderModel> Folders { get; } = new();
+
+    [ObservableProperty]
+    private bool _isFolderPopOpen;
+
+    partial void OnIsFolderPopOpenChanged(bool value) => OnPropertyChanged(nameof(HasOpenPopover));
+
+    public string ActiveFolderName => _launcher.ActiveFolder.Name;
+
+    public string ActiveFolderPath => _launcher.ActiveFolder.Path;
+
+    [RelayCommand]
+    private void ToggleFolderPop()
+    {
+        IsFolderPopOpen = !IsFolderPopOpen;
+        IsAccPopOpen = false;
+        IsInstPopOpen = false;
+        IsDlPopOpen = false;
+        IsLoaderPopOpen = false;
+    }
+
+    /// <summary>切目录 = 换一份实例列表；当前实例跟着这个目录自己记的那一个走。</summary>
+    [RelayCommand]
+    private void SelectFolder(string path)
+    {
+        if (string.IsNullOrEmpty(path)) return;
+
+        _launcher.SelectFolder(path);
+        IsFolderPopOpen = false;
+        RefreshInstances();
+    }
+
+    [RelayCommand]
+    private async Task RenameFolderAsync(string path)
+    {
+        if (_launcher.Settings.FindFolder(path) is not { } folder) return;
+
+        var name = await ShowDialogAsync("重命名目录", folder.Name, "显示用的名字", folder.Name, "保存");
+        if (name is null || string.IsNullOrWhiteSpace(name)) return;
+
+        _launcher.TryRenameFolder(path, name);
+        RefreshFolders();
+    }
+
+    [RelayCommand]
+    private void SetDefaultFolder(string path)
+    {
+        if (!_launcher.TrySetDefaultFolder(path)) return;
+
+        IsFolderPopOpen = false;
+        RefreshFolders();
+        ShowBanner($"「{_launcher.Settings.FindFolder(path)?.Name}」现在是默认目录，新建与下载都会落在这里。");
+    }
+
+    [RelayCommand]
+    private async Task RemoveFolderAsync(string path)
+    {
+        if (_launcher.Settings.FindFolder(path) is not { } folder) return;
+
+        var ok = await ShowDialogAsync("移除目录",
+            $"只是从启动器的列表里去掉「{folder.Name}」，硬盘上的文件一个都不动。确定吗？", null, null, "移除");
+        if (ok is null) return;
+
+        if (!_launcher.TryRemoveFolder(path, out var error))
+        {
+            ShowBanner(error);
+            return;
+        }
+
+        // 移除的有可能正是眼前这一个，Settings.Save 已经把活动目录退回默认的，这里跟上。
+        _launcher.SelectFolder(_launcher.ActiveFolder.Path);
+        IsFolderPopOpen = false;
+        RefreshInstances();
+    }
+
+    // ----------------------------------------------------------
+    // 添加已有目录
+    // ----------------------------------------------------------
+
+    [ObservableProperty]
+    private bool _isAddFolderOpen;
+
+    [ObservableProperty]
+    private string _newFolderPath = "";
+
+    [ObservableProperty]
+    private string _newFolderName = "";
+
+    public string NewFolderSuggestedName
+    {
+        get
+        {
+            var path = NclPaths.NormaliseGameRoot(NewFolderPath);
+            return path.Length > 0 ? Core.Settings.LauncherSettings.SuggestFolderName(path) : "";
+        }
+    }
+
+    /// <summary>
+    ///     那行校验提示：<b>真去数一遍 versions/ 里的实例</b>，不是摆个样子。
+    ///     路径写错、盘没插、或者那是个空文件夹，都在这句话里说清楚，别等添加完了看空列表。
+    /// </summary>
+    public string NewFolderScanHint
+    {
+        get
+        {
+            var path = NclPaths.NormaliseGameRoot(NewFolderPath);
+            if (path.Length == 0) return "先填一个文件夹路径。";
+            if (!Directory.Exists(path)) return "这个路径不存在，或者不是一个文件夹。";
+            if (_launcher.Settings.FindFolder(path) is { } taken) return $"已经添加过了：「{taken.Name}」。";
+
+            var count = _launcher.CountInstancesIn(path);
+            return count > 0
+                ? $"校验通过：versions 里有 {count} 个实例。"
+                : "没有 versions 目录或里面是空的 —— 添加进来也可以，之后在里面装的实例会显示在这。";
+        }
+    }
+
+    partial void OnNewFolderPathChanged(string value)
+    {
+        OnPropertyChanged(nameof(NewFolderScanHint));
+        OnPropertyChanged(nameof(NewFolderSuggestedName));
+        OnPropertyChanged(nameof(NewFolderLooksValid));
+    }
+
+    /// <summary>校验那句配哪个图标：路径在、又不重复，才算真通过 —— 警告句子挂个绿勾是骗人。</summary>
+    public bool NewFolderLooksValid
+    {
+        get
+        {
+            var path = NclPaths.NormaliseGameRoot(NewFolderPath);
+            return path.Length > 0 && Directory.Exists(path) && _launcher.Settings.FindFolder(path) is null;
+        }
+    }
+
+    [RelayCommand]
+    private void BeginAddFolder(string? suggestedPath = null)
+    {
+        NewFolderPath = suggestedPath ?? "";
+        NewFolderName = "";
+        IsFolderPopOpen = false;
+        IsAddFolderOpen = true;
+    }
+
+    [RelayCommand]
+    private void CloseAddFolder() => IsAddFolderOpen = false;
+
+    [RelayCommand]
+    private void ConfirmAddFolder()
+    {
+        var name = NewFolderName.Trim().Length > 0 ? NewFolderName.Trim() : NewFolderSuggestedName;
+
+        if (!_launcher.TryAddFolder(NewFolderPath, name, out var added, out var error))
+        {
+            ShowBanner(error);
+            return;
+        }
+
+        IsAddFolderOpen = false;
+
+        // 添加完就切过去看成果，和实例页那颗胶囊的语义一致：胶囊说的就是"我现在在哪"。
+        if (added is not null) _launcher.SelectFolder(added.Path);
+        RefreshInstances();
+    }
+
+    /// <summary>用视图选回来的路径开对话框（两边的目录选择器 API 不同，选文件是视图的事）。</summary>
+    public void OfferNewFolder(string path)
+    {
+        NewFolderPath = path;
+        if (NewFolderName.Length == 0) NewFolderName = NewFolderSuggestedName;
+        IsAddFolderOpen = true;
+    }
+
+    // ==========================================================
+    // 导入整合包
+    // ==========================================================
+
+    [ObservableProperty]
+    private bool _isPackImportOpen;
+
+    [ObservableProperty]
+    private string _packSourcePath = "";
+
+    [ObservableProperty]
+    private string _packInstanceName = "";
+
+    [ObservableProperty]
+    private string _packTargetFolder = "";
+
+    /// <summary>导入是长活（要下整份原版 + 一堆 mod），跑起来就不许再点一次。</summary>
+    [ObservableProperty]
+    private bool _isPackImportBusy;
+
+    [ObservableProperty]
+    private string _packStageText = "";
+
+    [ObservableProperty]
+    private double _packProgressValue;
+
+    /// <summary>把整合包拖进窗口时那层遮罩。视图管拖放事件，这里只管它该不该露出来。</summary>
+    [ObservableProperty]
+    private bool _isDropOverlayVisible;
+
+    public string PackProgressText => IsPackImportBusy
+        ? $"{PackStageText} {PackProgressValue:0}%"
+        : "";
+
+    partial void OnPackStageTextChanged(string value) => OnPropertyChanged(nameof(PackProgressText));
+
+    partial void OnPackProgressValueChanged(double value) => OnPropertyChanged(nameof(PackProgressText));
+
+    partial void OnIsPackImportBusyChanged(bool value)
+    {
+        OnPropertyChanged(nameof(CanStartPackImport));
+        OnPropertyChanged(nameof(PackProgressText));
+    }
+
+    [RelayCommand]
+    private void BeginPackImport()
+    {
+        PackSourcePath = "";
+        PackInstanceName = "";
+        PackTargetFolder = ActiveFolderPath;
+        PackStageText = "";
+        PackProgressValue = 0;
+        IsPackImportOpen = true;
+    }
+
+    public string PackSourceName => Path.GetFileName(PackSourcePath);
+
+    /// <summary>拖拽区那一行大字：没选文件时是引导，选了就把文件名念回去，免得用户不确定到底挑了哪个。</summary>
+    public string PackDropTitle => PackSourceName.Length > 0 ? PackSourceName : "把整合包拖进来，或点这里浏览";
+
+    public bool CanStartPackImport => PackSourcePath.Length > 0 && !IsPackImportBusy;
+
+    partial void OnPackSourcePathChanged(string value)
+    {
+        OnPropertyChanged(nameof(PackSourceName));
+        OnPropertyChanged(nameof(PackDropTitle));
+    }
+
+    /// <summary>拖进窗口或点了「浏览」之后由视图调这里：文件名先填进实例名，用户想改就改。</summary>
+    public void OfferPackFile(string path)
+    {
+        if (!File.Exists(path))
+        {
+            ShowBanner("这个文件已经不在了。");
+            return;
+        }
+
+        // 只吃 zip 容器：rar / 7z 要额外的原生解压器，启动器里没有，拖进来也解不开。
+        var extension = Path.GetExtension(path).ToLowerInvariant();
+        if (extension is not (".zip" or ".mrpack"))
+        {
+            ShowBanner($"「{extension}」解不了 —— 整合包请用 .mrpack 或 .zip。");
+            return;
+        }
+
+        PackSourcePath = path;
+        PackInstanceName = Path.GetFileNameWithoutExtension(path);
+        PackTargetFolder = ActiveFolderPath;
+        IsPackImportOpen = true;
+    }
+
+    [RelayCommand]
+    private void ClosePackImport() => IsPackImportOpen = false;
+
+    [RelayCommand]
+    private void SelectPackTargetFolder(string path)
+    {
+        if (!string.IsNullOrEmpty(path)) PackTargetFolder = path;
+    }
+
+    partial void OnPackTargetFolderChanged(string value) => MarkPackTargetSelected();
+
+    /// <summary>对话框那排目录 chip 的选中态：和加载器下拉同一套做法，状态挂在每一项自己身上。</summary>
+    private void MarkPackTargetSelected()
+    {
+        foreach (var folder in Folders)
+        {
+            folder.IsPackTarget = string.Equals(folder.Path, PackTargetFolder, StringComparison.OrdinalIgnoreCase);
+        }
+    }
+
+    [RelayCommand]
+    private async Task StartPackImportAsync()
+    {
+        if (!CanStartPackImport) return;
+        if (!File.Exists(PackSourcePath))
+        {
+            ShowBanner("这个文件已经不在了。");
+            return;
+        }
+
+        var source = PackSourcePath;
+        var target = PackTargetFolder.Length > 0 ? PackTargetFolder : ActiveFolderPath;
+        var name = PackInstanceName.Trim();
+
+        IsPackImportBusy = true;
+        PackStageText = "准备导入";
+        PackProgressValue = 0;
+        var task = BeginTask($"导入 {Path.GetFileName(source)}");
+
+        // 同一份进度喂两个地方：任务列表那条行，和对话框里让人安心等着的那行字。
+        var progress = new CallbackProgress<InstallProgress>(p => AppDispatcher.Current.Post(() =>
+        {
+            Apply(task, p);
+            PackStageText = p.Stage;
+            PackProgressValue = Math.Clamp(p.Fraction * 100, 0, 100);
+        }));
+
+        try
+        {
+            var result = await _launcher.ImportModpackAsync(
+                source, target, name.Length == 0 ? null : name, progress, task.Cts!.Token);
+
+            FinishTask(task, "已完成");
+            IsPackImportBusy = false;
+
+            if (result.NewGameFolder is { } extracted)
+            {
+                // 一整份 .minecraft 那种包不当实例装：铺成新目录并切过去，版本/libraries/assets 都在包里。
+                if (_launcher.TryAddFolder(extracted, result.Manifest.Name, out var added, out _))
+                {
+                    _launcher.SelectFolder(added!.Path);
+                }
+            }
+            else if (string.Equals(target, ActiveFolderPath, StringComparison.OrdinalIgnoreCase))
+            {
+                _launcher.ReloadInstances();
+            }
+
+            RefreshInstances();
+            ClosePackImport();
+            ShowBanner(result.NewGameFolder is { } folder
+                ? $"已经解压成一个新的游戏目录：{Path.GetFileName(folder)}"
+                : $"「{result.Manifest.Name}」导入好了，可以直接启动。");
+        }
+        catch (Exception ex)
+        {
+            // 不给导入留「继续」：重试会再开一个实例目录（同名会带上 (2)），已下好的文件倒是都跳过。
+            EndTask(task, ex);
+            IsPackImportBusy = false;
+            if (task.Status is not ("已暂停" or "已取消")) ShowBanner($"导入失败：{ex.Message}");
+        }
+    }
+
+    // ==========================================================
+    // 实例页的排法（卡片 / 列表）
+    // ==========================================================
+
+    /// <summary>"grid" 卡片墙，"list" 紧凑列表。看法而已，跟着设置落盘。</summary>
+    [ObservableProperty]
+    private string _instanceViewMode = "grid";
+
+    public bool IsGridView => InstanceViewMode != "list";
+
+    public bool IsListView => InstanceViewMode == "list";
+
+    partial void OnInstanceViewModeChanged(string value)
+    {
+        OnPropertyChanged(nameof(IsGridView));
+        OnPropertyChanged(nameof(IsListView));
+        PersistSettings();
+    }
+
+    [RelayCommand]
+    private void SelectInstanceView(string mode)
+    {
+        if (!string.IsNullOrEmpty(mode)) InstanceViewMode = mode;
+    }
+
+    private void RefreshFolders()
+    {
+        var active = _launcher.ActiveFolder.Path;
+
+        Folders.Clear();
+        foreach (GameFolder folder in _launcher.Folders)
+        {
+            Folders.Add(new GameFolderModel(folder)
+            {
+                IsCurrent = string.Equals(folder.Path, active, StringComparison.OrdinalIgnoreCase),
+            });
+        }
+
+        OnPropertyChanged(nameof(ActiveFolderName));
+        OnPropertyChanged(nameof(ActiveFolderPath));
+        OnPropertyChanged(nameof(GameRoot));
+        MarkPackTargetSelected();
+    }
+
+    // ==========================================================
+    // Instance Management Page
     // ==========================================================
 
     [ObservableProperty]
@@ -1180,12 +1577,20 @@ public partial class MainWindowViewModel : ViewModelBase
     [ObservableProperty]
     private int _configInstMemoryGb = 4;
 
+    /// <summary>实例那一行手写的 JVM 参数，原样存、按空白切开喂给启动命令。</summary>
+    [ObservableProperty]
+    private string _configInstExtraJvmArgs = "";
+
+    /// <summary>预分配：<c>-Xms</c> 直接顶到 <c>-Xmx</c>。默认关 —— 那是拿物理内存换 GC 碎片。</summary>
+    [ObservableProperty]
+    private bool _configInstPreallocate;
+
     public ObservableCollection<JavaOptionModel> InstJavaOptions { get; } = new();
 
     public string GlobalMemoryGbSummary => $"{MaxMemoryGb} GB";
     public string GlobalJavaSummary => string.IsNullOrWhiteSpace(JavaLabel) ? "自动" : JavaLabel;
 
-    /// <summary>配置弹窗当前那一页：概览 / Java / 内存 / 目录。</summary>
+    /// <summary>管理页当前那一页：概览 / 模组 / 资源包 / 世界 / Java / 目录。</summary>
     [ObservableProperty]
     private string _configTab = "概览";
 
@@ -1195,40 +1600,105 @@ public partial class MainWindowViewModel : ViewModelBase
         if (!string.IsNullOrEmpty(tab)) ConfigTab = tab;
     }
 
-    /// <summary>正在编辑的就是当前实例时，底部那颗「设为当前」不该出现。</summary>
+    /// <summary>正在管理的就是当前实例时，操作栏那颗「设为当前」不该出现。</summary>
     public bool IsEditingCurrentInstance => EditingInstance is not null && ReferenceEquals(EditingInstance, CurrentInstance);
 
-    /// <summary>目录页那两行路径。没开隔离时"实例文件夹"就是公共游戏根目录，照实显示。</summary>
+    /// <summary>目录页那三行路径。没开隔离时"实例文件夹"就是公共游戏根目录，照实显示。</summary>
     public string EditingGameDirectory =>
         EditingInstance is { } i ? _launcher.Instances.GameDirectoryFor(i.Source) : "";
 
     public string EditingSavesDirectory =>
         EditingInstance is { } i ? Path.Combine(_launcher.Instances.GameDirectoryFor(i.Source), "saves") : "";
 
+    public string EditingModsDirectory =>
+        EditingInstance is { } i ? Path.Combine(_launcher.Instances.GameDirectoryFor(i.Source), "mods") : "";
+
+    public string EditingResourcePacksDirectory =>
+        EditingInstance is { } i ? Path.Combine(_launcher.Instances.GameDirectoryFor(i.Source), "resourcepacks") : "";
+
+    /// <summary>头部那行小字：版本 · 加载器 · 所在目录。</summary>
+    public string EditingVersionSummary =>
+        EditingInstance is { } i ? $"{i.MetaText} · 所在目录：{ActiveFolderName}" : "";
+
+    [ObservableProperty]
+    private string _editingModCountText = "0 模组";
+
+    [ObservableProperty]
+    private string _editingResourcePackCountText = "0 资源包";
+
+    [ObservableProperty]
+    private string _editingWorldCountText = "0 世界";
+
+    [ObservableProperty]
+    private string _modSearch = "";
+
+    partial void OnModSearchChanged(string value) => ApplyModFilter();
+
+    public ObservableCollection<ModItemModel> EditingMods { get; } = new();
+    public ObservableCollection<ModItemModel> FilteredEditingMods { get; } = new();
+    public ObservableCollection<ResourcePackItemModel> EditingResourcePacks { get; } = new();
+    public ObservableCollection<WorldItemModel> EditingWorlds { get; } = new();
+
+    public bool HasEditingMods => EditingMods.Count > 0;
+    public bool HasFilteredEditingMods => FilteredEditingMods.Count > 0;
+    public bool HasEditingResourcePacks => EditingResourcePacks.Count > 0;
+    public bool HasEditingWorlds => EditingWorlds.Count > 0;
+
+    public event Action? RequestAddModFile;
+    public event Action? RequestAddResourcePackFile;
+
+    [RelayCommand]
+    private void AddModFile() => RequestAddModFile?.Invoke();
+
+    [RelayCommand]
+    private void AddResourcePackFile() => RequestAddResourcePackFile?.Invoke();
+
     partial void OnEditingInstanceChanged(InstanceModel? value)
     {
         OnPropertyChanged(nameof(IsEditingCurrentInstance));
         OnPropertyChanged(nameof(EditingGameDirectory));
         OnPropertyChanged(nameof(EditingSavesDirectory));
+        OnPropertyChanged(nameof(EditingModsDirectory));
+        OnPropertyChanged(nameof(EditingResourcePacksDirectory));
+        OnPropertyChanged(nameof(EditingVersionSummary));
     }
 
-    /// <summary>弹窗底部「设为当前」：设完就关窗，改的东西已经先存过了，不留着一个"改了没保存"的歧义。</summary>
+    /// <summary>返回实例列表页并保存可能改过的基本设置。</summary>
+    [RelayCommand]
+    private void BackToInstances()
+    {
+        SaveEditingInstanceInternal();
+        CurrentPage = "instances";
+    }
+
+    /// <summary>设为当前实例。</summary>
     [RelayCommand]
     private void MakeEditingInstanceCurrent()
     {
         if (EditingInstance is not { } instance) return;
 
         MakeCurrentInstance(instance);
-        CloseInstanceConfig();
+        OnPropertyChanged(nameof(IsEditingCurrentInstance));
+        ShowBanner($"已将「{instance.Name}」设为当前实例。");
     }
 
-    /// <summary>目录页那颗「删除」：先关窗再走列表里同一条确认删除流程，不写第二份。</summary>
+    /// <summary>从管理页启动当前正在编辑的实例，启动后返回首页。</summary>
+    [RelayCommand]
+    private async Task LaunchEditingInstanceAsync()
+    {
+        if (EditingInstance is not { } instance) return;
+
+        SaveEditingInstanceInternal();
+        await LaunchInstanceAsync(instance);
+    }
+
+    /// <summary>删除当前正在编辑的实例，删完回实例列表。</summary>
     [RelayCommand]
     private async Task DeleteEditingInstanceAsync()
     {
         if (EditingInstance is not { } instance) return;
 
-        CloseInstanceConfig();
+        CurrentPage = "instances";
         await DeleteInstanceAsync(instance);
     }
 
@@ -1246,36 +1716,55 @@ public partial class MainWindowViewModel : ViewModelBase
             ? Math.Clamp(instance.MaxMemoryMb.Value / 1024, 1, 32)
             : MaxMemoryGb;
 
+        ConfigInstExtraJvmArgs = instance.ExtraJvmArguments ?? "";
+        ConfigInstPreallocate = instance.PreallocateMemory;
+
         RefreshInstJavaOptions();
         IsInstJavaChooserOpen = false;
         ConfigTab = "概览";
-        IsInstConfigOpen = true;
+        ModSearch = "";
+        RefreshInstanceManageData();
+
+        IsInstConfigOpen = false;
+        CurrentPage = "instance_manage";
     }
 
     [RelayCommand]
     private void CloseInstanceConfig()
     {
         IsInstConfigOpen = false;
-        EditingInstance = null;
-        IsInstJavaChooserOpen = false;
+        CurrentPage = "instances";
     }
 
     [RelayCommand]
-    private void SaveInstanceConfig()
+    private void SaveEditingInstance()
     {
-        if (EditingInstance is null) return;
+        if (SaveEditingInstanceInternal())
+        {
+            ShowBanner($"实例「{ConfigInstName.Trim()}」配置已保存。");
+        }
+    }
+
+    // 保留旧命名以防外部或旧视图绑定调用
+    [RelayCommand]
+    private void SaveInstanceConfig() => SaveEditingInstance();
+
+    private bool SaveEditingInstanceInternal()
+    {
+        if (EditingInstance is null) return false;
 
         var name = ConfigInstName.Trim();
         if (string.IsNullOrWhiteSpace(name))
         {
             ShowBanner("实例名称不能为空。");
-            return;
+            return false;
         }
 
         var javaPath = ConfigInstCustomJava ? ConfigInstJavaPath : null;
         var maxMemoryMb = ConfigInstCustomMemory ? (int?)(ConfigInstMemoryGb * 1024) : null;
 
-        _launcher.Instances.Update(EditingInstance.Id, name, ConfigInstIsolated, javaPath, maxMemoryMb);
+        _launcher.Instances.Update(EditingInstance.Id, name, ConfigInstIsolated, javaPath, maxMemoryMb,
+            ConfigInstExtraJvmArgs, ConfigInstPreallocate);
         EditingInstance.Refresh();
 
         ApplyInstanceFilter();
@@ -1284,10 +1773,318 @@ public partial class MainWindowViewModel : ViewModelBase
             CurrentInstance.Refresh();
         }
 
-        IsInstConfigOpen = false;
-        EditingInstance = null;
-        ShowBanner($"实例「{name}」配置已保存。");
+        return true;
     }
+
+    [RelayCommand]
+    private void RefreshInstanceManageData()
+    {
+        RefreshEditingMods();
+        RefreshEditingResourcePacks();
+        RefreshEditingWorlds();
+        EditingInstance?.Refresh();
+    }
+
+    [RelayCommand]
+    private void OpenEditingResourcePacks()
+    {
+        if (EditingInstance is null) return;
+        var dir = EditingResourcePacksDirectory;
+        try { Directory.CreateDirectory(dir); } catch { }
+        OpenFolder(dir);
+    }
+
+    [RelayCommand]
+    private void OpenEditingSaves()
+    {
+        if (EditingInstance is null) return;
+        var dir = EditingSavesDirectory;
+        try { Directory.CreateDirectory(dir); } catch { }
+        OpenFolder(dir);
+    }
+
+    [RelayCommand]
+    private void OpenWorldFolder(WorldItemModel item) => OpenFolder(item.FolderPath);
+
+    [RelayCommand]
+    private void ToggleMod(ModItemModel item)
+    {
+        try
+        {
+            var oldPath = item.FilePath;
+            if (!File.Exists(oldPath)) return;
+
+            string newPath;
+            if (item.IsEnabled)
+            {
+                newPath = oldPath.EndsWith(".disabled", StringComparison.OrdinalIgnoreCase)
+                    ? oldPath
+                    : oldPath + ".disabled";
+                item.IsEnabled = false;
+            }
+            else
+            {
+                newPath = oldPath.EndsWith(".disabled", StringComparison.OrdinalIgnoreCase)
+                    ? oldPath[..^9]
+                    : oldPath;
+                item.IsEnabled = true;
+            }
+
+            if (!string.Equals(oldPath, newPath, StringComparison.OrdinalIgnoreCase))
+            {
+                if (File.Exists(newPath)) File.Delete(newPath);
+                File.Move(oldPath, newPath);
+                item.FilePath = newPath;
+                item.FileName = Path.GetFileName(newPath);
+            }
+
+            var enabledCount = EditingMods.Count(m => m.IsEnabled);
+            EditingModCountText = EditingMods.Count == enabledCount
+                ? $"{EditingMods.Count} 模组"
+                : $"已启用 {enabledCount} / 共 {EditingMods.Count} 模组";
+            OnPropertyChanged(nameof(EditingModCountText));
+            EditingInstance?.Refresh();
+        }
+        catch (Exception ex)
+        {
+            ShowBanner($"更改模组状态失败：{ex.Message}");
+        }
+    }
+
+    [RelayCommand]
+    private async Task DeleteModAsync(ModItemModel item)
+    {
+        var ok = await ShowDialogAsync("删除模组", $"确定要删除模组「{item.DisplayName}」吗？", null, null, "删除");
+        if (ok is null) return;
+
+        try
+        {
+            if (File.Exists(item.FilePath)) File.Delete(item.FilePath);
+            EditingMods.Remove(item);
+            FilteredEditingMods.Remove(item);
+            var enabledCount = EditingMods.Count(m => m.IsEnabled);
+            EditingModCountText = EditingMods.Count == enabledCount
+                ? $"{EditingMods.Count} 模组"
+                : $"已启用 {enabledCount} / 共 {EditingMods.Count} 模组";
+            OnPropertyChanged(nameof(EditingModCountText));
+            OnPropertyChanged(nameof(HasEditingMods));
+            OnPropertyChanged(nameof(HasFilteredEditingMods));
+            EditingInstance?.Refresh();
+            ShowBanner($"已删除模组「{item.DisplayName}」。");
+        }
+        catch (Exception ex)
+        {
+            ShowBanner($"删除模组失败：{ex.Message}");
+        }
+    }
+
+    [RelayCommand]
+    private async Task DeleteResourcePackAsync(ResourcePackItemModel item)
+    {
+        var ok = await ShowDialogAsync("删除资源包", $"确定要删除资源包「{item.Name}」吗？", null, null, "删除");
+        if (ok is null) return;
+
+        try
+        {
+            if (item.IsDirectory)
+            {
+                if (Directory.Exists(item.FilePath)) Directory.Delete(item.FilePath, true);
+            }
+            else
+            {
+                if (File.Exists(item.FilePath)) File.Delete(item.FilePath);
+            }
+            EditingResourcePacks.Remove(item);
+            EditingResourcePackCountText = $"{EditingResourcePacks.Count} 资源包";
+            OnPropertyChanged(nameof(EditingResourcePackCountText));
+            OnPropertyChanged(nameof(HasEditingResourcePacks));
+            ShowBanner($"已删除资源包「{item.Name}」。");
+        }
+        catch (Exception ex)
+        {
+            ShowBanner($"删除资源包失败：{ex.Message}");
+        }
+    }
+
+    [RelayCommand]
+    private async Task DeleteWorldAsync(WorldItemModel item)
+    {
+        var ok = await ShowDialogAsync("删除世界存档", $"确定要删除世界「{item.Name}」吗？存档删除后无法恢复！", null, null, "删除");
+        if (ok is null) return;
+
+        try
+        {
+            if (Directory.Exists(item.FolderPath)) Directory.Delete(item.FolderPath, true);
+            EditingWorlds.Remove(item);
+            EditingWorldCountText = $"{EditingWorlds.Count} 世界";
+            OnPropertyChanged(nameof(EditingWorldCountText));
+            OnPropertyChanged(nameof(HasEditingWorlds));
+            ShowBanner($"已删除世界「{item.Name}」。");
+        }
+        catch (Exception ex)
+        {
+            ShowBanner($"删除世界失败：{ex.Message}");
+        }
+    }
+
+    private void RefreshEditingMods()
+    {
+        EditingMods.Clear();
+        if (EditingInstance is not { } instance)
+        {
+            ApplyModFilter();
+            return;
+        }
+
+        var dir = EditingModsDirectory;
+        if (Directory.Exists(dir))
+        {
+            try
+            {
+                var files = Directory.GetFiles(dir);
+                foreach (var file in files.OrderBy(f => Path.GetFileName(f)))
+                {
+                    var ext = Path.GetExtension(file);
+                    var name = Path.GetFileName(file);
+                    bool isJar = ext.Equals(".jar", StringComparison.OrdinalIgnoreCase);
+                    bool isDisabled = name.EndsWith(".disabled", StringComparison.OrdinalIgnoreCase) ||
+                                      ext.Equals(".disabled", StringComparison.OrdinalIgnoreCase);
+                    if (!isJar && !isDisabled) continue;
+
+                    var fi = new FileInfo(file);
+                    var cleanName = isDisabled && name.EndsWith(".disabled", StringComparison.OrdinalIgnoreCase)
+                        ? name[..^9]
+                        : name;
+
+                    EditingMods.Add(new ModItemModel
+                    {
+                        FilePath = file,
+                        FileName = name,
+                        DisplayName = cleanName,
+                        IsEnabled = !isDisabled,
+                        FileSizeText = FormatFileSize(fi.Length),
+                        ModifiedTimeText = fi.LastWriteTime.ToString("yyyy-MM-dd HH:mm")
+                    });
+                }
+            }
+            catch { }
+        }
+
+        var enabledCount = EditingMods.Count(m => m.IsEnabled);
+        EditingModCountText = EditingMods.Count == enabledCount
+            ? $"{EditingMods.Count} 模组"
+            : $"已启用 {enabledCount} / 共 {EditingMods.Count} 模组";
+
+        OnPropertyChanged(nameof(EditingModCountText));
+        OnPropertyChanged(nameof(HasEditingMods));
+        ApplyModFilter();
+    }
+
+    private void ApplyModFilter()
+    {
+        FilteredEditingMods.Clear();
+        var q = ModSearch.Trim();
+        var matches = EditingMods.Where(m =>
+            string.IsNullOrEmpty(q) ||
+            m.DisplayName.Contains(q, StringComparison.OrdinalIgnoreCase) ||
+            m.FileName.Contains(q, StringComparison.OrdinalIgnoreCase));
+
+        foreach (var m in matches)
+        {
+            FilteredEditingMods.Add(m);
+        }
+        OnPropertyChanged(nameof(HasFilteredEditingMods));
+    }
+
+    private void RefreshEditingResourcePacks()
+    {
+        EditingResourcePacks.Clear();
+        if (EditingInstance is null)
+        {
+            OnPropertyChanged(nameof(HasEditingResourcePacks));
+            return;
+        }
+
+        var dir = EditingResourcePacksDirectory;
+        if (Directory.Exists(dir))
+        {
+            try
+            {
+                foreach (var sub in Directory.GetDirectories(dir).OrderBy(d => Path.GetFileName(d)))
+                {
+                    var di = new DirectoryInfo(sub);
+                    EditingResourcePacks.Add(new ResourcePackItemModel
+                    {
+                        FilePath = sub,
+                        Name = di.Name,
+                        IsDirectory = true,
+                        SizeText = "文件夹",
+                        ModifiedTimeText = di.LastWriteTime.ToString("yyyy-MM-dd HH:mm")
+                    });
+                }
+
+                foreach (var file in Directory.GetFiles(dir, "*.zip").OrderBy(f => Path.GetFileName(f)))
+                {
+                    var fi = new FileInfo(file);
+                    EditingResourcePacks.Add(new ResourcePackItemModel
+                    {
+                        FilePath = file,
+                        Name = fi.Name,
+                        IsDirectory = false,
+                        SizeText = FormatFileSize(fi.Length),
+                        ModifiedTimeText = fi.LastWriteTime.ToString("yyyy-MM-dd HH:mm")
+                    });
+                }
+            }
+            catch { }
+        }
+
+        EditingResourcePackCountText = $"{EditingResourcePacks.Count} 资源包";
+        OnPropertyChanged(nameof(EditingResourcePackCountText));
+        OnPropertyChanged(nameof(HasEditingResourcePacks));
+    }
+
+    private void RefreshEditingWorlds()
+    {
+        EditingWorlds.Clear();
+        if (EditingInstance is null)
+        {
+            OnPropertyChanged(nameof(HasEditingWorlds));
+            return;
+        }
+
+        var dir = EditingSavesDirectory;
+        if (Directory.Exists(dir))
+        {
+            try
+            {
+                foreach (var sub in Directory.GetDirectories(dir).OrderByDescending(d => Directory.GetLastWriteTime(d)))
+                {
+                    var di = new DirectoryInfo(sub);
+                    EditingWorlds.Add(new WorldItemModel
+                    {
+                        FolderPath = sub,
+                        Name = di.Name,
+                        LastPlayedText = di.LastWriteTime.ToString("yyyy-MM-dd HH:mm"),
+                        SizeText = "世界存档"
+                    });
+                }
+            }
+            catch { }
+        }
+
+        EditingWorldCountText = $"{EditingWorlds.Count} 世界";
+        OnPropertyChanged(nameof(EditingWorldCountText));
+        OnPropertyChanged(nameof(HasEditingWorlds));
+    }
+
+    private static string FormatFileSize(long bytes)
+    {
+        if (bytes < 1024) return $"{bytes} B";
+        if (bytes < 1024 * 1024) return $"{bytes / 1024.0:F1} KB";
+        return $"{bytes / (1024.0 * 1024.0):F1} MB";
+    }
+
 
     [RelayCommand]
     private void ToggleInstJavaChooser() => IsInstJavaChooserOpen = !IsInstJavaChooserOpen;
@@ -1393,6 +2190,26 @@ public partial class MainWindowViewModel : ViewModelBase
     private void OpenInstanceFolder(InstanceModel instance) =>
         OpenFolder(_launcher.Instances.GameDirectoryFor(instance.Source));
 
+    /// <summary>配置弹窗里的「打开模组目录」：目录还没生成过就先建出来，开一个不存在的路径只会报错。</summary>
+    [RelayCommand]
+    private void OpenEditingMods()
+    {
+        if (EditingInstance is not { } instance) return;
+
+        var directory = Path.Combine(_launcher.Instances.GameDirectoryFor(instance.Source), "mods");
+        try
+        {
+            Directory.CreateDirectory(directory);
+        }
+        catch (Exception ex)
+        {
+            ShowBanner($"建不出 mods 目录：{ex.Message}");
+            return;
+        }
+
+        OpenFolder(directory);
+    }
+
     private void RefreshInstances()
     {
         var currentId = _launcher.CurrentInstance?.Id;
@@ -1405,10 +2222,11 @@ public partial class MainWindowViewModel : ViewModelBase
 
         CurrentInstance = Instances.FirstOrDefault(i => i.Id == currentId) ?? Instances.FirstOrDefault();
 
-        // 下拉只列真出现过的加载器：种类再多也撑不爆工具条，没装过的也不摆出来碍事。
+        // 下拉只列真出现过的加载器**种类**：tag 上写的是「Fabric 0.16.10」这种带版本的一整串，
+        // 按整串列就是装了五个 Fabric 出五个选项，撑爆工具条。
         LoaderChoices.Clear();
         LoaderChoices.Add(new LoaderOptionModel(LoaderOptionModel.AllName));
-        foreach (var loader in Instances.Select(i => i.Loader)
+        foreach (var loader in Instances.Select(i => i.LoaderKind)
                      .Distinct(StringComparer.Ordinal)
                      .Where(x => x != LoaderOptionModel.AllName)
                      .OrderBy(x => x, StringComparer.CurrentCulture))
@@ -1418,6 +2236,7 @@ public partial class MainWindowViewModel : ViewModelBase
         MarkLoaderSelected();
         OnPropertyChanged(nameof(HasInstances));
         ApplyInstanceFilter();
+        RefreshFolders();
     }
 
     private void ApplyInstanceFilter()
@@ -1425,7 +2244,7 @@ public partial class MainWindowViewModel : ViewModelBase
         var query = InstanceSearch.Trim();
 
         var hits = Instances.Where(m =>
-            (InstanceLoader == LoaderOptionModel.AllName || m.Loader == InstanceLoader) &&
+            (InstanceLoader == LoaderOptionModel.AllName || m.LoaderKind == InstanceLoader) &&
             (query.Length == 0 ||
              m.Name.Contains(query, StringComparison.OrdinalIgnoreCase) ||
              m.MetaText.Contains(query, StringComparison.OrdinalIgnoreCase)));
@@ -1438,7 +2257,6 @@ public partial class MainWindowViewModel : ViewModelBase
         VisibleInstances.Clear();
         foreach (var model in sorted) VisibleInstances.Add(model);
 
-        OnPropertyChanged(nameof(InstanceCountText));
         OnPropertyChanged(nameof(HasInstanceFilter));
         OnPropertyChanged(nameof(HasNoInstanceMatches));
         OnPropertyChanged(nameof(InstanceEmptyHint));
@@ -1533,6 +2351,7 @@ public partial class MainWindowViewModel : ViewModelBase
         }
 
         IsLaunching = true;
+        CurrentPage = "home";
         LaunchProgress = 0;
         LaunchPctText = "0%";
         LaunchStepText = "准备中";
@@ -2047,8 +2866,8 @@ public partial class MainWindowViewModel : ViewModelBase
     [ObservableProperty]
     private bool _isDark = true;
 
-    /// <summary>Shown read-only: moving it mid-session would leave the loaded instances pointing elsewhere.</summary>
-    public string GameRoot => _launcher.Settings.EffectiveGameRoot;
+    /// <summary>设置页那行"游戏目录"：报的是实例页正在看的这一个，跟着那颗胶囊走。</summary>
+    public string GameRoot => _launcher.ActiveFolder.Path;
 
     public string SourceHint => DownloadSource switch
     {
@@ -2260,6 +3079,7 @@ public partial class MainWindowViewModel : ViewModelBase
             VersionIsolation = settings.VersionIsolation;
             HideOnLaunch = settings.HideOnLaunch;
             CloseWindowBehavior = settings.CloseWindowBehavior;
+            InstanceViewMode = settings.InstanceViewMode;
             DownloadThreads = settings.DownloadThreads;
             DownloadSource = settings.DownloadSource switch
             {
@@ -2329,6 +3149,7 @@ public partial class MainWindowViewModel : ViewModelBase
         settings.VersionIsolation = VersionIsolation;
         settings.HideOnLaunch = HideOnLaunch;
         settings.CloseWindowBehavior = CloseWindowBehavior;
+        settings.InstanceViewMode = InstanceViewMode;
         settings.DownloadThreads = DownloadThreads;
         settings.IsDark = IsDark;
         settings.CustomBackgroundPath = CustomBackgroundPath;
@@ -2450,7 +3271,7 @@ public partial class MainWindowViewModel : ViewModelBase
 
     partial void OnBannerTextChanged(string value) => OnPropertyChanged(nameof(IsBannerOpen));
 
-    private void ShowBanner(string text)
+    public void ShowBanner(string text)
     {
         BannerText = text;
 

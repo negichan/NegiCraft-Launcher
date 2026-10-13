@@ -1,6 +1,7 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 using NegiCraftLauncher.Core.Auth;
 using NegiCraftLauncher.Core.Instances;
+using NegiCraftLauncher.Core.Settings;
 using NegiCraftLauncher.Raster;
 
 namespace NegiCraftLauncher.ViewModels;
@@ -23,11 +24,26 @@ public partial class InstanceModel : ObservableObject
     /// <summary>加载器名（原版 / Fabric / Forge / NeoForge / Quilt / OptiFine …）。卡片的 tag 与筛选都吃它。</summary>
     public string Loader => Source.Loader;
 
+    /// <summary>
+    ///     tag 上写的是「Fabric 0.16.10」这样带版本的一整串，筛选下拉只按种类分组，
+    ///     不然装了五个 Fabric 就是五个选项，撑爆工具条。
+    /// </summary>
+    public string LoaderKind => Loader.Split(' ')[0];
+
+    /// <summary>列表模式那颗「N 模组」tag；没装模组就不摆，空 tag 是噪声。</summary>
+    public bool HasMods => Source.ModCount > 0;
+
+    public string ModCountText => $"{Source.ModCount} 模组";
+
     public bool Isolated => Source.Isolated;
 
     public string? JavaPath => Source.JavaPath;
 
     public int? MaxMemoryMb => Source.MaxMemoryMb;
+
+    public string? ExtraJvmArguments => Source.ExtraJvmArguments;
+
+    public bool PreallocateMemory => Source.PreallocateMemory;
 
     /// <summary>
     /// 卡片底行那句「最近游玩 2 小时前」。启动时 <c>GameLauncher</c> 会 <c>Touch()</c> 写下
@@ -62,10 +78,49 @@ public partial class InstanceModel : ObservableObject
         OnPropertyChanged(nameof(MetaText));
         OnPropertyChanged(nameof(VersionId));
         OnPropertyChanged(nameof(Loader));
+        OnPropertyChanged(nameof(LoaderKind));
+        OnPropertyChanged(nameof(HasMods));
+        OnPropertyChanged(nameof(ModCountText));
         OnPropertyChanged(nameof(LastPlayedText));
         OnPropertyChanged(nameof(Isolated));
         OnPropertyChanged(nameof(JavaPath));
         OnPropertyChanged(nameof(MaxMemoryMb));
+        OnPropertyChanged(nameof(ExtraJvmArguments));
+        OnPropertyChanged(nameof(PreallocateMemory));
+    }
+}
+
+/// <summary>
+///     实例页顶上那颗胶囊与它展开的目录列表里的一行。<b>路径就是身份</b>（命令都按路径下发），
+///     名字只是显示用的别名，所以重命名不会动到盘上的任何东西。
+/// </summary>
+public partial class GameFolderModel : ObservableObject
+{
+    public GameFolderModel(GameFolder source) => Source = source;
+
+    public GameFolder Source { get; }
+
+    public string Path => Source.Path;
+
+    public string Name => Source.Name;
+
+    public bool IsDefault => Source.IsDefault;
+
+    /// <summary>目录不在了（挪了盘、拔了移动硬盘）：列表里直说，不然空列表看着像实例被删了。</summary>
+    public bool Exists => Core.NclPaths.NormaliseGameRoot(Path).Length > 0 && System.IO.Directory.Exists(Path);
+
+    [ObservableProperty]
+    private bool _isCurrent;
+
+    /// <summary>导入对话框里"装到哪个目录"选中的那一个。XAML 比不了"这一行 == 当前选择"，只能把状态挂在行上。</summary>
+    [ObservableProperty]
+    private bool _isPackTarget;
+
+    public void Refresh()
+    {
+        OnPropertyChanged(nameof(Name));
+        OnPropertyChanged(nameof(IsDefault));
+        OnPropertyChanged(nameof(Exists));
     }
 }
 
@@ -181,4 +236,58 @@ public partial class JavaOptionModel : ObservableObject
 
     [ObservableProperty]
     private bool _isSelected;
+}
+
+/// <summary>实例管理页「模组」标签里的一行。</summary>
+public partial class ModItemModel : ObservableObject
+{
+    public string FilePath { get; set; } = "";
+
+    [ObservableProperty]
+    private string _fileName = "";
+
+    [ObservableProperty]
+    private string _displayName = "";
+
+    [ObservableProperty]
+    private string _fileSizeText = "";
+
+    [ObservableProperty]
+    private string _modifiedTimeText = "";
+
+    [ObservableProperty]
+    private bool _isEnabled = true;
+}
+
+/// <summary>实例管理页「资源包」标签里的一行。</summary>
+public partial class ResourcePackItemModel : ObservableObject
+{
+    public string FilePath { get; set; } = "";
+
+    [ObservableProperty]
+    private string _name = "";
+
+    [ObservableProperty]
+    private string _sizeText = "";
+
+    [ObservableProperty]
+    private string _modifiedTimeText = "";
+
+    [ObservableProperty]
+    private bool _isDirectory;
+}
+
+/// <summary>实例管理页「世界」标签里的一行。</summary>
+public partial class WorldItemModel : ObservableObject
+{
+    public string FolderPath { get; set; } = "";
+
+    [ObservableProperty]
+    private string _name = "";
+
+    [ObservableProperty]
+    private string _lastPlayedText = "";
+
+    [ObservableProperty]
+    private string _sizeText = "";
 }

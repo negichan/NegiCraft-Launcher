@@ -35,7 +35,8 @@ public static partial class ArgumentBuilder
         var result = new List<string>();
 
         result.Add($"-Xmx{context.MaxMemoryMb}M");
-        result.Add($"-Xms{Math.Min(1024, context.MaxMemoryMb)}M");
+        // 不预分配时 -Xms 只申请 1 GB：剩下的堆让游戏自己按需长，免得启动就把那块物理内存全占住。
+        result.Add($"-Xms{(context.PreallocateMemory ? context.MaxMemoryMb : Math.Min(1024, context.MaxMemoryMb))}M");
 
         // Only affects the console streams we capture, never how the game reads its own files.
         if (context.Java.MajorVersion >= 19)
