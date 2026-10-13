@@ -1,4 +1,5 @@
 <ResourceDictionary xmlns="https://github.com/avaloniaui"
+                    xmlns:conv="using:Avalonia.Data.Converters"
                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
     <!--
         NegiCraftLauncher in-house control themes.
@@ -60,6 +61,7 @@
         <Setter Property="Padding" Value="16,0" />
         <Setter Property="HorizontalContentAlignment" Value="Center" />
         <Setter Property="VerticalContentAlignment" Value="Center" />
+        <Setter Property="FocusAdorner" Value="{x:Null}" />
         <Setter Property="Template">
             <ControlTemplate>
                 <Border Background="{TemplateBinding Background}"
@@ -91,7 +93,7 @@
         <Setter Property="BorderBrush" Value="{DynamicResource BorderLineBrush}" />
         <Setter Property="BorderThickness" Value="1" />
         <Setter Property="CornerRadius" Value="10" />
-        <Setter Property="Padding" Value="12,0" />
+        <Setter Property="Padding" Value="10,0" />
         <Setter Property="MinHeight" Value="36" />
         <Setter Property="VerticalContentAlignment" Value="Center" />
         <Setter Property="CaretBrush" Value="{DynamicResource ForegroundBrush}" />
@@ -107,22 +109,39 @@
                         MinHeight="{TemplateBinding MinHeight}"
                         TextElement.Foreground="{TemplateBinding Foreground}"
                         Name="Border">
-                    <ScrollViewer AllowAutoHide="{TemplateBinding (ScrollViewer.AllowAutoHide)}"
-                                  HorizontalScrollBarVisibility="{TemplateBinding (ScrollViewer.HorizontalScrollBarVisibility)}"
-                                  VerticalScrollBarVisibility="{TemplateBinding (ScrollViewer.VerticalScrollBarVisibility)}"
-                                  Name="PART_ScrollViewer">
+                    <!-- 照 ShadUI 的 TextBox 模板结构：Border → Grid「左槽 * 文字」，Padding 只挂在
+                         整行上。左槽就是 Avalonia 自带的 InnerLeftContent（ShadUI 的搜索框也用它放
+                         放大镜），WPF 侧对应我们自己的 neg:Negi.LeadingIcon —— 两端同一个结构，
+                         图标和文字的间距由布局给，不再靠手调 padding-left。 -->
+                    <Grid ColumnDefinitions="Auto,*,Auto" Margin="{TemplateBinding Padding}">
+                        <Panel Grid.Column="0" VerticalAlignment="Center">
+                            <Path Name="PART_SearchIcon"
+                                  Data="M9.5,3A6.5,6.5 0 0,1 16,9.5C16,11.11 15.41,12.59 14.44,13.73L14.71,14H15.5L20.5,19L19,20.5L14,15.5V14.71L13.73,14.44C12.59,15.41 11.11,16 9.5,16A6.5,6.5 0 0,1 3,9.5A6.5,6.5 0 0,1 9.5,3M9.5,5C7,5 5,7 5,9.5C5,12 7,14 9.5,14C12,14 14,12 14,9.5C14,7 12,5 9.5,5Z"
+                                  Width="13" Height="13"
+                                  Fill="#71717a"
+                                  Stretch="Uniform"
+                                  IsHitTestVisible="False"
+                                  Margin="0,0,5,0" />
+                            <ContentPresenter Content="{TemplateBinding InnerLeftContent}"
+                                              IsVisible="{TemplateBinding InnerLeftContent, Converter={x:Static conv:ObjectConverters.IsNotNull}}"
+                                              Margin="0,0,5,0"
+                                              IsHitTestVisible="False" />
+                        </Panel>
+                        <ScrollViewer AllowAutoHide="{TemplateBinding (ScrollViewer.AllowAutoHide)}"
+                                      Grid.Column="1"
+                                      HorizontalScrollBarVisibility="{TemplateBinding (ScrollViewer.HorizontalScrollBarVisibility)}"
+                                      VerticalScrollBarVisibility="{TemplateBinding (ScrollViewer.VerticalScrollBarVisibility)}"
+                                      Name="PART_ScrollViewer">
                         <Panel Name="TextContainer">
                             <TextBlock Foreground="{DynamicResource MutedForegroundBrush}"
                                        HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
                                        IsVisible="{TemplateBinding Text, Converter={x:Static StringConverters.IsNullOrEmpty}}"
-                                       Margin="{TemplateBinding Padding}"
                                        Name="Watermark"
                                        Text="{TemplateBinding Watermark}"
                                        VerticalAlignment="{TemplateBinding VerticalContentAlignment}" />
                             <TextPresenter CaretBrush="{TemplateBinding CaretBrush}"
                                            CaretIndex="{TemplateBinding CaretIndex}"
                                            HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
-                                           Margin="{TemplateBinding Padding}"
                                            Name="PART_TextPresenter"
                                            PasswordChar="{TemplateBinding PasswordChar}"
                                            RevealPassword="{TemplateBinding RevealPassword}"
@@ -136,6 +155,26 @@
                                            VerticalAlignment="{TemplateBinding VerticalContentAlignment}" />
                         </Panel>
                     </ScrollViewer>
+                        <Panel Grid.Column="2" VerticalAlignment="Center">
+                            <ContentPresenter Content="{TemplateBinding InnerRightContent}"
+                                              IsVisible="{TemplateBinding InnerRightContent, Converter={x:Static conv:ObjectConverters.IsNotNull}}"
+                                              Margin="8,0,0,0" />
+                            <Button Name="PART_ClearButton"
+                                    Command="{CompiledBinding $parent[TextBox].Clear}"
+                                    Focusable="False" IsTabStop="False"
+                                    Cursor="Hand"
+                                    Width="20" Height="20"
+                                    Margin="4,0,0,0"
+                                    VerticalAlignment="Center">
+                                <Path Name="PART_ClearIcon"
+                                      Data="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"
+                                      Width="12" Height="12"
+                                      Fill="#71717a"
+                                      Stretch="Uniform"
+                                      HorizontalAlignment="Center" VerticalAlignment="Center" />
+                            </Button>
+                        </Panel>
+                    </Grid>
                 </Border>
             </ControlTemplate>
         </Setter>
@@ -147,6 +186,58 @@
         </Style>
         <Style Selector="^:disabled">
             <Setter Property="Opacity" Value="0.5" />
+        </Style>
+
+        <!-- 默认隐藏搜索图标与清空按钮 -->
+        <Style Selector="^ /template/ Path#PART_SearchIcon">
+            <Setter Property="IsVisible" Value="False" />
+        </Style>
+        <Style Selector="^ /template/ Button#PART_ClearButton">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="CornerRadius" Value="4" />
+            <Setter Property="Padding" Value="0" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="IsVisible" Value="False" />
+        </Style>
+        <Style Selector="^ /template/ Button#PART_ClearButton:pointerover">
+            <Setter Property="Background" Value="#27272a" />
+        </Style>
+        <Style Selector="^ /template/ Button#PART_ClearButton:pointerover Path#PART_ClearIcon">
+            <Setter Property="Fill" Value="#fafafa" />
+        </Style>
+        <Style Selector="^ /template/ Button#PART_ClearButton:pressed">
+            <Setter Property="Background" Value="#3f3f46" />
+        </Style>
+
+        <!-- SearchBox：显示左侧放大镜 -->
+        <Style Selector="^.SearchBox /template/ Path#PART_SearchIcon">
+            <Setter Property="IsVisible" Value="True" />
+        </Style>
+
+        <!-- 当 SearchBox 或 clearButton 有文字时（:not(:empty)），显现清空按钮 -->
+        <Style Selector="^.SearchBox:not(:empty) /template/ Button#PART_ClearButton">
+            <Setter Property="IsVisible" Value="True" />
+        </Style>
+        <Style Selector="^.clearButton:not(:empty) /template/ Button#PART_ClearButton">
+            <Setter Property="IsVisible" Value="True" />
+        </Style>
+
+        <!-- SearchBox 专用样式类：统一 32 高度、8 圆角、暗色底 -->
+        <Style Selector="^.SearchBox">
+            <Setter Property="Height" Value="32" />
+            <Setter Property="MinHeight" Value="32" />
+            <Setter Property="CornerRadius" Value="8" />
+            <Setter Property="Background" Value="#111114" />
+            <Setter Property="BorderBrush" Value="#26262b" />
+            <Setter Property="FontSize" Value="12.5" />
+            <Setter Property="Padding" Value="6,0,6,0" />
+            <Setter Property="VerticalContentAlignment" Value="Center" />
+        </Style>
+        <Style Selector="^.SearchBox:pointerover /template/ Border#Border">
+            <Setter Property="BorderBrush" Value="#3f3f46" />
+        </Style>
+        <Style Selector="^.SearchBox:focus /template/ Border#Border">
+            <Setter Property="BorderBrush" Value="{DynamicResource RingBrush}" />
         </Style>
     </ControlTheme>
 
