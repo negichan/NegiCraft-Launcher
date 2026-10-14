@@ -175,6 +175,7 @@ internal static class Program
                 host = null;
             }
 
+            await CheckSettingsSlide();
             await CheckUiMotion();
             await CheckFoxSqueeze();
 
@@ -216,6 +217,101 @@ internal static class Program
             }
             finally { done(); }
         }
+    }
+
+    private static async Task CheckSettingsSlide()
+    {
+        var style = new Style(typeof(Border));
+        style.Setters.Add(new Setter(UIElement.OpacityProperty, 0.0));
+        var dialog = new Border { Width = 280, Height = 180, Background = Brushes.Gray, Style = style };
+        Pop.SetAnchor(dialog, "Center");
+        Pop.SetSlideOnly(dialog, true);
+        var host = new Window
+        {
+            Width = 420, Height = 320, Content = dialog,
+            ShowActivated = false, ShowInTaskbar = false,
+        };
+        try
+        {
+            host.Show();
+            await Task.Delay(60);
+            var size = dialog.RenderSize;
+            Matrix Pose() => dialog.RenderTransform?.Value ?? Matrix.Identity;
+            Pop.SetIsOpen(dialog, true);
+            var transform = dialog.RenderTransform ?? Transform.Identity;
+            if (SystemParameters.ClientAreaAnimation)
+            {
+                Check("settings slide starts just below its resting position",
+                    Math.Abs(Pose().OffsetY - 14) < 0.01);
+                var previousY = 14.0;
+                var previousOpacity = 0.0;
+                var monotonic = true;
+                var fixedSize = true;
+                for (var frame = 0; frame < 20; frame++)
+                {
+                    await Task.Delay(16);
+                    var matrix = Pose();
+                    monotonic &= matrix.OffsetY >= -0.01 && matrix.OffsetY <= previousY + 0.01 &&
+                                 dialog.Opacity >= previousOpacity - 0.01;
+                    fixedSize &= Math.Abs(matrix.M11 - 1) < 0.001 && Math.Abs(matrix.M22 - 1) < 0.001 &&
+                                 dialog.RenderSize == size;
+                    previousY = matrix.OffsetY;
+                    previousOpacity = dialog.Opacity;
+                    if (frame == 8)
+                        Check("settings entry remains animated for a slower glide", HasClocks(dialog, transform));
+                }
+                Check("settings slides upward and fades in without overshooting", monotonic);
+                Check("settings opening keeps its size without scaling", fixedSize);
+            }
+            Check("settings settles at its original position and releases clocks",
+                dialog.Opacity == 1 && Pose().IsIdentity &&
+                !HasClocks(dialog, transform) && dialog.CacheMode is null);
+
+            Pop.SetIsOpen(dialog, false);
+            Check("settings closing immediately disables interaction", !dialog.IsHitTestVisible);
+            if (SystemParameters.ClientAreaAnimation)
+            {
+                var previousY = 0.0;
+                var previousOpacity = 1.0;
+                var monotonic = true;
+                var maxY = 0.0;
+                var fixedSize = true;
+                for (var frame = 0; frame < 17; frame++)
+                {
+                    await Task.Delay(16);
+                    if (dialog.Opacity <= 0.001) continue;
+                    var matrix = Pose();
+                    monotonic &= matrix.OffsetY >= previousY - 0.01 && matrix.OffsetY <= 12.01 &&
+                                 dialog.Opacity <= previousOpacity + 0.01;
+                    fixedSize &= Math.Abs(matrix.M11 - 1) < 0.001 && Math.Abs(matrix.M22 - 1) < 0.001 &&
+                                 dialog.RenderSize == size;
+                    maxY = Math.Max(maxY, matrix.OffsetY);
+                    previousY = matrix.OffsetY;
+                    previousOpacity = dialog.Opacity;
+                    if (frame == 8)
+                        Check("settings exit remains animated for a slower glide", HasClocks(dialog, transform));
+                }
+                Check("settings slides slightly downward while fading out", monotonic && maxY > 0.1);
+                Check("settings closing keeps its size without scaling", fixedSize);
+            }
+            Check("settings closed state releases clocks and cache",
+                dialog.Opacity == 0 && !HasClocks(dialog, transform) && dialog.CacheMode is null);
+
+            Pop.SetIsOpen(dialog, true);
+            await Task.Delay(35);
+            Pop.SetIsOpen(dialog, false);
+            await Task.Delay(25);
+            var pose = Pose();
+            var opacity = dialog.Opacity;
+            Pop.SetIsOpen(dialog, true);
+            Check("settings interrupted slide preserves its pose and opacity",
+                Near(pose, Pose()) && Math.Abs(dialog.Opacity - opacity) < 0.02);
+            await Task.Delay(320);
+            Check("settings interrupted slide settles without residual animation",
+                dialog.Opacity == 1 && Pose().IsIdentity &&
+                !HasClocks(dialog, transform) && dialog.CacheMode is null);
+        }
+        finally { host.Close(); }
     }
 
     private static async Task CheckUiMotion()
@@ -277,6 +373,23 @@ internal static class Program
             Check("page restores prior cache", ReferenceEquals(page.CacheMode, priorCache));
             Check("page preserves configured opacity", Math.Abs(page.Opacity - 0.85) < 0.001);
             Check("page settles without clocks", !HasClocks(page, page.RenderTransform));
+            PageTransition.SetSuppressEnterAnimation(panel, true);
+            panel.Visibility = Visibility.Hidden;
+            panel.Visibility = Visibility.Visible;
+            await Task.Delay(25);
+            Check("modal return preserves page opacity and position", Math.Abs(page.Opacity - 0.85) < 0.001 &&
+                page.RenderTransform.Value.IsIdentity && !HasClocks(page, page.RenderTransform));
+            Check("modal return suppresses nested page entry", !HasClocks(nested, nested.RenderTransform));
+            Check("modal return preserves the configured cache", ReferenceEquals(page.CacheMode, priorCache));
+            PageTransition.SetSuppressEnterAnimation(panel, false);
+            await Task.Delay(25);
+            Check("ending modal suppression does not replay entry", !HasClocks(page, page.RenderTransform) &&
+                !HasClocks(nested, nested.RenderTransform));
+            page.Visibility = Visibility.Collapsed;
+            page.Visibility = Visibility.Visible;
+            if (SystemParameters.ClientAreaAnimation)
+                Check("ordinary page navigation still animates", page.HasAnimatedProperties);
+            await Task.Delay(260);
             for (var i = 0; i < 4; i++)
             {
                 page.Visibility = Visibility.Collapsed;
