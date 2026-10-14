@@ -2594,7 +2594,8 @@
                         <Border Background="#68000000" IsHitTestVisible="False" />
                     </Grid>
                     <Grid x:Name="SettingsDialog" MaxWidth="1020" MaxHeight="620" Margin="32"
-                          pop:Pop.Anchor="Center" Opacity="0"
+                          Style="{StaticResource PopoverStyle}"
+                          pop:Pop.Anchor="Center" pop:Pop.SlideOnly="True"
                           KeyboardNavigation.TabNavigation="Cycle"
                           KeyboardNavigation.ControlTabNavigation="Cycle"
                           FocusManager.IsFocusScope="True">

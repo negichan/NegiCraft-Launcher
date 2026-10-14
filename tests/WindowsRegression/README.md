@@ -23,6 +23,10 @@ The movement checks are not keyboard-to-display latency measurements. Check fast
 Button checks use the real theme template and assert a stable hit area, continuous
 press/release poses, and clock cleanup. Page checks cover repeated visibility changes,
 nested transitions, unload/reload, and restoration of existing opacity and bitmap caches.
+Modal-return checks cover inherited entry-animation suppression, preservation of the
+selected page's pose/cache, and resumption of animations for ordinary page navigation.
+Settings-motion checks cover short upward/downward slides without scaling or overshoot,
+fade direction, interrupted reopening, and clock/cache cleanup.
 Popover checks include interrupted closing, temporary cache cleanup, and pinned alignment.
 
 For a visible-window frame-pacing report, build the WPF app in Release and run:

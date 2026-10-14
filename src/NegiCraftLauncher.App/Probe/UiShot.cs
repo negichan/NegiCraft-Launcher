@@ -157,6 +157,7 @@ internal static class UiShot
 
         vm.GoCommand.Execute("settings");
         await AuditSettingsDialog((MainWindow)window, vm, log);
+        await AuditSettingsReturn((MainWindow)window, vm, log);
         vm.GoCommand.Execute("settings");
         foreach (var tab in SettingsTabs)
         {
@@ -240,28 +241,51 @@ internal static class UiShot
 
         ((System.Windows.Controls.Button)window.FindName("SettingsCloseButton"))
             .RaiseEvent(new RoutedEventArgs(System.Windows.Controls.Primitives.ButtonBase.ClickEvent));
-        await Task.Delay(180);
+        await Task.Delay(280);
         Check("close button restores the original page and input", !window.IsSettingsOpen && vm.CurrentPage == originalPage && content.IsVisible && backdrop.Source is null);
 
         vm.GoCommand.Execute("settings");
-        await Task.Delay(260);
+        if (SystemParameters.ClientAreaAnimation)
+        {
+            var entry = dialog.RenderTransform.Value;
+            Check("settings entry starts nearby at its full size",
+                Math.Abs(entry.M11 - 1) < 0.001 && Math.Abs(entry.M22 - 1) < 0.001 &&
+                Math.Abs(entry.OffsetY - 14) < 0.01);
+        }
+        await Task.Delay(32);
+        if (SystemParameters.ClientAreaAnimation)
+        {
+            var entry = dialog.RenderTransform?.Value ?? Matrix.Identity;
+            Check("settings entry moves upward without scaling",
+                Math.Abs(entry.M11 - 1) < 0.001 && Math.Abs(entry.M22 - 1) < 0.001 &&
+                entry.OffsetY >= 0 && entry.OffsetY < 14);
+        }
+        await Task.Delay(288);
         var escape = new System.Windows.Input.KeyEventArgs(System.Windows.Input.Keyboard.PrimaryDevice,
             PresentationSource.FromVisual(window)!, 0, System.Windows.Input.Key.Escape)
         {
             RoutedEvent = System.Windows.Input.Keyboard.PreviewKeyDownEvent,
         };
         dialog.RaiseEvent(escape);
-        await Task.Delay(180);
+        await Task.Delay(32);
+        if (SystemParameters.ClientAreaAnimation)
+        {
+            var exit = dialog.RenderTransform?.Value ?? Matrix.Identity;
+            Check("settings exit moves slightly downward without scaling",
+                Math.Abs(exit.M11 - 1) < 0.001 && Math.Abs(exit.M22 - 1) < 0.001 &&
+                exit.OffsetY > 0 && exit.OffsetY <= 12);
+        }
+        await Task.Delay(248);
         Check("Escape closes the dialog", !window.IsSettingsOpen && content.IsVisible);
 
         vm.GoCommand.Execute("settings");
-        await Task.Delay(260);
+        await Task.Delay(320);
         var scrim = (FrameworkElement)window.FindName("SettingsScrim");
         scrim.RaiseEvent(new System.Windows.Input.MouseButtonEventArgs(System.Windows.Input.Mouse.PrimaryDevice, 0, System.Windows.Input.MouseButton.Left)
         {
             RoutedEvent = System.Windows.Input.Mouse.MouseDownEvent,
         });
-        await Task.Delay(180);
+        await Task.Delay(280);
         Check("clicking the backdrop closes the dialog", !window.IsSettingsOpen && content.IsVisible);
 
         vm.GoCommand.Execute("settings");
@@ -270,12 +294,70 @@ internal static class UiShot
         await Task.Delay(300);
         Check("rapid reopen survives pending close", window.IsSettingsOpen && !content.IsVisible && backdrop.Source is not null);
         window.IsSettingsOpen = false;
-        await Task.Delay(180);
+        await Task.Delay(280);
         Check("rapid reopen restores state after final close", content.IsVisible && backdrop.Source is null);
+
+        vm.GoCommand.Execute("settings");
+        await Task.Delay(320);
+        window.IsSettingsOpen = false;
+        await Task.Delay(48);
+        vm.GoCommand.Execute("settings");
+        await Task.Delay(320);
+        Check("reopening during backdrop fade restores the opaque modal",
+            window.IsSettingsOpen && !content.IsVisible && Math.Abs(scrim.Opacity - 1) < 0.001);
+        window.IsSettingsOpen = false;
+        await Task.Delay(280);
+        Check("final close releases the backdrop animation",
+            content.IsVisible && !scrim.HasAnimatedProperties && backdrop.Source is null);
+        Check("closed settings dialog stays transparent after animation cleanup",
+            dialog.Opacity == 0 && !dialog.IsHitTestVisible && !dialog.HasAnimatedProperties);
 
         var legacy = new MainWindowViewModel(new Services.WpfBitmapDecoder());
         legacy.GoCommand.Execute("settings");
         Check("hosts without a dialog retain settings navigation", legacy.CurrentPage == "settings");
+    }
+
+    private static async Task AuditSettingsReturn(MainWindow window, MainWindowViewModel vm, StringBuilder log)
+    {
+        foreach (var (page, name) in new[]
+        {
+            ("home", "PageHome"), ("instances", "PageInstances"), ("download", "PageDownload"),
+        })
+        {
+            vm.GoCommand.Execute(page);
+            await Task.Delay(350);
+            var content = (FrameworkElement)window.FindName(name);
+            vm.GoCommand.Execute("settings");
+            await Task.Delay(320);
+            window.IsSettingsOpen = false;
+
+            var dialog = (FrameworkElement)window.FindName("SettingsDialog");
+            var previousDialogOpacity = dialog.Opacity;
+            var maxOpacityIncrease = 0.0;
+            var samples = 0;
+            var minOpacity = 1.0;
+            var maxOffset = 0.0;
+            var scrim = (FrameworkElement)window.FindName("SettingsScrim");
+            var fadingFrames = 0;
+            for (var frame = 0; frame < 20; frame++)
+            {
+                await Task.Delay(16);
+                maxOpacityIncrease = Math.Max(maxOpacityIncrease, dialog.Opacity - previousDialogOpacity);
+                previousDialogOpacity = dialog.Opacity;
+                if (!content.IsVisible) continue;
+                samples++;
+                minOpacity = Math.Min(minOpacity, content.Opacity);
+                maxOffset = Math.Max(maxOffset, Math.Abs(content.RenderTransform.Value.OffsetY));
+                if (scrim.IsVisible && scrim.Opacity > 0.001 && scrim.Opacity < 0.999) fadingFrames++;
+                if (page == "home" && frame is 1 or 5 or 15)
+                    await Capture(window, $"ncl-wpf-settings-return-{frame}.png", log);
+            }
+            log.AppendLine($"  {(samples > 0 && minOpacity >= 0.99 && maxOffset < 0.01 ? "OK" : "!!")} settings return {page}: no repeated page entry (samples={samples}, min opacity={minOpacity:F3}, max offset={maxOffset:F3})");
+            log.AppendLine($"  {(!SystemParameters.ClientAreaAnimation || fadingFrames > 0 ? "OK" : "!!")} settings return {page}: backdrop fades over a stable live page (intermediate frames={fadingFrames})");
+            log.AppendLine($"  {(maxOpacityIncrease < 0.01 && dialog.Opacity == 0 ? "OK" : "!!")} settings return {page}: dialog never reappears after fading out (max opacity increase={maxOpacityIncrease:F3}, final opacity={dialog.Opacity:F3})");
+        }
+        vm.GoCommand.Execute("home");
+        await Task.Delay(300);
     }
 
     /// <summary>把所有带 x:Name 的元素的实际尺寸/可见性列出来，样式没命中时一眼看得出来。</summary>

@@ -62,7 +62,7 @@ internal static class UiPerformance
                     settingsOpenTimes.Add(Stopwatch.GetElapsedTime(stamp).TotalMilliseconds);
                     await Task.Delay(320);
                     window.IsSettingsOpen = false;
-                    await Task.Delay(180);
+                    await Task.Delay(280);
                 }
             }));
             var pressedKey = (DependencyPropertyKey)typeof(ButtonBase)

@@ -1,6 +1,7 @@
 using System.Windows;
 using System.Windows.Input;
 using System.Windows.Media;
+using System.Windows.Media.Animation;
 using System.Windows.Media.Imaging;
 using System.Windows.Threading;
 using NegiCraftLauncher.App.Controls;
@@ -43,15 +44,18 @@ public partial class MainWindow
         var version = ++_settingsVersion;
         if (open)
         {
+            SettingsScrim.BeginAnimation(UIElement.OpacityProperty, null);
+            SettingsScrim.Opacity = 1;
+            PageTransition.SetSuppressEnterAnimation(LauncherScene, true);
             if (!_settingsBackdropPrepared)
             {
                 _settingsPreviousFocus = Keyboard.FocusedElement;
                 _settingsBackdropCache ??= CaptureSettingsBackdrop();
                 SettingsBackdrop.Source = _settingsBackdropCache;
                 _settingsBackdropPrepared = true;
-                LauncherScene.Visibility = Visibility.Hidden;
-                _bgToneTimer.Stop();
             }
+            LauncherScene.Visibility = Visibility.Hidden;
+            _bgToneTimer.Stop();
             PageSettings.Visibility = Visibility.Visible;
             PageSettings.IsHitTestVisible = true;
             Pop.SetIsOpen(SettingsDialog, true);
@@ -69,14 +73,31 @@ public partial class MainWindow
 
     private async Task FinishSettingsClose(int version)
     {
-        if (SystemParameters.ClientAreaAnimation) await Task.Delay(120);
+        // Restore the live scene under the opaque snapshot before fading it out.
+        // Its pages stayed selected; revealing them must not replay their entry animations.
+        LauncherScene.Visibility = Visibility.Visible;
+        if (SystemParameters.ClientAreaAnimation)
+        {
+            await Dispatcher.Yield(DispatcherPriority.Render);
+            if (_settingsVersion != version || IsSettingsOpen) return;
+            SettingsScrim.Opacity = 0;
+            SettingsScrim.BeginAnimation(UIElement.OpacityProperty,
+                new DoubleAnimation(1, 0, TimeSpan.FromMilliseconds(Pop.SlideCloseDurationMs))
+                {
+                    EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut },
+                    FillBehavior = FillBehavior.Stop,
+                });
+            await Task.Delay(Pop.SlideCloseDurationMs + 20);
+        }
         if (_settingsVersion != version || IsSettingsOpen) return;
 
         PageSettings.Visibility = Visibility.Collapsed;
+        SettingsScrim.BeginAnimation(UIElement.OpacityProperty, null);
+        SettingsScrim.Opacity = 1;
         SettingsBackdrop.Source = null;
         _settingsBackdropPrepared = false;
         if (_vm?.IsVideoBackground == true) _settingsBackdropCache = null;
-        LauncherScene.Visibility = Visibility.Visible;
+        PageTransition.SetSuppressEnterAnimation(LauncherScene, false);
         SyncToneSampling();
         if (_settingsPreviousFocus is UIElement { IsVisible: true, IsEnabled: true } previous)
             Keyboard.Focus(previous);
