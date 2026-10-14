@@ -108,6 +108,11 @@ public sealed class DebugBridge
                 case "pop":
                     await PetDebugMailbox.Ui(() =>
                     {
+                        if (_window is MainWindow main)
+                        {
+                            if (arg == "settings") main.OpenSettingsDialog();
+                            else main.IsSettingsOpen = false;
+                        }
                         _vm.IsAccPopOpen = arg == "acc";
                         _vm.IsInstPopOpen = arg == "inst";
                         _vm.IsDlPopOpen = arg == "dl";

@@ -64,6 +64,7 @@ public partial class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent();
+        InitializeSettingsViews();
         SetupTrayIcon();
         DataContextChanged += OnDataContextChangedHandler;
 
@@ -1100,13 +1101,18 @@ public partial class MainWindow : Window
 
     private void OnViewModelPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
-        if (e.PropertyName is not (nameof(MainWindowViewModel.CurrentSettingsTab)
+        if (!_settingsBackdropPrepared ||
+            e.PropertyName is not (nameof(MainWindowViewModel.CurrentSettingsTab)
                                 or nameof(MainWindowViewModel.IsJavaChooserOpen)
                                 or nameof(MainWindowViewModel.JavaOptions)))
             _settingsBackdropCache = null;
 
         if (e.PropertyName == nameof(MainWindowViewModel.CurrentSettingsTab))
+        {
             SettingsScroll.ScrollToTop();
+            PageSettingsScroll.ScrollToTop();
+            _settingsBackdropCache = null;
+        }
 
         if (e.PropertyName is nameof(MainWindowViewModel.BgArt)
                          or nameof(MainWindowViewModel.BgBrightness)
@@ -1861,7 +1867,7 @@ public partial class MainWindow : Window
     /// </summary>
     private void OnWindowDragOver(object sender, DragEventArgs e)
     {
-        if (PageSettings.Visibility == Visibility.Visible)
+        if (SettingsOverlay.Visibility == Visibility.Visible)
         {
             e.Effects = DragDropEffects.None;
             e.Handled = true;
@@ -1893,7 +1899,7 @@ public partial class MainWindow : Window
 
     private void OnWindowDrop(object sender, DragEventArgs e)
     {
-        if (PageSettings.Visibility == Visibility.Visible)
+        if (SettingsOverlay.Visibility == Visibility.Visible)
         {
             e.Handled = true;
             return;

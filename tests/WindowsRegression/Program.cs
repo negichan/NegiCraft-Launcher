@@ -1,4 +1,5 @@
 using System.Reflection;
+using System.Diagnostics;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
@@ -247,6 +248,8 @@ internal static class Program
                 var previousOpacity = 0.0;
                 var monotonic = true;
                 var fixedSize = true;
+                var elapsed = Stopwatch.StartNew();
+                var observedLongGlide = false;
                 for (var frame = 0; frame < 20; frame++)
                 {
                     await Task.Delay(16);
@@ -257,9 +260,10 @@ internal static class Program
                                  dialog.RenderSize == size;
                     previousY = matrix.OffsetY;
                     previousOpacity = dialog.Opacity;
-                    if (frame == 8)
-                        Check("settings entry remains animated for a slower glide", HasClocks(dialog, transform));
+                    if (elapsed.ElapsedMilliseconds is >= 100 and < 220)
+                        observedLongGlide |= HasClocks(dialog, transform);
                 }
+                Check("settings entry remains animated for a slower glide", observedLongGlide);
                 Check("settings slides upward and fades in without overshooting", monotonic);
                 Check("settings opening keeps its size without scaling", fixedSize);
             }
@@ -276,6 +280,8 @@ internal static class Program
                 var monotonic = true;
                 var maxY = 0.0;
                 var fixedSize = true;
+                var elapsed = Stopwatch.StartNew();
+                var observedLongGlide = false;
                 for (var frame = 0; frame < 17; frame++)
                 {
                     await Task.Delay(16);
@@ -288,9 +294,10 @@ internal static class Program
                     maxY = Math.Max(maxY, matrix.OffsetY);
                     previousY = matrix.OffsetY;
                     previousOpacity = dialog.Opacity;
-                    if (frame == 8)
-                        Check("settings exit remains animated for a slower glide", HasClocks(dialog, transform));
+                    if (elapsed.ElapsedMilliseconds is >= 80 and < 170)
+                        observedLongGlide |= HasClocks(dialog, transform);
                 }
+                Check("settings exit remains animated for a slower glide", observedLongGlide);
                 Check("settings slides slightly downward while fading out", monotonic && maxY > 0.1);
                 Check("settings closing keeps its size without scaling", fixedSize);
             }

@@ -137,10 +137,7 @@ public partial class MainWindowViewModel : ViewModelBase
     [RelayCommand]
     private void Go(string page)
     {
-        // WPF hosts settings as a dialog; other hosts retain the existing settings page.
-        var navigation = NavigationRequested;
-        navigation?.Invoke(page);
-        if (page == "settings" && navigation is not null) return;
+        if (NavigationRequested?.Invoke(page) == true) return;
         CurrentPage = page;
 
         // 从游戏回来「最近游玩」该变了：进实例页顺手重读一遍模型，
@@ -151,7 +148,8 @@ public partial class MainWindowViewModel : ViewModelBase
         }
     }
 
-    public event Action<string>? NavigationRequested;
+    /// <summary>A host returns true when it displays the requested destination itself.</summary>
+    public event Func<string, bool>? NavigationRequested;
 
     // ==========================================================
     // Background & appearance
@@ -2851,6 +2849,9 @@ public partial class MainWindowViewModel : ViewModelBase
     private string _currentSettingsTab = "游戏";
 
     [ObservableProperty]
+    private bool _useSettingsDialog;
+
+    [ObservableProperty]
     private int _maxMemoryGb = 6;
 
     [ObservableProperty]
@@ -2889,6 +2890,8 @@ public partial class MainWindowViewModel : ViewModelBase
     {
         if (value == "Java") RefreshJavaOptions();
     }
+
+    partial void OnUseSettingsDialogChanged(bool value) => PersistSettings();
 
     partial void OnMaxMemoryGbChanged(int value)
     {
@@ -3094,6 +3097,7 @@ public partial class MainWindowViewModel : ViewModelBase
                 _ => "自动",
             };
             IsDark = settings.IsDark;
+            UseSettingsDialog = settings.UseSettingsDialog;
 
             if (!string.IsNullOrEmpty(settings.CustomBackgroundPath) &&
                 File.Exists(settings.CustomBackgroundPath))
@@ -3158,6 +3162,7 @@ public partial class MainWindowViewModel : ViewModelBase
         settings.InstanceViewMode = InstanceViewMode;
         settings.DownloadThreads = DownloadThreads;
         settings.IsDark = IsDark;
+        settings.UseSettingsDialog = UseSettingsDialog;
         settings.CustomBackgroundPath = CustomBackgroundPath;
         settings.VideoBackgroundPath = VideoBackgroundPath;
         settings.BackgroundBlur = BgBlur;

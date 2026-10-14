@@ -1,4 +1,5 @@
 using System.Windows;
+using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Animation;
@@ -25,17 +26,57 @@ public partial class MainWindow
     private IInputElement? _settingsPreviousFocus;
     private bool _settingsBackdropPrepared;
     private BitmapSource? _settingsBackdropCache;
+    private string _settingsReturnPage = "home";
 
-    private void OnSettingsNavigationRequested(string page)
+    private Panel SettingsNavPanel => (Panel)DialogSettingsNavHost.Content;
+    private Panel SettingsCardsPanel => (Panel)DialogSettingsCardsHost.Content;
+
+    private void InitializeSettingsViews()
     {
-        if (page == "settings")
+        var navigation = (DataTemplate)FindResource("SettingsNavTemplate");
+        var cards = (DataTemplate)FindResource("SettingsCardsTemplate");
+        PageSettingsNavHost.Content = navigation.LoadContent();
+        DialogSettingsNavHost.Content = navigation.LoadContent();
+        PageSettingsCardsHost.Content = cards.LoadContent();
+        DialogSettingsCardsHost.Content = cards.LoadContent();
+    }
+
+    private bool OnSettingsNavigationRequested(string page)
+    {
+        if (page == "settings" && _vm is { } vm)
         {
-            _vm?.CloseAllPopoversCommand.Execute(null);
-            IsSettingsOpen = true;
+            if (vm.CurrentPage != "settings") _settingsReturnPage = vm.CurrentPage;
+            if (vm.UseSettingsDialog)
+            {
+                OpenSettingsDialog();
+                return true;
+            }
+        }
+        IsSettingsOpen = false;
+        return false;
+    }
+
+    public void OpenSettingsDialog()
+    {
+        _vm?.CloseAllPopoversCommand.Execute(null);
+        IsSettingsOpen = true;
+    }
+
+    private void OnSettingsModeClick(object sender, RoutedEventArgs e)
+    {
+        if (_vm is not { } vm) return;
+        vm.UseSettingsDialog = !vm.UseSettingsDialog;
+        if (vm.UseSettingsDialog)
+        {
+            // Reveal the previous page without replaying its entrance behind the snapshot.
+            PageTransition.SetSuppressEnterAnimation(LauncherScene, true);
+            vm.GoCommand.Execute(_settingsReturnPage);
+            LauncherScene.UpdateLayout();
+            OpenSettingsDialog();
         }
         else
         {
-            IsSettingsOpen = false;
+            vm.GoCommand.Execute("settings");
         }
     }
 
@@ -56,8 +97,8 @@ public partial class MainWindow
             }
             LauncherScene.Visibility = Visibility.Hidden;
             _bgToneTimer.Stop();
-            PageSettings.Visibility = Visibility.Visible;
-            PageSettings.IsHitTestVisible = true;
+            SettingsOverlay.Visibility = Visibility.Visible;
+            SettingsOverlay.IsHitTestVisible = true;
             Pop.SetIsOpen(SettingsDialog, true);
             Dispatcher.BeginInvoke(DispatcherPriority.Input, () =>
             {
@@ -91,7 +132,7 @@ public partial class MainWindow
         }
         if (_settingsVersion != version || IsSettingsOpen) return;
 
-        PageSettings.Visibility = Visibility.Collapsed;
+        SettingsOverlay.Visibility = Visibility.Collapsed;
         SettingsScrim.BeginAnimation(UIElement.OpacityProperty, null);
         SettingsScrim.Opacity = 1;
         SettingsBackdrop.Source = null;
