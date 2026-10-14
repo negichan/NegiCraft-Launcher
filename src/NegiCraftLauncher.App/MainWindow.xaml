@@ -91,7 +91,9 @@
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="{x:Type Button}">
-                        <Grid>
+                        <Grid neg:ButtonMotion.Enabled="True"
+                              neg:ButtonMotion.Pressed="{Binding IsPressed, RelativeSource={RelativeSource TemplatedParent}}"
+                              neg:ButtonMotion.Hovered="{Binding IsMouseOver, RelativeSource={RelativeSource TemplatedParent}}">
                             <Border x:Name="HoverBd" Background="#2E7F7F7F" CornerRadius="12" Opacity="0" />
                             <Border x:Name="ActiveBd" Background="#fafafa" CornerRadius="12" Opacity="0" />
                             <ContentPresenter x:Name="Content"
@@ -245,11 +247,6 @@
             <Style.Triggers>
                 <Trigger Property="IsMouseOver" Value="True">
                     <Setter Property="Background" Value="#297F7F7F" />
-                    <Setter Property="RenderTransform">
-                        <Setter.Value>
-                            <ScaleTransform ScaleX="1.02" ScaleY="1.02" />
-                        </Setter.Value>
-                    </Setter>
                 </Trigger>
             </Style.Triggers>
         </Style>
@@ -262,29 +259,20 @@
             <Style.Triggers>
                 <Trigger Property="IsMouseOver" Value="True">
                     <Setter Property="Background" Value="#ffffff" />
-                    <Setter Property="RenderTransform">
-                        <Setter.Value>
-                            <ScaleTransform ScaleX="1.03" ScaleY="1.03" />
-                        </Setter.Value>
-                    </Setter>
                 </Trigger>
             </Style.Triggers>
         </Style>
 
         <!-- 弹层留在树里（靠透明 + 不吃点击隐藏），因为切 Visibility 会把它踢出布局。
              开合的全部动效由 Controls/Pop.cs 接管，含透明度。 -->
-        <Style x:Key="PopoverStyle" TargetType="{x:Type Border}">
+        <Style x:Key="PopoverStyle" TargetType="{x:Type FrameworkElement}">
             <Setter Property="Opacity" Value="0" />
             <Setter Property="IsHitTestVisible" Value="False" />
         </Style>
 
-        <!-- 音量浮层专用的开合动画 —— **刻意不走 `Pop`**。
-             `Pop` 那套是"从触发控件的矩形里长出来、飞出去过冲 1.05 再回落到 0.987"的
-             **菜单**动画（150+110+110ms，还带一条揭示裁切），挂在按钮上的菜单很合适；
-             但音量条是**悬停即出**的东西 —— 370ms 太慢、弹那一下也多余，而且飞行期间
-             `Pop` 会把 `IsHitTestVisible` 压成 false，害得收合看门狗还得配一段宽限。
-             这里换成自己的节奏：淡入 130ms + 从按钮底下滑出 6px（180ms ease-out），
-             关掉时 100ms 原路收回。命中从一开始就可用，宽限期也就不需要了。
+        <!-- 音量浮层只做淡入和位移，不用菜单的缩放回弹。
+             淡入 130ms + 从按钮底下滑出 6px（180ms ease-out），关掉时 100ms 原路收回。
+             命中从一开始就可用，悬停轮询不需要等待动画结束。
              ⚠️ `RenderTransform` 写在元素自己身上而不是这个 Style 里：样式 setter 里的
                `Freezable` 有被冻结的风险，冻住就动不了了。 -->
         <Style x:Key="VolumePopStyle" TargetType="{x:Type Border}">
@@ -321,35 +309,9 @@
             </Style.Triggers>
         </Style>
 
-        <!-- 页面切换与视图切换过渡动画：淡入 180ms + 向上滑动 6px (200ms ease-out) -->
+        <!-- 页面仅在过渡期间缓存；结束后恢复文字的正常渲染。 -->
         <Style x:Key="PageAnimStyle" TargetType="{x:Type Grid}">
-            <Setter Property="RenderTransform">
-                <Setter.Value>
-                    <TranslateTransform Y="0" />
-                </Setter.Value>
-            </Setter>
-            <Style.Triggers>
-                <Trigger Property="Visibility" Value="Visible">
-                    <Trigger.EnterActions>
-                        <BeginStoryboard>
-                            <Storyboard>
-                                <DoubleAnimation Storyboard.TargetProperty="Opacity"
-                                                 From="0" To="1" Duration="0:0:0.18">
-                                    <DoubleAnimation.EasingFunction>
-                                        <CubicEase EasingMode="EaseOut" />
-                                    </DoubleAnimation.EasingFunction>
-                                </DoubleAnimation>
-                                <DoubleAnimation Storyboard.TargetProperty="(UIElement.RenderTransform).(TranslateTransform.Y)"
-                                                 From="6" To="0" Duration="0:0:0.20">
-                                    <DoubleAnimation.EasingFunction>
-                                        <CubicEase EasingMode="EaseOut" />
-                                    </DoubleAnimation.EasingFunction>
-                                </DoubleAnimation>
-                            </Storyboard>
-                        </BeginStoryboard>
-                    </Trigger.EnterActions>
-                </Trigger>
-            </Style.Triggers>
+            <Setter Property="controls:PageTransition.Enabled" Value="True" />
         </Style>
 
         <!-- ============ 竖排音量条（喇叭底下那条）============
@@ -1014,6 +976,10 @@
              阶梯比阴影本身还显眼。
              ⚠️ 别给弹层/托盘菜单/侧栏这么干：它们的宿主尺寸 == 内容尺寸，溢出会被硬裁
              （见 Theme/Controls.xaml 里 Shadow* 的用法）。 -->
+        <Grid x:Name="ShellShadowLayer" IsHitTestVisible="False">
+            <Grid.CacheMode>
+                <BitmapCache />
+            </Grid.CacheMode>
         <Border x:Name="ShellShadowWide"
                 Margin="63"
                 Background="#09090b"
@@ -1034,6 +1000,7 @@
                                   BlurRadius="6" ShadowDepth="4" Direction="270" />
             </Border.Effect>
         </Border>
+        </Grid>
 
     <Border x:Name="Shell"
             Margin="60"
@@ -1052,6 +1019,20 @@
                  采样必须打在**合成完的**画面上（模糊 / 亮度叠加 / .shade 渐变都算在内），
                  所以取的是这一层的根，而不是单独的 BgLayer。 -->
             <Grid x:Name="BgRoot">
+                <Grid.Style>
+                    <Style TargetType="{x:Type Grid}">
+                        <Setter Property="CacheMode">
+                            <Setter.Value>
+                                <BitmapCache />
+                            </Setter.Value>
+                        </Setter>
+                        <Style.Triggers>
+                            <DataTrigger Binding="{Binding IsVideoBackground}" Value="True">
+                                <Setter Property="CacheMode" Value="{x:Null}" />
+                            </DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </Grid.Style>
                 <!-- 生成的 240x146 场景拉伸铺满并保持硬边；用户选的图片则按比例裁切、允许插值。
                      RenderOptions 不能绑，所以两条路拆成两个元素。 -->
                 <Grid x:Name="BgLayer">
@@ -1229,6 +1210,20 @@
                     SizeChanged="OnSidebarBackdropSizeChanged"
                     IsHitTestVisible="False"
                     Panel.ZIndex="19">
+                <Border.Style>
+                    <Style TargetType="{x:Type Border}">
+                        <Setter Property="CacheMode">
+                            <Setter.Value>
+                                <BitmapCache />
+                            </Setter.Value>
+                        </Setter>
+                        <Style.Triggers>
+                            <DataTrigger Binding="{Binding IsVideoBackground}" Value="True">
+                                <Setter Property="CacheMode" Value="{x:Null}" />
+                            </DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </Border.Style>
                 <Grid>
                     <!-- 把壳的背景图再画一遍，位置退回壳的原点，玻璃才对得上它盖住的东西 -->
                     <Image Source="{Binding BgArt, Converter={StaticResource PixelsToBitmap}}"
@@ -2989,16 +2984,15 @@
             <!-- 7. 弹层                                      -->
             <!-- ========================================== -->
             <!-- #accPop：left 84 / bottom 12 / 宽 280 -->
-            <Border HorizontalAlignment="Left" VerticalAlignment="Bottom"
+            <Grid HorizontalAlignment="Left" VerticalAlignment="Bottom"
                     Margin="84,0,0,12" Width="280"
-                    Background="#111114" BorderBrush="#26262b" BorderThickness="1"
-                    CornerRadius="14" Padding="6"
-                    Effect="{StaticResource ShadowLg}"
                     Style="{StaticResource PopoverStyle}"
                     pop:Pop.Anchor="BottomLeft"
                     pop:Pop.Trigger="{Binding ElementName=AccountAvatar}"
                     pop:Pop.IsOpen="{Binding IsAccPopOpen}"
                     Panel.ZIndex="50">
+                <Border Background="#111114" BorderBrush="#26262b" BorderThickness="1"
+                        CornerRadius="14" Padding="6" Effect="{StaticResource ShadowLg}">
                 <neg:NegiStackPanel Spacing="2">
                     <ScrollViewer MaxHeight="260">
                         <ItemsControl ItemsSource="{Binding Accounts}">
@@ -3060,19 +3054,19 @@
                         </neg:NegiStackPanel>
                     </Button>
                 </neg:NegiStackPanel>
-            </Border>
+                </Border>
+            </Grid>
 
             <!-- #instPop：正好在停靠栏上方 8px（bottom 100）/ 宽 380 -->
-            <Border HorizontalAlignment="Right" VerticalAlignment="Bottom"
+            <Grid HorizontalAlignment="Right" VerticalAlignment="Bottom"
                     Margin="0,0,20,100" Width="380"
-                    Background="#111114" BorderBrush="#26262b" BorderThickness="1"
-                    CornerRadius="14" Padding="6"
-                    Effect="{StaticResource ShadowLg}"
                     Style="{StaticResource PopoverStyle}"
                     pop:Pop.Anchor="BottomLeft"
                     pop:Pop.Trigger="{Binding ElementName=InstSelectBtn}"
                     pop:Pop.IsOpen="{Binding IsInstPopOpen}"
                     Panel.ZIndex="50">
+                <Border Background="#111114" BorderBrush="#26262b" BorderThickness="1"
+                        CornerRadius="14" Padding="6" Effect="{StaticResource ShadowLg}">
                 <neg:NegiStackPanel Spacing="2">
                     <ScrollViewer MaxHeight="300">
                         <ItemsControl ItemsSource="{Binding Instances}">
@@ -3109,7 +3103,8 @@
                         </neg:NegiStackPanel>
                     </Button>
                 </neg:NegiStackPanel>
-            </Border>
+                </Border>
+            </Grid>
 
             <!-- ========================================== -->
             <!-- 7a2. 加载器筛选下拉（挂在实例页工具条那颗按钮上） -->
@@ -3120,11 +3115,8 @@
                  和稿子里 `p.style.left=r.left; p.style.top=r.bottom+6` 是同一条规则。
                  以前的 Margin 是手量的窗口坐标 —— 按钮在工具条第几格、搜索框多宽都会挪它，量一次坏一次。
                  这里留的 Margin 只在 Pin 量不到（首次布局还没跑完）时兜底。 -->
-            <Border x:Name="LoaderPop" HorizontalAlignment="Left" VerticalAlignment="Top"
+            <Grid x:Name="LoaderPop" HorizontalAlignment="Left" VerticalAlignment="Top"
                     Margin="0,102,0,0" Width="208"
-                    Background="#111114" BorderBrush="#26262b" BorderThickness="1"
-                    CornerRadius="14" Padding="6"
-                    Effect="{StaticResource ShadowLg}"
                     Style="{StaticResource PopoverStyle}"
                     pop:Pop.Anchor="TopLeft"
                     pop:Pop.Pin="UnderLeft"
@@ -3132,6 +3124,8 @@
                     pop:Pop.Trigger="{Binding ElementName=LoaderFilterBtn}"
                     pop:Pop.IsOpen="{Binding IsLoaderPopOpen}"
                     Panel.ZIndex="50">
+                <Border Background="#111114" BorderBrush="#26262b" BorderThickness="1"
+                        CornerRadius="14" Padding="6" Effect="{StaticResource ShadowLg}">
                 <ScrollViewer MaxHeight="280" VerticalScrollBarVisibility="Auto">
                     <ItemsControl HorizontalContentAlignment="Stretch" ItemsSource="{Binding LoaderChoices}">
                         <ItemsControl.ItemTemplate>
@@ -3150,7 +3144,8 @@
                         </ItemsControl.ItemTemplate>
                     </ItemsControl>
                 </ScrollViewer>
-            </Border>
+                </Border>
+            </Grid>
 
             <!-- ========================================== -->
             <!-- 7a3. 目录切换浮层（挂在页头那颗胶囊上）      -->
@@ -3160,11 +3155,8 @@
                  选中态不再打勾，直接给 muted 底 —— 稿子定的口径。 -->
             <!-- 停的位置交给 Pop.Pin：UnderRight + 间隙 6，右边缘与按钮对齐展开。
                  下面的 Margin 只是 Pin 量不到时的兜底位置。 -->
-            <Border x:Name="FolderPop" HorizontalAlignment="Left" VerticalAlignment="Top"
+            <Grid x:Name="FolderPop" HorizontalAlignment="Left" VerticalAlignment="Top"
                     Margin="0,102,0,0" Width="300"
-                    Background="#111114" BorderBrush="#26262b" BorderThickness="1"
-                    CornerRadius="12" Padding="4"
-                    Effect="{StaticResource ShadowLg}"
                     Style="{StaticResource PopoverStyle}"
                     pop:Pop.Anchor="TopRight"
                     pop:Pop.Pin="UnderRight"
@@ -3172,6 +3164,8 @@
                     pop:Pop.Trigger="{Binding ElementName=FolderPillBtn}"
                     pop:Pop.IsOpen="{Binding IsFolderPopOpen}"
                     Panel.ZIndex="50">
+                <Border Background="#111114" BorderBrush="#26262b" BorderThickness="1"
+                        CornerRadius="12" Padding="4" Effect="{StaticResource ShadowLg}">
                 <!-- 稿子 .folder-pop-list{gap:2px}；垂直滚动条要 Auto —— WPF 的 ScrollViewer 默认是
                      Visible，会一直占掉右边 10px，只有一个目录时那 10px 就变成浮层右边的一条空档。 -->
                 <ScrollViewer MaxHeight="280" VerticalScrollBarVisibility="Auto">
@@ -3266,21 +3260,21 @@
                         </ItemsControl.ItemTemplate>
                     </ItemsControl>
                 </ScrollViewer>
-            </Border>
+                </Border>
+            </Grid>
 
             <!-- ========================================== -->
             <!-- 7b. 下载任务弹层（挂在下载页的「下载任务」按钮上） -->
             <!-- ========================================== -->
-            <Border HorizontalAlignment="Right" VerticalAlignment="Top"
+            <Grid HorizontalAlignment="Right" VerticalAlignment="Top"
                     Margin="0,64,112,0" Width="440"
-                    Background="#111114" BorderBrush="#26262b" BorderThickness="1"
-                    CornerRadius="14" Padding="4" ClipToBounds="True"
-                    Effect="{StaticResource ShadowLg}"
                     Style="{StaticResource PopoverStyle}"
                     pop:Pop.Anchor="TopRight"
                     pop:Pop.Trigger="{Binding ElementName=DlPopBtn}"
                     pop:Pop.IsOpen="{Binding IsDlPopOpen}"
                     Panel.ZIndex="50">
+                <Border Background="#111114" BorderBrush="#26262b" BorderThickness="1"
+                        CornerRadius="14" Padding="4" ClipToBounds="True" Effect="{StaticResource ShadowLg}">
                 <neg:NegiGrid Rows="Auto *">
                     <neg:NegiGrid Grid.Row="0" Columns="* Auto" Margin="10,8,10,10">
                         <TextBlock Grid.Column="0" Text="下载任务" FontWeight="SemiBold" FontSize="13"
@@ -3298,7 +3292,8 @@
                                FontSize="13" Foreground="#a1a1aa"
                                HorizontalAlignment="Center" VerticalAlignment="Center" Margin="0,28,0,28" />
                 </neg:NegiGrid>
-            </Border>
+                </Border>
+            </Grid>
 
             <!-- ========================================== -->
             <!-- 8. 背景取景三件套（自选壁纸时才出现）        -->
@@ -3382,15 +3377,14 @@
             <!-- 9. 横幅（瞬时状态提示）                       -->
             <!-- ========================================== -->
             <!-- 启动停靠栏占着右下角，所以提示从顶部边缘垂下来，不跟它撞。 -->
-            <Border HorizontalAlignment="Center" VerticalAlignment="Top"
+            <Grid HorizontalAlignment="Center" VerticalAlignment="Top"
                     Margin="0,20,0,0" MaxWidth="520"
-                    Background="#F2111114" BorderBrush="#26262b" BorderThickness="1"
-                    CornerRadius="12" Padding="14,10"
-                    Effect="{StaticResource ShadowToast}"
                     Style="{StaticResource PopoverStyle}"
                     pop:Pop.Anchor="TopCenter"
                     pop:Pop.IsOpen="{Binding IsBannerOpen}"
                     Panel.ZIndex="65">
+                <Border Background="#F2111114" BorderBrush="#26262b" BorderThickness="1"
+                        CornerRadius="12" Padding="14,10" Effect="{StaticResource ShadowToast}">
                 <neg:NegiGrid Columns="Auto * Auto">
                     <materialIcons:MaterialIcon Grid.Column="0" Kind="InformationOutline" Width="16" Height="16"
                                                 Foreground="#a1a1aa" VerticalAlignment="Center" Margin="0,0,10,0" />
@@ -3402,7 +3396,8 @@
                         <materialIcons:MaterialIcon Kind="Close" Width="13" Height="13" />
                     </Button>
                 </neg:NegiGrid>
-            </Border>
+                </Border>
+            </Grid>
 
             <!-- ========================================== -->
             <!-- 10. 对话框（窗口内的输入 / 确认）              -->
@@ -3411,14 +3406,13 @@
                 <Border Background="#A6000000" Visibility="{Binding IsDialogOpen, Converter={StaticResource BoolToVis}}"
                         MouseLeftButtonDown="OnDialogBackdropMouseDown" />
 
-                <Border HorizontalAlignment="Center" VerticalAlignment="Center"
+                <Grid HorizontalAlignment="Center" VerticalAlignment="Center"
                         Width="400"
-                        Background="#111114" BorderBrush="#26262b" BorderThickness="1"
-                        CornerRadius="16" Padding="22,20"
-                        Effect="{StaticResource ShadowLg}"
                         Style="{StaticResource PopoverStyle}"
                         pop:Pop.Anchor="Center"
                         pop:Pop.IsOpen="{Binding IsDialogOpen}">
+                    <Border Background="#111114" BorderBrush="#26262b" BorderThickness="1"
+                            CornerRadius="16" Padding="22,20" Effect="{StaticResource ShadowLg}">
                     <neg:NegiStackPanel Spacing="14">
                         <TextBlock Text="{Binding DialogTitle}" FontSize="16" FontWeight="SemiBold" Foreground="#fafafa" />
 
@@ -3440,7 +3434,8 @@
                                     Command="{Binding ConfirmDialogCommand}" />
                         </neg:NegiStackPanel>
                     </neg:NegiStackPanel>
-                </Border>
+                    </Border>
+                </Grid>
             </Grid>
 
             <!-- ========================================== -->
@@ -3450,13 +3445,12 @@
             <Grid Panel.ZIndex="72" Visibility="{Binding IsPackImportOpen, Converter={StaticResource BoolToVis}}">
                 <Border Background="#A6000000" MouseLeftButtonDown="OnPackBackdropMouseDown" />
 
-                <Border HorizontalAlignment="Center" VerticalAlignment="Center" Width="480"
-                        Background="#111114" BorderBrush="#26262b" BorderThickness="1"
-                        CornerRadius="16" Padding="24,18"
-                        Effect="{StaticResource ShadowLg}"
+                <Grid HorizontalAlignment="Center" VerticalAlignment="Center" Width="480"
                         Style="{StaticResource PopoverStyle}"
                         pop:Pop.Anchor="Center"
                         pop:Pop.IsOpen="{Binding IsPackImportOpen}">
+                    <Border Background="#111114" BorderBrush="#26262b" BorderThickness="1"
+                            CornerRadius="16" Padding="24,18" Effect="{StaticResource ShadowLg}">
                     <neg:NegiStackPanel Spacing="14">
                         <neg:NegiGrid Columns="Auto * Auto">
                             <materialIcons:MaterialIcon Grid.Column="0" Kind="PackageVariantClosed" Width="22" Height="22"
@@ -3546,20 +3540,20 @@
                                     Command="{Binding StartPackImportCommand}" />
                         </neg:NegiStackPanel>
                     </neg:NegiStackPanel>
-                </Border>
+                    </Border>
+                </Grid>
             </Grid>
 
             <!-- 添加已有目录：关联本地现成的 .minecraft，让它进目录列表。这里只登记，不动盘上的东西。 -->
             <Grid Panel.ZIndex="72" Visibility="{Binding IsAddFolderOpen, Converter={StaticResource BoolToVis}}">
                 <Border Background="#A6000000" MouseLeftButtonDown="OnAddFolderBackdropMouseDown" />
 
-                <Border HorizontalAlignment="Center" VerticalAlignment="Center" Width="480"
-                        Background="#111114" BorderBrush="#26262b" BorderThickness="1"
-                        CornerRadius="16" Padding="24,18"
-                        Effect="{StaticResource ShadowLg}"
+                <Grid HorizontalAlignment="Center" VerticalAlignment="Center" Width="480"
                         Style="{StaticResource PopoverStyle}"
                         pop:Pop.Anchor="Center"
                         pop:Pop.IsOpen="{Binding IsAddFolderOpen}">
+                    <Border Background="#111114" BorderBrush="#26262b" BorderThickness="1"
+                            CornerRadius="16" Padding="24,18" Effect="{StaticResource ShadowLg}">
                     <neg:NegiStackPanel Spacing="14">
                         <neg:NegiGrid Columns="Auto * Auto">
                             <materialIcons:MaterialIcon Grid.Column="0" Kind="FolderPlusOutline" Width="22" Height="22"
@@ -3615,7 +3609,8 @@
                                     Command="{Binding ConfirmAddFolderCommand}" />
                         </neg:NegiStackPanel>
                     </neg:NegiStackPanel>
-                </Border>
+                    </Border>
+                </Grid>
             </Grid>
 
             <!-- 拖进来时的整窗提示：只要"松手就导入"这一句，别在用户还没松手时就开始解析。
@@ -3646,13 +3641,12 @@
             <Grid Panel.ZIndex="74" Visibility="{Binding IsClosePromptOpen, Converter={StaticResource BoolToVis}}">
                 <Border Background="#A6000000" MouseLeftButtonDown="OnClosePromptBackdropMouseDown" />
 
-                <Border HorizontalAlignment="Center" VerticalAlignment="Center" Width="420"
-                        Background="#111114" BorderBrush="#26262b" BorderThickness="1"
-                        CornerRadius="16" Padding="22,20"
-                        Effect="{StaticResource ShadowLg}"
+                <Grid HorizontalAlignment="Center" VerticalAlignment="Center" Width="420"
                         Style="{StaticResource PopoverStyle}"
                         pop:Pop.Anchor="Center"
                         pop:Pop.IsOpen="{Binding IsClosePromptOpen}">
+                    <Border Background="#111114" BorderBrush="#26262b" BorderThickness="1"
+                            CornerRadius="16" Padding="22,20" Effect="{StaticResource ShadowLg}">
                     <neg:NegiStackPanel Spacing="14">
                         <neg:NegiStackPanel Spacing="4">
                             <TextBlock Text="关闭启动器" FontSize="16" FontWeight="SemiBold" Foreground="#fafafa" />
@@ -3674,7 +3668,8 @@
                                     Command="{Binding AnswerCloseCommand}" CommandParameter="tray" />
                         </neg:NegiStackPanel>
                     </neg:NegiStackPanel>
-                </Border>
+                    </Border>
+                </Grid>
             </Grid>
 
         </Grid>

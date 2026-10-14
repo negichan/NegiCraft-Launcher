@@ -10,6 +10,7 @@
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="$(SourceRoot)/src/NegiCraftLauncher.App/Controls/Pop.cs" Link="Pop.cs" />
+    <Compile Include="$(SourceRoot)/src/NegiCraftLauncher.App/Controls/PageTransition.cs" Link="PageTransition.cs" />
     <Compile Include="$(SourceRoot)/src/NegiCraftLauncher.App/Controls/SqueezeButton.cs" Link="SqueezeButton.cs" />
     <ProjectReference Include="$(SourceRoot)/src/NegiCraftLauncher.Pet/NegiCraftLauncher.Pet.csproj" />
   </ItemGroup>

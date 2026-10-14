@@ -197,6 +197,9 @@
             <Setter.Value>
                 <ControlTemplate TargetType="{x:Type Button}">
                     <Border x:Name="Root"
+                            neg:ButtonMotion.Enabled="True"
+                            neg:ButtonMotion.Pressed="{Binding IsPressed, RelativeSource={RelativeSource TemplatedParent}}"
+                            neg:ButtonMotion.Hovered="{Binding IsMouseOver, RelativeSource={RelativeSource TemplatedParent}}"
                             Background="{TemplateBinding Background}"
                             BorderBrush="{TemplateBinding BorderBrush}"
                             BorderThickness="{TemplateBinding BorderThickness}"
