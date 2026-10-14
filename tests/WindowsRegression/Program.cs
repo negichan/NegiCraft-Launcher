@@ -48,6 +48,12 @@ internal static class Program
         PetWindow? pet = null;
         try
         {
+            if (Environment.GetCommandLineArgs().Contains("--fox-only"))
+            {
+                await CheckFoxSqueeze();
+                return;
+            }
+
             var renderer = new SkinRenderSoftware { Width = 110, Height = 171 };
             renderer.SetSkin(SkinTexture.Decode(DefaultSkins.Bytes(false))!);
             var pose = new SkinPoseDriver(renderer);
@@ -130,6 +136,8 @@ internal static class Program
                 host = null;
             }
 
+            await CheckFoxSqueeze();
+
             pet = new PetWindow("", null) { Left = 500, Top = 300 };
             pet.ApplySkin(NegiCraftLauncher.Raster.DefaultSkins.Bytes(false));
             pet.Show();
@@ -167,6 +175,88 @@ internal static class Program
                 host?.Close();
             }
             finally { done(); }
+        }
+    }
+
+    private static async Task CheckFoxSqueeze()
+    {
+        var art = new Border { Width = 36, Height = 36, Background = Brushes.Coral };
+        var fox = new SqueezeButton { Width = 42, Height = 36, Content = art };
+        var panel = new Grid();
+        panel.Children.Add(fox);
+        var host = new Window
+        {
+            Width = 200, Height = 160, Content = panel,
+            ShowActivated = false, ShowInTaskbar = false
+        };
+        var pressedKey = (DependencyPropertyKey)typeof(System.Windows.Controls.Primitives.ButtonBase)
+            .GetField("IsPressedPropertyKey", BindingFlags.Static | BindingFlags.NonPublic)!.GetValue(null)!;
+        void Press(bool down) => fox.SetValue(pressedKey, down);
+
+        try
+        {
+            host.Show();
+            await Task.Delay(60);
+            var transform = (TransformGroup)art.RenderTransform;
+            var scale = (ScaleTransform)transform.Children[0];
+            var tilt = (RotateTransform)transform.Children[1];
+            var size = fox.RenderSize;
+
+            Press(true);
+            await Task.Delay(140);
+            Check("fox holds a deep squash while pressed", scale.ScaleX > 1.4 && scale.ScaleY < 0.6);
+            Check("fox hit area stays fixed", fox.RenderSize == size && fox.RenderTransform.Value.IsIdentity);
+            Press(false);
+            var rebound = await ObserveScale(220);
+            if (SystemParameters.ClientAreaAnimation)
+                Check($"fox has a pronounced rebound (peak={rebound.Max:F3})", rebound.Max > 1.3);
+
+            var before = scale.ScaleY;
+            Press(true);
+            if (SystemParameters.ClientAreaAnimation)
+                Check("fox repeated press preserves current pose", Math.Abs(scale.ScaleY - before) < 0.02);
+            await Task.Delay(110);
+            Check("fox repeated press interrupts rebound", scale.ScaleY < 0.6);
+            Press(false);
+            await Task.Delay(650);
+            Check("fox returns to rest", scale.ScaleX == 1 && scale.ScaleY == 1 && tilt.Angle == 0);
+            Check("fox releases completed animation clocks", !scale.HasAnimatedProperties && !tilt.HasAnimatedProperties);
+
+            Press(true);
+            Press(false);
+            var tap = await ObserveScale(190);
+            if (SystemParameters.ClientAreaAnimation)
+                Check($"fox short tap still deeply squeezes (min={tap.Min:F3})", tap.Min < 0.65);
+            host.Hide();
+            Check("hidden fox resets motion", scale.ScaleX == 1 && scale.ScaleY == 1 && !scale.HasAnimatedProperties);
+            host.Show();
+            Press(true);
+            await Task.Delay(110);
+            panel.Children.Remove(fox);
+            await Task.Delay(50);
+            Check("unloaded fox clears animations", scale.ScaleX == 1 && scale.ScaleY == 1 && !tilt.HasAnimatedProperties);
+            Press(false);
+            panel.Children.Add(fox);
+            await Task.Delay(50);
+            Check("reloaded fox starts at rest", scale.ScaleX == 1 && scale.ScaleY == 1);
+
+            async Task<(double Min, double Max)> ObserveScale(int milliseconds)
+            {
+                var watch = System.Diagnostics.Stopwatch.StartNew();
+                var min = scale.ScaleY;
+                var max = min;
+                while (watch.ElapsedMilliseconds < milliseconds)
+                {
+                    await Task.Delay(10);
+                    min = Math.Min(min, scale.ScaleY);
+                    max = Math.Max(max, scale.ScaleY);
+                }
+                return (min, max);
+            }
+        }
+        finally
+        {
+            host.Close();
         }
     }
 
