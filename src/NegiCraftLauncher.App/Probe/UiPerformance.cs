@@ -58,7 +58,7 @@ internal static class UiPerformance
                 for (var i = 0; i < 4; i++)
                 {
                     var stamp = Stopwatch.GetTimestamp();
-                    vm.GoCommand.Execute("settings");
+                    window.OpenSettingsDialog();
                     settingsOpenTimes.Add(Stopwatch.GetElapsedTime(stamp).TotalMilliseconds);
                     await Task.Delay(320);
                     window.IsSettingsOpen = false;

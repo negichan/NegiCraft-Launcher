@@ -132,6 +132,23 @@ internal static class UiShot
 
     private static async Task RunSequenceAsync(Window window, MainWindowViewModel vm, StringBuilder log)
     {
+        var originalMode = vm.UseSettingsDialog;
+        try
+        {
+            vm.UseSettingsDialog = false;
+            await CaptureSequenceAsync(window, vm, log);
+        }
+        finally
+        {
+            vm.UseSettingsDialog = originalMode;
+            await Task.Delay(550);
+        }
+        File.WriteAllText(ReportPath, log.ToString());
+        Application.Current.Shutdown();
+    }
+
+    private static async Task CaptureSequenceAsync(Window window, MainWindowViewModel vm, StringBuilder log)
+    {
         await Task.Delay(3000);
 
         // 窗口尺寸被 WM 夹住时（屏幕比窗口窄）不要紧 —— 截图走 ForceCanvas，
@@ -155,10 +172,9 @@ internal static class UiShot
         HitTestAt(window, 1046, 65, log);
         FindInRect(window, new Rect(1000, 40, 80, 70), log);
 
-        vm.GoCommand.Execute("settings");
         await AuditSettingsDialog((MainWindow)window, vm, log);
         await AuditSettingsReturn((MainWindow)window, vm, log);
-        vm.GoCommand.Execute("settings");
+        ((MainWindow)window).OpenSettingsDialog();
         foreach (var tab in SettingsTabs)
         {
             vm.SelectSettingsTabCommand.Execute(tab);
@@ -178,6 +194,18 @@ internal static class UiShot
         vm.IsJavaChooserOpen = true;
         await Capture(window, "ncl-wpf-settings-Java-expanded-minimum.png", log, 1080, 740);
         vm.IsJavaChooserOpen = false;
+        ((MainWindow)window).IsSettingsOpen = false;
+        await Task.Delay(280);
+        vm.GoCommand.Execute("settings");
+        foreach (var tab in SettingsTabs)
+        {
+            vm.SelectSettingsTabCommand.Execute(tab);
+            await Task.Delay(320);
+            await Capture(window, $"ncl-wpf-settings-page-{tab}.png", log);
+            await Capture(window, $"ncl-wpf-settings-page-{tab}-minimum.png", log, 1080, 740);
+            var scroll = (System.Windows.Controls.ScrollViewer)window.FindName("PageSettingsScroll");
+            log.AppendLine($"  {(scroll.ExtentWidth <= scroll.ViewportWidth + 1 && scroll.VerticalOffset < 1 ? "OK" : "!!")} settings page={tab}: no horizontal overflow, scroll resets");
+        }
 
         // 弹层
         vm.GoCommand.Execute("home");
@@ -208,8 +236,6 @@ internal static class UiShot
         AuditNamedElements(window, log);
         ReportErrors(log);
 
-        File.WriteAllText(ReportPath, log.ToString());
-        Application.Current.Shutdown();
     }
 
     /// <summary>四个页面容器同一时刻只该有一个是 Visible。</summary>
@@ -229,8 +255,87 @@ internal static class UiShot
     private static async Task AuditSettingsDialog(MainWindow window, MainWindowViewModel vm, StringBuilder log)
     {
         void Check(string label, bool valid) => log.AppendLine($"  {(valid ? "OK" : "!!")} settings dialog: {label}");
+        Check("older settings files default to page mode",
+            System.Text.Json.JsonSerializer.Deserialize<Core.Settings.LauncherSettings>("{}")?.UseSettingsDialog == false);
+        vm.GoCommand.Execute("download");
+        vm.GoCommand.Execute("settings");
         await Task.Delay(300);
+        Check("sidebar navigation opens the regular settings page",
+            vm.CurrentPage == "settings" && !window.IsSettingsOpen &&
+            ((FrameworkElement)window.FindName("PageSettings")).IsVisible);
+        vm.SelectSettingsTabCommand.Execute("Java");
+        var windowMode = (System.Windows.Controls.Button)window.FindName("SettingsWindowModeButton");
+        var pageMode = (System.Windows.Controls.Button)window.FindName("SettingsPageModeButton");
+        windowMode
+            .RaiseEvent(new RoutedEventArgs(System.Windows.Controls.Primitives.ButtonBase.ClickEvent));
+        await Task.Delay(300);
+        Check("switching to window mode opens settings over the previous page",
+            vm.UseSettingsDialog && window.IsSettingsOpen && vm.CurrentPage == "download" && vm.CurrentSettingsTab == "Java");
+        var pageMemory = FindMemorySlider((DependencyObject)window.FindName("PageSettingsCardsHost"));
+        var dialogMemory = FindMemorySlider((DependencyObject)window.FindName("DialogSettingsCardsHost"));
+        var originalMemory = vm.MaxMemoryGb;
+        try
+        {
+            pageMemory.SetCurrentValue(System.Windows.Controls.Primitives.RangeBase.ValueProperty, originalMemory == 32 ? 31.0 : originalMemory + 1.0);
+            await Task.Delay(40);
+            Check("page edits update both settings views",
+                vm.MaxMemoryGb == (int)pageMemory.Value && dialogMemory.Value == pageMemory.Value);
+            dialogMemory.SetCurrentValue(System.Windows.Controls.Primitives.RangeBase.ValueProperty, (double)originalMemory);
+            await Task.Delay(40);
+            Check("dialog edits update the regular settings page",
+                vm.MaxMemoryGb == originalMemory && pageMemory.Value == originalMemory);
+        }
+        finally
+        {
+            vm.MaxMemoryGb = originalMemory;
+        }
+        window.IsSettingsOpen = false;
+        await Task.Delay(280);
+        Check("closing window mode returns to the previous page without changing the preference",
+            vm.UseSettingsDialog && !window.IsSettingsOpen && vm.CurrentPage == "download");
+        vm.GoCommand.Execute("settings");
+        await Task.Delay(550);
+        Check("sidebar settings uses the saved window mode",
+            vm.UseSettingsDialog && window.IsSettingsOpen && vm.CurrentPage == "download" && vm.CurrentSettingsTab == "Java");
+        var reloadedWindowMode = new MainWindowViewModel(new Services.WpfBitmapDecoder());
+        Check("window mode is restored on restart", reloadedWindowMode.UseSettingsDialog);
+        reloadedWindowMode.GoCommand.Execute("settings");
+        Check("hosts without a dialog retain settings navigation even with window mode saved",
+            reloadedWindowMode.CurrentPage == "settings");
+        await Capture(window, "ncl-wpf-settings-window-mode.png", log);
+        await Capture(window, "ncl-wpf-settings-window-mode-minimum.png", log, 1080, 740);
+
+        pageMode.RaiseEvent(new RoutedEventArgs(System.Windows.Controls.Primitives.ButtonBase.ClickEvent));
+        await Task.Delay(550);
+        Check("switching back opens the regular settings page and preserves the tab",
+            !vm.UseSettingsDialog && !window.IsSettingsOpen && vm.CurrentPage == "settings" && vm.CurrentSettingsTab == "Java" &&
+            ((FrameworkElement)window.FindName("PageSettings")).IsVisible);
+        var reloadedPageMode = new MainWindowViewModel(new Services.WpfBitmapDecoder());
+        Check("page mode is restored on restart", !reloadedPageMode.UseSettingsDialog);
+        vm.GoCommand.Execute("home");
+        vm.GoCommand.Execute("settings");
+        await Task.Delay(350);
+        Check("sidebar settings uses page mode after switching back",
+            !vm.UseSettingsDialog && !window.IsSettingsOpen && vm.CurrentPage == "settings");
+
+        windowMode.RaiseEvent(new RoutedEventArgs(System.Windows.Controls.Primitives.ButtonBase.ClickEvent));
+        await Task.Delay(40);
+        pageMode.RaiseEvent(new RoutedEventArgs(System.Windows.Controls.Primitives.ButtonBase.ClickEvent));
+        windowMode.RaiseEvent(new RoutedEventArgs(System.Windows.Controls.Primitives.ButtonBase.ClickEvent));
+        await Task.Delay(350);
+        Check("rapid mode changes keep the reopened dialog and its underlying page stable",
+            vm.UseSettingsDialog && window.IsSettingsOpen && vm.CurrentPage == "home");
+        pageMode.RaiseEvent(new RoutedEventArgs(System.Windows.Controls.Primitives.ButtonBase.ClickEvent));
+        await Task.Delay(280);
+        Check("rapid mode changes return to the interactive settings page",
+            !vm.UseSettingsDialog && !window.IsSettingsOpen && vm.CurrentPage == "settings" &&
+            ((FrameworkElement)window.FindName("PageSettings")).IsVisible);
+
+        vm.GoCommand.Execute("home");
+        await Task.Delay(350);
         var originalPage = vm.CurrentPage;
+        window.OpenSettingsDialog();
+        await Task.Delay(300);
         var content = (FrameworkElement)window.FindName("MainContent");
         var backdrop = (System.Windows.Controls.Image)window.FindName("SettingsBackdrop");
         var dialog = (FrameworkElement)window.FindName("SettingsDialog");
@@ -244,7 +349,7 @@ internal static class UiShot
         await Task.Delay(280);
         Check("close button restores the original page and input", !window.IsSettingsOpen && vm.CurrentPage == originalPage && content.IsVisible && backdrop.Source is null);
 
-        vm.GoCommand.Execute("settings");
+        window.OpenSettingsDialog();
         if (SystemParameters.ClientAreaAnimation)
         {
             var entry = dialog.RenderTransform.Value;
@@ -278,7 +383,7 @@ internal static class UiShot
         await Task.Delay(248);
         Check("Escape closes the dialog", !window.IsSettingsOpen && content.IsVisible);
 
-        vm.GoCommand.Execute("settings");
+        window.OpenSettingsDialog();
         await Task.Delay(320);
         var scrim = (FrameworkElement)window.FindName("SettingsScrim");
         scrim.RaiseEvent(new System.Windows.Input.MouseButtonEventArgs(System.Windows.Input.Mouse.PrimaryDevice, 0, System.Windows.Input.MouseButton.Left)
@@ -288,20 +393,20 @@ internal static class UiShot
         await Task.Delay(280);
         Check("clicking the backdrop closes the dialog", !window.IsSettingsOpen && content.IsVisible);
 
-        vm.GoCommand.Execute("settings");
+        window.OpenSettingsDialog();
         window.IsSettingsOpen = false;
-        vm.GoCommand.Execute("settings");
+        window.OpenSettingsDialog();
         await Task.Delay(300);
         Check("rapid reopen survives pending close", window.IsSettingsOpen && !content.IsVisible && backdrop.Source is not null);
         window.IsSettingsOpen = false;
         await Task.Delay(280);
         Check("rapid reopen restores state after final close", content.IsVisible && backdrop.Source is null);
 
-        vm.GoCommand.Execute("settings");
+        window.OpenSettingsDialog();
         await Task.Delay(320);
         window.IsSettingsOpen = false;
         await Task.Delay(48);
-        vm.GoCommand.Execute("settings");
+        window.OpenSettingsDialog();
         await Task.Delay(320);
         Check("reopening during backdrop fade restores the opaque modal",
             window.IsSettingsOpen && !content.IsVisible && Math.Abs(scrim.Opacity - 1) < 0.001);
@@ -312,22 +417,44 @@ internal static class UiShot
         Check("closed settings dialog stays transparent after animation cleanup",
             dialog.Opacity == 0 && !dialog.IsHitTestVisible && !dialog.HasAnimatedProperties);
 
+        window.OpenSettingsDialog();
+        await Task.Delay(320);
+        vm.GoCommand.Execute("instances");
+        await Task.Delay(350);
+        Check("page navigation closes the dialog and selects the requested page",
+            !window.IsSettingsOpen && vm.CurrentPage == "instances" && content.IsVisible && backdrop.Source is null);
+
         var legacy = new MainWindowViewModel(new Services.WpfBitmapDecoder());
         legacy.GoCommand.Execute("settings");
         Check("hosts without a dialog retain settings navigation", legacy.CurrentPage == "settings");
+
+        static System.Windows.Controls.Slider FindMemorySlider(DependencyObject root)
+        {
+            return Find(root) ?? throw new InvalidOperationException("Memory slider not found in settings view.");
+
+            static System.Windows.Controls.Slider? Find(DependencyObject element)
+            {
+                if (element is System.Windows.Controls.Slider slider &&
+                    System.Windows.Data.BindingOperations.GetBinding(slider, System.Windows.Controls.Primitives.RangeBase.ValueProperty)?.Path.Path == "MaxMemoryGb")
+                    return slider;
+                foreach (var child in LogicalTreeHelper.GetChildren(element).OfType<DependencyObject>())
+                    if (Find(child) is { } found) return found;
+                return null;
+            }
+        }
     }
 
     private static async Task AuditSettingsReturn(MainWindow window, MainWindowViewModel vm, StringBuilder log)
     {
         foreach (var (page, name) in new[]
         {
-            ("home", "PageHome"), ("instances", "PageInstances"), ("download", "PageDownload"),
+            ("home", "PageHome"), ("instances", "PageInstances"), ("download", "PageDownload"), ("settings", "PageSettings"),
         })
         {
             vm.GoCommand.Execute(page);
             await Task.Delay(350);
             var content = (FrameworkElement)window.FindName(name);
-            vm.GoCommand.Execute("settings");
+            window.OpenSettingsDialog();
             await Task.Delay(320);
             window.IsSettingsOpen = false;
 
