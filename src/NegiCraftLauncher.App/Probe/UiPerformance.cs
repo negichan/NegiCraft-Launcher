@@ -52,6 +52,19 @@ internal static class UiPerformance
                     await Task.Delay(350);
                 }
             }));
+            var settingsOpenTimes = new List<double>();
+            results.Add(await Measure("settings-dialog", window, async () =>
+            {
+                for (var i = 0; i < 4; i++)
+                {
+                    var stamp = Stopwatch.GetTimestamp();
+                    window.OpenSettingsDialog();
+                    settingsOpenTimes.Add(Stopwatch.GetElapsedTime(stamp).TotalMilliseconds);
+                    await Task.Delay(320);
+                    window.IsSettingsOpen = false;
+                    await Task.Delay(280);
+                }
+            }));
             var pressedKey = (DependencyPropertyKey)typeof(ButtonBase)
                 .GetField("IsPressedPropertyKey", BindingFlags.Static | BindingFlags.NonPublic)!.GetValue(null)!;
             var button = (ButtonBase)window.FindName("InstSelectBtn");
@@ -108,6 +121,7 @@ internal static class UiPerformance
                     .GetField("_bgToneTimer", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(window)!).IsEnabled,
                 Note = "Render callbacks measure UI frame pacing, not independently measured displayed FPS.",
                 Scenarios = results,
+                SettingsOpenMs = Summarize(settingsOpenTimes),
                 RepeatedToneUpdateMs = Summarize(sampleTimes),
             };
             var json = JsonSerializer.Serialize(report, new JsonSerializerOptions { WriteIndented = true });
