@@ -7,6 +7,9 @@ namespace NegiCraftLauncher.App.Controls;
 
 public static class Pop
 {
+    internal const int SlideOpenDurationMs = 260;
+    internal const int SlideCloseDurationMs = 210;
+
     private static readonly ConditionalWeakTable<FrameworkElement, Runner> Runners = new();
 
     public static readonly DependencyProperty IsOpenProperty = DependencyProperty.RegisterAttached(
@@ -19,6 +22,8 @@ public static class Pop
         "Pin", typeof(string), typeof(Pop), new PropertyMetadata(""));
     public static readonly DependencyProperty PinGapProperty = DependencyProperty.RegisterAttached(
         "PinGap", typeof(double), typeof(Pop), new PropertyMetadata(6.0));
+    public static readonly DependencyProperty SlideOnlyProperty = DependencyProperty.RegisterAttached(
+        "SlideOnly", typeof(bool), typeof(Pop), new PropertyMetadata(false));
 
     public static bool GetIsOpen(DependencyObject target) => (bool)target.GetValue(IsOpenProperty);
     public static void SetIsOpen(DependencyObject target, bool value) => target.SetValue(IsOpenProperty, value);
@@ -30,6 +35,8 @@ public static class Pop
     public static void SetPin(DependencyObject target, string value) => target.SetValue(PinProperty, value);
     public static double GetPinGap(DependencyObject target) => (double)target.GetValue(PinGapProperty);
     public static void SetPinGap(DependencyObject target, double value) => target.SetValue(PinGapProperty, value);
+    public static bool GetSlideOnly(DependencyObject target) => (bool)target.GetValue(SlideOnlyProperty);
+    public static void SetSlideOnly(DependencyObject target, bool value) => target.SetValue(SlideOnlyProperty, value);
 
     private static void OnIsOpenChanged(DependencyObject target, DependencyPropertyChangedEventArgs args)
     {
@@ -68,9 +75,10 @@ public static class Pop
         {
             var version = ++_version;
             Measure();
+            var slideOnly = GetSlideOnly(_target);
             if (!_visible)
             {
-                _scale.ScaleX = _scale.ScaleY = 0.94;
+                _scale.ScaleX = _scale.ScaleY = slideOnly ? 1 : 0.94;
                 _position.X = _pinX;
                 _position.Y = _pinY + _enterY;
                 _target.Opacity = 0;
@@ -85,6 +93,13 @@ public static class Pop
                 return;
             }
             CacheForAnimation();
+            if (slideOnly)
+            {
+                Animate(_position, TranslateTransform.XProperty, version, (SlideOpenDurationMs, _pinX));
+                Animate(_position, TranslateTransform.YProperty, version, (SlideOpenDurationMs, _pinY));
+                Animate(_target, UIElement.OpacityProperty, version, (220, 1), (SlideOpenDurationMs, 1), completed: Settle);
+                return;
+            }
             Animate(_scale, ScaleTransform.ScaleXProperty, version, (150, 1.014), (220, 1));
             Animate(_scale, ScaleTransform.ScaleYProperty, version, (150, 1.014), (220, 1));
             Animate(_position, TranslateTransform.XProperty, version, (220, _pinX));
@@ -103,11 +118,17 @@ public static class Pop
             }
             _target.RenderTransform = _transform;
             CacheForAnimation();
-            Animate(_position, TranslateTransform.XProperty, version, (110, _pinX));
-            Animate(_scale, ScaleTransform.ScaleXProperty, version, (110, 0.96));
-            Animate(_scale, ScaleTransform.ScaleYProperty, version, (110, 0.96));
-            Animate(_position, TranslateTransform.YProperty, version, (110, _pinY + _enterY * 0.75));
-            Animate(_target, UIElement.OpacityProperty, version, (110, 0), completed: Rest);
+            var slideOnly = GetSlideOnly(_target);
+            var duration = slideOnly ? SlideCloseDurationMs : 110;
+            Animate(_position, TranslateTransform.XProperty, version, (duration, _pinX));
+            if (!slideOnly)
+            {
+                Animate(_scale, ScaleTransform.ScaleXProperty, version, (110, 0.96));
+                Animate(_scale, ScaleTransform.ScaleYProperty, version, (110, 0.96));
+            }
+            var exitY = slideOnly ? Math.Sign(_enterY) * 12 : _enterY * 0.75;
+            Animate(_position, TranslateTransform.YProperty, version, (duration, _pinY + exitY));
+            Animate(_target, UIElement.OpacityProperty, version, (duration, 0), completed: Rest);
         }
 
         private void Animate(
@@ -136,7 +157,7 @@ public static class Pop
 
             void Add((int Ms, double Value) frame) => animation.KeyFrames.Add(new SplineDoubleKeyFrame(
                 frame.Value, KeyTime.FromTimeSpan(TimeSpan.FromMilliseconds(frame.Ms)),
-                new KeySpline(0.2, 0.75, 0.25, 1)));
+                GetSlideOnly(_target) ? new KeySpline(0.22, 0.55, 0.35, 1) : new KeySpline(0.2, 0.75, 0.25, 1)));
         }
 
         private void CacheForAnimation()
@@ -189,7 +210,7 @@ public static class Pop
         {
             var (fx, fy) = AnchorFraction(GetAnchor(_target));
             _target.RenderTransformOrigin = new Point(fx, fy);
-            _enterY = fy >= 0.5 ? 8 : -8;
+            _enterY = (fy >= 0.5 ? 1 : -1) * (GetSlideOnly(_target) ? 14 : 8);
             _pinX = _pinY = 0;
             var pin = GetPin(_target);
             var trigger = GetTrigger(_target);

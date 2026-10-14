@@ -462,7 +462,7 @@
 
         <!-- 设置页左侧导航 -->
         <Style x:Key="SetNavBtnStyle" TargetType="{x:Type Button}" BasedOn="{StaticResource {x:Type Button}}">
-            <Setter Property="Height" Value="34" />
+            <Setter Property="Height" Value="42" />
             <Setter Property="Padding" Value="12,0" />
             <Setter Property="neg:Negi.CornerRadius" Value="8" />
             <Setter Property="Background" Value="Transparent" />
@@ -479,7 +479,7 @@
                     <Setter Property="Foreground" Value="#fafafa" />
                 </Trigger>
                 <Trigger Property="neg:Negi.On" Value="True">
-                    <Setter Property="Background" Value="#1c1c21" />
+                    <Setter Property="Background" Value="#353539" />
                     <Setter Property="Foreground" Value="#fafafa" />
                 </Trigger>
             </Style.Triggers>
@@ -959,6 +959,383 @@
                 </neg:NegiStackPanel>
             </Border>
         </DataTemplate>
+        <DataTemplate x:Key="SettingsNavTemplate">
+            <neg:NegiStackPanel Spacing="4">
+                <Button Style="{StaticResource SetNavBtnStyle}" Content="游戏"
+                        neg:Negi.On="{Binding CurrentSettingsTab, Converter={StaticResource Equals}, ConverterParameter=游戏}"
+                        Command="{Binding SelectSettingsTabCommand}" CommandParameter="游戏" />
+                <Button Style="{StaticResource SetNavBtnStyle}" Content="Java"
+                        neg:Negi.On="{Binding CurrentSettingsTab, Converter={StaticResource Equals}, ConverterParameter=Java}"
+                        Command="{Binding SelectSettingsTabCommand}" CommandParameter="Java" />
+                <Button Style="{StaticResource SetNavBtnStyle}" Content="下载"
+                        neg:Negi.On="{Binding CurrentSettingsTab, Converter={StaticResource Equals}, ConverterParameter=下载}"
+                        Command="{Binding SelectSettingsTabCommand}" CommandParameter="下载" />
+                <Button Style="{StaticResource SetNavBtnStyle}" Content="外观"
+                        neg:Negi.On="{Binding CurrentSettingsTab, Converter={StaticResource Equals}, ConverterParameter=外观}"
+                        Command="{Binding SelectSettingsTabCommand}" CommandParameter="外观" />
+                <Button Style="{StaticResource SetNavBtnStyle}" Content="桌宠"
+                        neg:Negi.On="{Binding CurrentSettingsTab, Converter={StaticResource Equals}, ConverterParameter=桌宠}"
+                        Command="{Binding SelectSettingsTabCommand}" CommandParameter="桌宠" />
+                <Button Style="{StaticResource SetNavBtnStyle}" Content="关于"
+                        neg:Negi.On="{Binding CurrentSettingsTab, Converter={StaticResource Equals}, ConverterParameter=关于}"
+                        Command="{Binding SelectSettingsTabCommand}" CommandParameter="关于" />
+            </neg:NegiStackPanel>
+        </DataTemplate>
+        <DataTemplate x:Key="SettingsCardsTemplate">
+            <Grid VerticalAlignment="Top" Margin="0,0,6,0">
+
+                <!-- 游戏 -->
+                <Border Background="#111114" BorderBrush="#26262b" BorderThickness="1" CornerRadius="8" Padding="18,0"
+                        Visibility="{Binding CurrentSettingsTab, Converter={StaticResource Equals}, ConverterParameter=游戏}">
+                    <neg:NegiStackPanel>
+                        <Border MinHeight="76" Padding="0,14" BorderBrush="#26262b" BorderThickness="0,0,0,1">
+                            <neg:NegiGrid Columns="* Auto">
+                                <neg:NegiStackPanel VerticalAlignment="Center" Spacing="2">
+                                    <TextBlock Text="最大内存" FontWeight="Medium" Foreground="#fafafa" />
+                                    <TextBlock Text="分配给游戏的堆内存，建议不超过物理内存的一半。"
+                                               FontSize="12" Foreground="#a0a0a8" TextWrapping="Wrap" Margin="0,0,16,0" />
+                                </neg:NegiStackPanel>
+                                <neg:NegiStackPanel Grid.Column="1" Orientation="Horizontal" Spacing="12" Width="244" VerticalAlignment="Center">
+                                    <Slider Value="{Binding MaxMemoryGb}" Minimum="1" Maximum="32" Width="174" />
+                                    <TextBlock Text="{Binding MaxMemoryGb, StringFormat='{}{0} GB'}"
+                                               Width="48" TextAlignment="Right" VerticalAlignment="Center"
+                                               Foreground="#fafafa" />
+                                </neg:NegiStackPanel>
+                            </neg:NegiGrid>
+                        </Border>
+
+                        <Border MinHeight="76" Padding="0,14" BorderBrush="#26262b" BorderThickness="0,0,0,1">
+                            <neg:NegiGrid Columns="* Auto">
+                                <neg:NegiStackPanel VerticalAlignment="Center" Spacing="2">
+                                    <TextBlock Text="版本隔离" FontWeight="Medium" Foreground="#fafafa" />
+                                    <TextBlock Text="每个实例有独立的存档、Mod 和配置文件。"
+                                               FontSize="12" Foreground="#a0a0a8" TextWrapping="Wrap" Margin="0,0,16,0" />
+                                </neg:NegiStackPanel>
+                                <CheckBox Grid.Column="1" IsChecked="{Binding VersionIsolation}" />
+                            </neg:NegiGrid>
+                        </Border>
+
+                        <Border MinHeight="76" Padding="0,14" BorderBrush="#26262b" BorderThickness="0,0,0,1">
+                            <neg:NegiGrid Columns="* Auto">
+                                <neg:NegiStackPanel VerticalAlignment="Center" Spacing="2">
+                                    <TextBlock Text="启动后隐藏启动器" FontWeight="Medium" Foreground="#fafafa" />
+                                    <TextBlock Text="游戏退出后会自动恢复。" FontSize="12" Foreground="#a0a0a8" />
+                                </neg:NegiStackPanel>
+                                <CheckBox Grid.Column="1" IsChecked="{Binding HideOnLaunch}" />
+                            </neg:NegiGrid>
+                        </Border>
+
+                        <Border MinHeight="76" Padding="0,14" BorderBrush="#26262b" BorderThickness="0,0,0,1">
+                            <neg:NegiGrid Columns="* Auto">
+                                <neg:NegiStackPanel VerticalAlignment="Center" Spacing="2">
+                                    <TextBlock Text="关闭窗口时" FontWeight="Medium" Foreground="#fafafa" />
+                                    <TextBlock Text="关闭窗口时的默认行为。" FontSize="12" Foreground="#a0a0a8" TextWrapping="Wrap" Margin="0,0,16,0" />
+                                </neg:NegiStackPanel>
+                                <Border Grid.Column="1" Background="#1c1c21" CornerRadius="10" Padding="3" VerticalAlignment="Center">
+                                    <neg:NegiStackPanel Orientation="Horizontal" Spacing="2">
+                                        <Button Style="{StaticResource SegmentBtnStyle}" Content="每次询问"
+                                                neg:Negi.On="{Binding CloseWindowBehavior, Converter={StaticResource Equals}, ConverterParameter=ask}"
+                                                Command="{Binding SetCloseWindowBehaviorCommand}" CommandParameter="ask" />
+                                        <Button Style="{StaticResource SegmentBtnStyle}" Content="收进托盘"
+                                                neg:Negi.On="{Binding CloseWindowBehavior, Converter={StaticResource Equals}, ConverterParameter=tray}"
+                                                Command="{Binding SetCloseWindowBehaviorCommand}" CommandParameter="tray" />
+                                        <Button Style="{StaticResource SegmentBtnStyle}" Content="直接退出"
+                                                neg:Negi.On="{Binding CloseWindowBehavior, Converter={StaticResource Equals}, ConverterParameter=exit}"
+                                                Command="{Binding SetCloseWindowBehaviorCommand}" CommandParameter="exit" />
+                                    </neg:NegiStackPanel>
+                                </Border>
+                            </neg:NegiGrid>
+                        </Border>
+
+                        <Border MinHeight="76" Padding="0,14">
+                            <neg:NegiGrid Columns="* Auto">
+                                <neg:NegiStackPanel VerticalAlignment="Center" Spacing="2" Margin="0,0,16,0">
+                                    <TextBlock Text="游戏目录" FontWeight="Medium" Foreground="#fafafa" />
+                                    <TextBlock Text="{Binding GameRoot}" FontSize="12" Foreground="#a0a0a8"
+                                               TextTrimming="CharacterEllipsis" />
+                                </neg:NegiStackPanel>
+                                <Button Grid.Column="1" Style="{StaticResource BtnSmOutlineStyle}" VerticalAlignment="Center"
+                                        Command="{Binding OpenGameRootCommand}">
+                                    <neg:NegiStackPanel Orientation="Horizontal" Spacing="6">
+                                        <materialIcons:MaterialIcon Kind="FolderOpenOutline" Width="14" Height="14" />
+                                        <TextBlock Text="打开" VerticalAlignment="Center" />
+                                    </neg:NegiStackPanel>
+                                </Button>
+                            </neg:NegiGrid>
+                        </Border>
+                    </neg:NegiStackPanel>
+                </Border>
+
+                <!-- Java -->
+                <Border Background="#111114" BorderBrush="#26262b" BorderThickness="1" CornerRadius="8" Padding="18,0"
+                        Visibility="{Binding CurrentSettingsTab, Converter={StaticResource Equals}, ConverterParameter=Java}">
+                    <neg:NegiStackPanel>
+                        <Border MinHeight="76" Padding="0,14" BorderBrush="#26262b" BorderThickness="0,0,0,1">
+                            <neg:NegiGrid Columns="* Auto">
+                                <neg:NegiStackPanel VerticalAlignment="Center" Spacing="2">
+                                    <TextBlock Text="Java 运行时" FontWeight="Medium" Foreground="#fafafa" />
+                                    <TextBlock Text="自动模式按游戏版本选择合适的 Java。" FontSize="12" Foreground="#a0a0a8" TextWrapping="Wrap" Margin="0,0,16,0" />
+                                </neg:NegiStackPanel>
+                                <Button Grid.Column="1" Style="{StaticResource BtnSmOutlineStyle}" Width="240"
+                                        HorizontalContentAlignment="Stretch"
+                                        Command="{Binding ToggleJavaChooserCommand}">
+                                    <neg:NegiGrid Columns="* Auto">
+                                        <TextBlock Text="{Binding JavaLabel}" VerticalAlignment="Center"
+                                                   TextTrimming="CharacterEllipsis" />
+                                        <materialIcons:MaterialIcon Grid.Column="1" Kind="ChevronDown"
+                                                                    Width="14" Height="14" Foreground="#a0a0a8" />
+                                    </neg:NegiGrid>
+                                </Button>
+                            </neg:NegiGrid>
+                        </Border>
+
+                        <Border Padding="0,8" Visibility="{Binding IsJavaChooserOpen, Converter={StaticResource BoolToVis}}">
+                            <neg:NegiStackPanel Spacing="2">
+                                <ItemsControl ItemsSource="{Binding JavaOptions}">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate>
+                                            <Button Style="{StaticResource MenuRowStyle}"
+                                                    Command="{Binding DataContext.SelectJavaCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                    CommandParameter="{Binding .}">
+                                                <neg:NegiGrid Columns="* Auto">
+                                                    <TextBlock Text="{Binding Label}" FontSize="13" Foreground="#fafafa"
+                                                               VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+                                                    <materialIcons:MaterialIcon Grid.Column="1" Kind="Check" Width="16" Height="16"
+                                                                                Foreground="#fafafa"
+                                                                                Visibility="{Binding IsSelected, Converter={StaticResource BoolToVis}}" />
+                                                </neg:NegiGrid>
+                                            </Button>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+
+                                <Button Style="{StaticResource MenuRowStyle}" Click="OnPickJavaClick">
+                                    <neg:NegiStackPanel Orientation="Horizontal" Spacing="10">
+                                        <materialIcons:MaterialIcon Kind="FolderSearchOutline" Width="18" Height="18"
+                                                                    Foreground="#a1a1aa" Margin="7,0" />
+                                        <TextBlock Text="浏览 javaw.exe…" FontSize="13" Foreground="#fafafa" VerticalAlignment="Center" />
+                                    </neg:NegiStackPanel>
+                                </Button>
+                            </neg:NegiStackPanel>
+                        </Border>
+
+                        <Border MinHeight="76" Padding="0,14">
+                            <TextBlock Text="缺少合适的 Java 时，启动会失败并提示需要的版本。"
+                                       FontSize="12" Foreground="#a0a0a8" VerticalAlignment="Center"
+                                       TextWrapping="Wrap" />
+                        </Border>
+                    </neg:NegiStackPanel>
+                </Border>
+
+                <!-- 下载 -->
+                <Border Background="#111114" BorderBrush="#26262b" BorderThickness="1" CornerRadius="8" Padding="18,0"
+                        Visibility="{Binding CurrentSettingsTab, Converter={StaticResource Equals}, ConverterParameter=下载}">
+                    <neg:NegiStackPanel>
+                        <Border MinHeight="76" Padding="0,14" BorderBrush="#26262b" BorderThickness="0,0,0,1">
+                            <neg:NegiGrid Columns="* Auto">
+                                <TextBlock Text="下载源" FontWeight="Medium" VerticalAlignment="Center" Foreground="#fafafa" />
+                                <Border Grid.Column="1" Background="#1c1c21" CornerRadius="10" Padding="3">
+                                    <neg:NegiStackPanel Orientation="Horizontal" Spacing="2">
+                                        <Button Style="{StaticResource SegmentBtnStyle}" Content="官方"
+                                                neg:Negi.On="{Binding DownloadSource, Converter={StaticResource Equals}, ConverterParameter=官方}"
+                                                Command="{Binding SetDownloadSourceCommand}" CommandParameter="官方" />
+                                        <Button Style="{StaticResource SegmentBtnStyle}" Content="BMCLAPI"
+                                                neg:Negi.On="{Binding DownloadSource, Converter={StaticResource Equals}, ConverterParameter=BMCLAPI}"
+                                                Command="{Binding SetDownloadSourceCommand}" CommandParameter="BMCLAPI" />
+                                        <Button Style="{StaticResource SegmentBtnStyle}" Content="自动"
+                                                neg:Negi.On="{Binding DownloadSource, Converter={StaticResource Equals}, ConverterParameter=自动}"
+                                                Command="{Binding SetDownloadSourceCommand}" CommandParameter="自动" />
+                                    </neg:NegiStackPanel>
+                                </Border>
+                            </neg:NegiGrid>
+                        </Border>
+
+                        <!-- BMCLAPI 的条款要求凡提供镜像处都要署名赞助方，所以这行常驻。 -->
+                        <Border Padding="0,14" BorderBrush="#26262b" BorderThickness="0,0,0,1">
+                            <neg:NegiStackPanel Spacing="6">
+                                <TextBlock Text="{Binding SourceHint}" FontSize="12" Foreground="#a0a0a8"
+                                           TextWrapping="Wrap" />
+                                <TextBlock Text="BMCLAPI 由 bangbang93 赞助提供。" FontSize="12"
+                                           Foreground="#a0a0a8" TextWrapping="Wrap" />
+                            </neg:NegiStackPanel>
+                        </Border>
+
+                        <Border MinHeight="76" Padding="0,14" BorderBrush="#26262b" BorderThickness="0,0,0,1">
+                            <neg:NegiGrid Columns="* Auto">
+                                <neg:NegiStackPanel VerticalAlignment="Center" Spacing="2">
+                                    <TextBlock Text="下载线程" FontWeight="Medium" Foreground="#fafafa" />
+                                    <TextBlock Text="同时下载的连接数，大文件会拆成多段并行。"
+                                               FontSize="12" Foreground="#a0a0a8" TextWrapping="Wrap" Margin="0,0,16,0" />
+                                </neg:NegiStackPanel>
+                                <neg:NegiStackPanel Grid.Column="1" Orientation="Horizontal" Spacing="12" Width="244" VerticalAlignment="Center">
+                                    <Slider Value="{Binding DownloadThreads}" Minimum="1" Maximum="64" Width="174" />
+                                    <TextBlock Text="{Binding DownloadThreads, StringFormat='{}{0}'}"
+                                               Width="48" TextAlignment="Right" VerticalAlignment="Center"
+                                               Foreground="#fafafa" />
+                                </neg:NegiStackPanel>
+                            </neg:NegiGrid>
+                        </Border>
+
+                        <Border Padding="0,16,0,18">
+                            <neg:NegiStackPanel Spacing="10">
+                                <neg:NegiGrid Columns="* Auto">
+                                    <TextBlock Text="下载中心" FontWeight="Medium" Foreground="#fafafa"
+                                               VerticalAlignment="Center" />
+                                    <Button Grid.Column="1" Style="{StaticResource BtnSmOutlineStyle}" Content="清除已完成"
+                                            Command="{Binding ClearDownloadsCommand}" />
+                                </neg:NegiGrid>
+                                <Border BorderBrush="#26262b" BorderThickness="1" CornerRadius="10"
+                                        ClipToBounds="True" Visibility="{Binding HasDownloads, Converter={StaticResource BoolToVis}}">
+                                    <ScrollViewer MaxHeight="320">
+                                        <ItemsControl ItemsSource="{Binding Downloads}"
+                                                      ItemTemplate="{StaticResource DownloadRowTemplate}" />
+                                    </ScrollViewer>
+                                </Border>
+                                <TextBlock Text="暂无下载任务" Visibility="{Binding HasDownloads, Converter={StaticResource BoolToVis}, ConverterParameter=invert}"
+                                           FontSize="13" Foreground="#a0a0a8"
+                                           HorizontalAlignment="Center" Margin="0,16,0,16" />
+                            </neg:NegiStackPanel>
+                        </Border>
+                    </neg:NegiStackPanel>
+                </Border>
+
+                <!-- 外观 -->
+                <Border Background="#111114" BorderBrush="#26262b" BorderThickness="1" CornerRadius="8" Padding="18,0"
+                        Visibility="{Binding CurrentSettingsTab, Converter={StaticResource Equals}, ConverterParameter=外观}">
+                    <neg:NegiStackPanel>
+                        <Border MinHeight="76" Padding="0,14" BorderBrush="#26262b" BorderThickness="0,0,0,1">
+                            <neg:NegiGrid Columns="* Auto">
+                                <TextBlock Text="主题" FontWeight="Medium" VerticalAlignment="Center" Foreground="#fafafa" />
+                                <Button Grid.Column="1" Style="{StaticResource BtnSmOutlineStyle}" Command="{Binding ToggleThemeCommand}">
+                                    <neg:NegiStackPanel Orientation="Horizontal" Spacing="6">
+                                        <materialIcons:MaterialIcon Kind="WeatherSunny" Width="14" Height="14" />
+                                        <TextBlock Text="切换深浅色" VerticalAlignment="Center" />
+                                    </neg:NegiStackPanel>
+                                </Button>
+                            </neg:NegiGrid>
+                        </Border>
+
+                        <Border MinHeight="76" Padding="0,14" BorderBrush="#26262b" BorderThickness="0,0,0,1">
+                            <neg:NegiGrid Columns="* Auto">
+                                <neg:NegiStackPanel VerticalAlignment="Center" Spacing="2" Margin="0,0,16,0">
+                                    <TextBlock Text="首页 3D 模型" FontWeight="Medium" Foreground="#fafafa" />
+                                    <TextBlock Text="左键拖它的位置（会记住），右键转角度。关掉它会把拖过的位置一起清掉，重开回到默认站位。"
+                                               FontSize="12" Foreground="#a0a0a8" TextWrapping="Wrap" />
+                                </neg:NegiStackPanel>
+                                <neg:NegiStackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                                    <!-- 只清位置、不动开关：拖乱了想回原点，不该顺手把模型也关掉 -->
+                                    <Button Style="{StaticResource BtnSmOutlineStyle}" Content="复位位置"
+                                            Command="{Binding ResetHomeSkinModelPositionCommand}"
+                                            Visibility="{Binding HasHomeSkinModelPosition, Converter={StaticResource BoolToVis}}" />
+                                    <CheckBox IsChecked="{Binding HomeSkinModelVisible}" />
+                                </neg:NegiStackPanel>
+                            </neg:NegiGrid>
+                        </Border>
+
+                        <Border MinHeight="76" Padding="0,14">
+                            <neg:NegiStackPanel Spacing="12">
+                                <TextBlock Text="背景" FontWeight="Medium" VerticalAlignment="Center" Foreground="#fafafa" />
+                                <WrapPanel>
+                                    <!-- 当前背景，一眼能认出选的是哪张 -->
+                                    <Border Width="52" Height="34" CornerRadius="8" ClipToBounds="True" Margin="0,0,8,8"
+                                            BorderBrush="#26262b" BorderThickness="1"
+                                            Visibility="{Binding IsCustomBackground, Converter={StaticResource BoolToVis}}">
+                                        <Grid>
+                                            <!-- 缩略位不参与取景：50x32 上裁切差看不出东西，
+                                                 绑尺寸反而多一条布局依赖。 -->
+                                            <Image Source="{Binding BgCustomArt, Converter={StaticResource PixelsToBitmap}}"
+                                                   Stretch="UniformToFill" />
+                                            <Border Background="#ffffff" Opacity="{Binding BgLightOpacity}" />
+                                            <Border Background="#000000" Opacity="{Binding BgDarkOpacity}" />
+                                        </Grid>
+                                    </Border>
+                                    <!-- 视频壁纸的缩略位：不另开一个播放器去抽首帧（那要多一份解码），
+                                         只放个胶片图标表示"这里挂的是视频"。 -->
+                                    <Border Width="52" Height="34" CornerRadius="8" Margin="0,0,8,8"
+                                            Background="#18181b" BorderBrush="#26262b" BorderThickness="1"
+                                            Visibility="{Binding IsVideoBackground, Converter={StaticResource BoolToVis}}">
+                                        <materialIcons:MaterialIcon Kind="VideoFilm" Width="18" Height="18"
+                                                                    HorizontalAlignment="Center" VerticalAlignment="Center"
+                                                                    Foreground="#a1a1aa" />
+                                    </Border>
+                                    <Button Style="{StaticResource BtnSmOutlineStyle}" Content="调整" Margin="0,0,8,8"
+                                            Command="{Binding OpenBgTuningCommand}"
+                                            Visibility="{Binding HasCustomBackground, Converter={StaticResource BoolToVis}}" />
+                                    <!-- 这颗是"换回默认壁纸"（连背景一起清掉）。
+                                         调节窗里那颗同名的只归零参数、不动壁纸 —— 两件事，
+                                         所以文案必须分开写清楚。 -->
+                                    <Button Style="{StaticResource BtnSmOutlineStyle}" Content="恢复默认壁纸" Margin="0,0,8,8"
+                                            Command="{Binding ResetBackgroundCommand}"
+                                            Visibility="{Binding HasCustomBackground, Converter={StaticResource BoolToVis}}" />
+                                    <Button Style="{StaticResource BtnSmOutlineStyle}" Click="OnPickBackgroundClick" Margin="0,0,8,8">
+                                        <neg:NegiStackPanel Orientation="Horizontal" Spacing="6">
+                                            <materialIcons:MaterialIcon Kind="ImageFrame" Width="14" Height="14" />
+                                            <TextBlock Text="选择图片" VerticalAlignment="Center" />
+                                        </neg:NegiStackPanel>
+                                    </Button>
+                                    <Button Style="{StaticResource BtnSmOutlineStyle}" Click="OnPickVideoBackgroundClick" Margin="0,0,8,8">
+                                        <neg:NegiStackPanel Orientation="Horizontal" Spacing="6">
+                                            <materialIcons:MaterialIcon Kind="VideoFilm" Width="14" Height="14" />
+                                            <TextBlock Text="选择视频" VerticalAlignment="Center" />
+                                        </neg:NegiStackPanel>
+                                    </Button>
+                                    <!-- 一键搬 Wallpaper Engine 当前壁纸：只搬视频壁纸，
+                                         场景 / 网页 / 应用只提示类型、不动背景 -->
+                                    <Button Style="{StaticResource BtnSmOutlineStyle}" Click="OnSyncWallpaperEngineClick" Margin="0,0,8,8">
+                                        <neg:NegiStackPanel Orientation="Horizontal" Spacing="6">
+                                            <materialIcons:MaterialIcon Kind="Wallpaper" Width="14" Height="14" />
+                                            <TextBlock Text="同步 Wallpaper Engine" VerticalAlignment="Center" />
+                                        </neg:NegiStackPanel>
+                                    </Button>
+                                </WrapPanel>
+                            </neg:NegiStackPanel>
+                        </Border>
+                    </neg:NegiStackPanel>
+                </Border>
+
+                <!-- 桌宠 -->
+                <Border Background="#111114" BorderBrush="#26262b" BorderThickness="1" CornerRadius="8" Padding="18,0"
+                        Visibility="{Binding CurrentSettingsTab, Converter={StaticResource Equals}, ConverterParameter=桌宠}">
+                    <neg:NegiStackPanel>
+                        <Border MinHeight="76" Padding="0,14" BorderBrush="#26262b" BorderThickness="0,0,0,1">
+                            <neg:NegiGrid Columns="* Auto">
+                                <neg:NegiStackPanel VerticalAlignment="Center" Spacing="2" Margin="0,0,16,0">
+                                    <TextBlock Text="GPU 渲染（硬件加速）" FontWeight="Medium" Foreground="#fafafa" />
+                                    <TextBlock Text="桌宠改用显卡渲染。关闭时走软件光栅化，稳定锁 60 帧、静止时停渲染。"
+                                               FontSize="12" Foreground="#a0a0a8" TextWrapping="Wrap" />
+                                </neg:NegiStackPanel>
+                                <CheckBox Grid.Column="1" IsChecked="{Binding PetUseGpu}" />
+                            </neg:NegiGrid>
+                        </Border>
+
+                        <Border MinHeight="76" Padding="0,14">
+                            <neg:NegiStackPanel VerticalAlignment="Center" Spacing="2">
+                                <TextBlock Text="仅对桌宠生效" FontWeight="Medium" Foreground="#fafafa" />
+                                <TextBlock Text="启动器主页的皮肤预览始终走软件光栅化 —— 那条路要出确定性截图做像素回归。"
+                                           FontSize="12" Foreground="#a0a0a8" TextWrapping="Wrap" />
+                            </neg:NegiStackPanel>
+                        </Border>
+                    </neg:NegiStackPanel>
+                </Border>
+
+                <!-- 关于 -->
+                <Border Background="#111114" BorderBrush="#26262b" BorderThickness="1" CornerRadius="8" Padding="18,18"
+                        Visibility="{Binding CurrentSettingsTab, Converter={StaticResource Equals}, ConverterParameter=关于}">
+                    <neg:NegiStackPanel Spacing="14">
+                        <neg:NegiStackPanel Orientation="Horizontal" Spacing="12">
+                            <Image Source="pack://application:,,,/Assets/app.png" Width="40" Height="40" />
+                            <neg:NegiStackPanel VerticalAlignment="Center" Spacing="2">
+                                <TextBlock Text="NegiCraft Launcher" FontSize="16" FontWeight="SemiBold" Foreground="#fafafa" />
+                                <TextBlock Text="{Binding LauncherVersion, StringFormat='版本 {0}'}"
+                                           FontSize="12" Foreground="#a1a1aa" />
+                            </neg:NegiStackPanel>
+                        </neg:NegiStackPanel>
+                        <TextBlock FontSize="12" Foreground="#a0a0a8" TextWrapping="Wrap" LineHeight="20"
+                                   Text="本项目与 Mojang Studios 及 Microsoft 无关联。Minecraft 是 Mojang Studios 的商标。" />
+                    </neg:NegiStackPanel>
+                </Border>
+            </Grid>
+        </DataTemplate>
     </Window.Resources>
 
     <!-- 最外层窗口壳：22px 圆角，背景 #09090b，**没有描边** —— 靠自身底色和下面那圈投影
@@ -1010,6 +1387,7 @@
             SizeChanged="OnShellSizeChanged">
 
         <Grid>
+        <Grid x:Name="LauncherScene">
             <!-- ========================================== -->
             <!-- 1. 像素背景与压暗（每一页都在）              -->
             <!-- ========================================== -->
@@ -1366,7 +1744,7 @@
             <!-- ========================================== -->
             <!-- 5. 内容区（内边距 22 28 22 100）             -->
             <!-- ========================================== -->
-            <Grid Margin="100,22,28,22" Panel.ZIndex="10">
+            <Grid x:Name="MainContent" Margin="100,22,28,22" Panel.ZIndex="10">
 
                 <!-- 页 1：首页 -->
                 <Grid x:Name="PageHome" Style="{StaticResource PageAnimStyle}" Visibility="{Binding IsOnHome, Converter={StaticResource BoolToVis}}" Margin="-100,-22,-28,-22">
@@ -2581,396 +2959,94 @@
                     </neg:NegiGrid>
                 </Grid>
 
-                <!-- 页 5：设置 -->
-                <Grid x:Name="PageSettings" Style="{StaticResource PageAnimStyle}" Visibility="{Binding CurrentPage, Converter={StaticResource Equals}, ConverterParameter=settings}">
+                <!-- 普通设置页和浮窗共用设置模板与状态。 -->
+                <Grid x:Name="PageSettings" Style="{StaticResource PageAnimStyle}"
+                      Visibility="{Binding CurrentPage, Converter={StaticResource Equals}, ConverterParameter=settings}">
                     <neg:NegiGrid Rows="Auto *">
-                        <TextBlock Grid.Row="0" Text="设置" FontSize="20" FontWeight="SemiBold" Height="36" VerticalAlignment="Center" Foreground="#fafafa" Margin="0,0,0,16" />
-
-                        <!-- .settings：两列 160px / 1fr -->
+                        <neg:NegiGrid Columns="* Auto" Margin="0,0,0,16">
+                            <TextBlock Text="设置" FontSize="20" FontWeight="SemiBold" Height="36"
+                                       VerticalAlignment="Center" Foreground="#fafafa" />
+                            <Button x:Name="SettingsWindowModeButton" Grid.Column="1"
+                                    Style="{StaticResource BtnSmOutlineStyle}" Height="32" Margin="0,0,84,0"
+                                    Click="OnSettingsModeClick" ToolTip="将设置的默认打开方式改为窗口"
+                                    AutomationProperties.Name="切换为窗口模式">
+                                <neg:NegiStackPanel Orientation="Horizontal" Spacing="6">
+                                    <materialIcons:MaterialIcon Kind="CogOutline" Width="16" Height="16" />
+                                    <TextBlock Text="切换为窗口模式" VerticalAlignment="Center" />
+                                </neg:NegiStackPanel>
+                            </Button>
+                        </neg:NegiGrid>
                         <neg:NegiGrid Grid.Row="1" Columns="160 24 *">
-                            <!-- .set-nav。⚠️ Debug 那一项**不在 XAML 里** —— 它由
-                                 MainWindow.Debug.cs 在 #if DEBUG 下用代码追加到这个面板，
-                                 Release 打包时整段不参与编译（见那个文件的说明）。 -->
-                            <neg:NegiStackPanel x:Name="SettingsNavPanel" Grid.Column="0" Spacing="4">
-                                <Button Style="{StaticResource SetNavBtnStyle}" Content="游戏"
-                                        neg:Negi.On="{Binding CurrentSettingsTab, Converter={StaticResource Equals}, ConverterParameter=游戏}"
-                                        Command="{Binding SelectSettingsTabCommand}" CommandParameter="游戏" />
-                                <Button Style="{StaticResource SetNavBtnStyle}" Content="Java"
-                                        neg:Negi.On="{Binding CurrentSettingsTab, Converter={StaticResource Equals}, ConverterParameter=Java}"
-                                        Command="{Binding SelectSettingsTabCommand}" CommandParameter="Java" />
-                                <Button Style="{StaticResource SetNavBtnStyle}" Content="下载"
-                                        neg:Negi.On="{Binding CurrentSettingsTab, Converter={StaticResource Equals}, ConverterParameter=下载}"
-                                        Command="{Binding SelectSettingsTabCommand}" CommandParameter="下载" />
-                                <Button Style="{StaticResource SetNavBtnStyle}" Content="外观"
-                                        neg:Negi.On="{Binding CurrentSettingsTab, Converter={StaticResource Equals}, ConverterParameter=外观}"
-                                        Command="{Binding SelectSettingsTabCommand}" CommandParameter="外观" />
-                                <Button Style="{StaticResource SetNavBtnStyle}" Content="桌宠"
-                                        neg:Negi.On="{Binding CurrentSettingsTab, Converter={StaticResource Equals}, ConverterParameter=桌宠}"
-                                        Command="{Binding SelectSettingsTabCommand}" CommandParameter="桌宠" />
-                                <Button Style="{StaticResource SetNavBtnStyle}" Content="关于"
-                                        neg:Negi.On="{Binding CurrentSettingsTab, Converter={StaticResource Equals}, ConverterParameter=关于}"
-                                        Command="{Binding SelectSettingsTabCommand}" CommandParameter="关于" />
-                            </neg:NegiStackPanel>
-
-                            <!-- .set-card：每个标签一张卡，让每组都以一条无边框的行收尾。
-                                 Debug 卡同样由 MainWindow.Debug.cs 代码追加（仅 Debug 构建）。 -->
-                            <Grid x:Name="SettingsCardsPanel" Grid.Column="2" VerticalAlignment="Top">
-
-                                <!-- 游戏 -->
-                                <Border Background="#111114" BorderBrush="#26262b" BorderThickness="1" CornerRadius="14" Padding="18,0"
-                                        Visibility="{Binding CurrentSettingsTab, Converter={StaticResource Equals}, ConverterParameter=游戏}">
-                                    <neg:NegiStackPanel>
-                                        <Border Height="58" BorderBrush="#26262b" BorderThickness="0,0,0,1">
-                                            <neg:NegiGrid Columns="* Auto">
-                                                <neg:NegiStackPanel VerticalAlignment="Center" Spacing="2">
-                                                    <TextBlock Text="最大内存" FontWeight="Medium" Foreground="#fafafa" />
-                                                    <TextBlock Text="分配给游戏的堆内存，建议不超过物理内存的一半。"
-                                                               FontSize="12" Foreground="#71717a" />
-                                                </neg:NegiStackPanel>
-                                                <neg:NegiStackPanel Grid.Column="1" Orientation="Horizontal" Spacing="12" Width="280" VerticalAlignment="Center">
-                                                    <Slider Value="{Binding MaxMemoryGb}" Minimum="1" Maximum="32" Width="210" />
-                                                    <TextBlock Text="{Binding MaxMemoryGb, StringFormat='{}{0} GB'}"
-                                                               Width="48" TextAlignment="Right" VerticalAlignment="Center"
-                                                               Foreground="#fafafa" />
-                                                </neg:NegiStackPanel>
-                                            </neg:NegiGrid>
-                                        </Border>
-
-                                        <Border Height="58" BorderBrush="#26262b" BorderThickness="0,0,0,1">
-                                            <neg:NegiGrid Columns="* Auto">
-                                                <neg:NegiStackPanel VerticalAlignment="Center" Spacing="2">
-                                                    <TextBlock Text="版本隔离" FontWeight="Medium" Foreground="#fafafa" />
-                                                    <TextBlock Text="每个实例有独立的存档、Mod 和配置文件。"
-                                                               FontSize="12" Foreground="#71717a" />
-                                                </neg:NegiStackPanel>
-                                                <CheckBox Grid.Column="1" IsChecked="{Binding VersionIsolation}" />
-                                            </neg:NegiGrid>
-                                        </Border>
-
-                                        <Border Height="58" BorderBrush="#26262b" BorderThickness="0,0,0,1">
-                                            <neg:NegiGrid Columns="* Auto">
-                                                <neg:NegiStackPanel VerticalAlignment="Center" Spacing="2">
-                                                    <TextBlock Text="启动后隐藏启动器" FontWeight="Medium" Foreground="#fafafa" />
-                                                    <TextBlock Text="游戏退出后会自动恢复。" FontSize="12" Foreground="#71717a" />
-                                                </neg:NegiStackPanel>
-                                                <CheckBox Grid.Column="1" IsChecked="{Binding HideOnLaunch}" />
-                                            </neg:NegiGrid>
-                                        </Border>
-
-                                        <Border Height="58" BorderBrush="#26262b" BorderThickness="0,0,0,1">
-                                            <neg:NegiGrid Columns="* Auto">
-                                                <neg:NegiStackPanel VerticalAlignment="Center" Spacing="2">
-                                                    <TextBlock Text="关闭窗口时" FontWeight="Medium" Foreground="#fafafa" />
-                                                    <TextBlock Text="点 ✕ 或按 Alt+F4 的时候走哪条路。" FontSize="12" Foreground="#71717a" />
-                                                </neg:NegiStackPanel>
-                                                <Border Grid.Column="1" Background="#1c1c21" CornerRadius="10" Padding="3" VerticalAlignment="Center">
-                                                    <neg:NegiStackPanel Orientation="Horizontal" Spacing="2">
-                                                        <Button Style="{StaticResource SegmentBtnStyle}" Content="每次询问"
-                                                                neg:Negi.On="{Binding CloseWindowBehavior, Converter={StaticResource Equals}, ConverterParameter=ask}"
-                                                                Command="{Binding SetCloseWindowBehaviorCommand}" CommandParameter="ask" />
-                                                        <Button Style="{StaticResource SegmentBtnStyle}" Content="收进托盘"
-                                                                neg:Negi.On="{Binding CloseWindowBehavior, Converter={StaticResource Equals}, ConverterParameter=tray}"
-                                                                Command="{Binding SetCloseWindowBehaviorCommand}" CommandParameter="tray" />
-                                                        <Button Style="{StaticResource SegmentBtnStyle}" Content="直接退出"
-                                                                neg:Negi.On="{Binding CloseWindowBehavior, Converter={StaticResource Equals}, ConverterParameter=exit}"
-                                                                Command="{Binding SetCloseWindowBehaviorCommand}" CommandParameter="exit" />
-                                                    </neg:NegiStackPanel>
-                                                </Border>
-                                            </neg:NegiGrid>
-                                        </Border>
-
-                                        <Border Height="58">
-                                            <neg:NegiGrid Columns="* Auto">
-                                                <neg:NegiStackPanel VerticalAlignment="Center" Spacing="2" Margin="0,0,16,0">
-                                                    <TextBlock Text="游戏目录" FontWeight="Medium" Foreground="#fafafa" />
-                                                    <TextBlock Text="{Binding GameRoot}" FontSize="12" Foreground="#71717a"
-                                                               TextTrimming="CharacterEllipsis" />
-                                                </neg:NegiStackPanel>
-                                                <Button Grid.Column="1" Style="{StaticResource BtnSmOutlineStyle}" VerticalAlignment="Center"
-                                                        Command="{Binding OpenGameRootCommand}">
-                                                    <neg:NegiStackPanel Orientation="Horizontal" Spacing="6">
-                                                        <materialIcons:MaterialIcon Kind="FolderOpenOutline" Width="14" Height="14" />
-                                                        <TextBlock Text="打开" VerticalAlignment="Center" />
-                                                    </neg:NegiStackPanel>
-                                                </Button>
-                                            </neg:NegiGrid>
-                                        </Border>
-                                    </neg:NegiStackPanel>
-                                </Border>
-
-                                <!-- Java -->
-                                <Border Background="#111114" BorderBrush="#26262b" BorderThickness="1" CornerRadius="14" Padding="18,0"
-                                        Visibility="{Binding CurrentSettingsTab, Converter={StaticResource Equals}, ConverterParameter=Java}">
-                                    <neg:NegiStackPanel>
-                                        <Border Height="58" BorderBrush="#26262b" BorderThickness="0,0,0,1">
-                                            <neg:NegiGrid Columns="* Auto">
-                                                <neg:NegiStackPanel VerticalAlignment="Center" Spacing="2">
-                                                    <TextBlock Text="Java 运行时" FontWeight="Medium" Foreground="#fafafa" />
-                                                    <TextBlock Text="自动模式会按版本要求挑选合适的 Java。" FontSize="12" Foreground="#71717a" />
-                                                </neg:NegiStackPanel>
-                                                <Button Grid.Column="1" Style="{StaticResource BtnSmOutlineStyle}" Width="240"
-                                                        HorizontalContentAlignment="Stretch"
-                                                        Command="{Binding ToggleJavaChooserCommand}">
-                                                    <neg:NegiGrid Columns="* Auto">
-                                                        <TextBlock Text="{Binding JavaLabel}" VerticalAlignment="Center"
-                                                                   TextTrimming="CharacterEllipsis" />
-                                                        <materialIcons:MaterialIcon Grid.Column="1" Kind="ChevronDown"
-                                                                                    Width="14" Height="14" Foreground="#71717a" />
-                                                    </neg:NegiGrid>
-                                                </Button>
-                                            </neg:NegiGrid>
-                                        </Border>
-
-                                        <Border Padding="0,8" Visibility="{Binding IsJavaChooserOpen, Converter={StaticResource BoolToVis}}">
-                                            <neg:NegiStackPanel Spacing="2">
-                                                <ItemsControl ItemsSource="{Binding JavaOptions}">
-                                                    <ItemsControl.ItemTemplate>
-                                                        <DataTemplate>
-                                                            <Button Style="{StaticResource MenuRowStyle}"
-                                                                    Command="{Binding DataContext.SelectJavaCommand, RelativeSource={RelativeSource AncestorType=Window}}"
-                                                                    CommandParameter="{Binding .}">
-                                                                <neg:NegiGrid Columns="* Auto">
-                                                                    <TextBlock Text="{Binding Label}" FontSize="13" Foreground="#fafafa"
-                                                                               VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
-                                                                    <materialIcons:MaterialIcon Grid.Column="1" Kind="Check" Width="16" Height="16"
-                                                                                                Foreground="#fafafa"
-                                                                                                Visibility="{Binding IsSelected, Converter={StaticResource BoolToVis}}" />
-                                                                </neg:NegiGrid>
-                                                            </Button>
-                                                        </DataTemplate>
-                                                    </ItemsControl.ItemTemplate>
-                                                </ItemsControl>
-
-                                                <Button Style="{StaticResource MenuRowStyle}" Click="OnPickJavaClick">
-                                                    <neg:NegiStackPanel Orientation="Horizontal" Spacing="10">
-                                                        <materialIcons:MaterialIcon Kind="FolderSearchOutline" Width="18" Height="18"
-                                                                                    Foreground="#a1a1aa" Margin="7,0" />
-                                                        <TextBlock Text="浏览 javaw.exe…" FontSize="13" Foreground="#fafafa" VerticalAlignment="Center" />
-                                                    </neg:NegiStackPanel>
-                                                </Button>
-                                            </neg:NegiStackPanel>
-                                        </Border>
-
-                                        <Border Height="58">
-                                            <TextBlock Text="缺少合适的 Java 时，启动会失败并提示需要的版本。"
-                                                       FontSize="12" Foreground="#71717a" VerticalAlignment="Center"
-                                                       TextWrapping="Wrap" />
-                                        </Border>
-                                    </neg:NegiStackPanel>
-                                </Border>
-
-                                <!-- 下载 -->
-                                <Border Background="#111114" BorderBrush="#26262b" BorderThickness="1" CornerRadius="14" Padding="18,0"
-                                        Visibility="{Binding CurrentSettingsTab, Converter={StaticResource Equals}, ConverterParameter=下载}">
-                                    <neg:NegiStackPanel>
-                                        <Border Height="58" BorderBrush="#26262b" BorderThickness="0,0,0,1">
-                                            <neg:NegiGrid Columns="* Auto">
-                                                <TextBlock Text="下载源" FontWeight="Medium" VerticalAlignment="Center" Foreground="#fafafa" />
-                                                <Border Grid.Column="1" Background="#1c1c21" CornerRadius="10" Padding="3">
-                                                    <neg:NegiStackPanel Orientation="Horizontal" Spacing="2">
-                                                        <Button Style="{StaticResource SegmentBtnStyle}" Content="官方"
-                                                                neg:Negi.On="{Binding DownloadSource, Converter={StaticResource Equals}, ConverterParameter=官方}"
-                                                                Command="{Binding SetDownloadSourceCommand}" CommandParameter="官方" />
-                                                        <Button Style="{StaticResource SegmentBtnStyle}" Content="BMCLAPI"
-                                                                neg:Negi.On="{Binding DownloadSource, Converter={StaticResource Equals}, ConverterParameter=BMCLAPI}"
-                                                                Command="{Binding SetDownloadSourceCommand}" CommandParameter="BMCLAPI" />
-                                                        <Button Style="{StaticResource SegmentBtnStyle}" Content="自动"
-                                                                neg:Negi.On="{Binding DownloadSource, Converter={StaticResource Equals}, ConverterParameter=自动}"
-                                                                Command="{Binding SetDownloadSourceCommand}" CommandParameter="自动" />
-                                                    </neg:NegiStackPanel>
-                                                </Border>
-                                            </neg:NegiGrid>
-                                        </Border>
-
-                                        <!-- BMCLAPI 的条款要求凡提供镜像处都要署名赞助方，所以这行常驻。 -->
-                                        <Border Padding="0,14" BorderBrush="#26262b" BorderThickness="0,0,0,1">
-                                            <neg:NegiStackPanel Spacing="6">
-                                                <TextBlock Text="{Binding SourceHint}" FontSize="12" Foreground="#71717a"
-                                                           TextWrapping="Wrap" />
-                                                <TextBlock Text="BMCLAPI 由 bangbang93 赞助提供。" FontSize="12"
-                                                           Foreground="#71717a" TextWrapping="Wrap" />
-                                            </neg:NegiStackPanel>
-                                        </Border>
-
-                                        <Border Height="58" BorderBrush="#26262b" BorderThickness="0,0,0,1">
-                                            <neg:NegiGrid Columns="* Auto">
-                                                <neg:NegiStackPanel VerticalAlignment="Center" Spacing="2">
-                                                    <TextBlock Text="下载线程" FontWeight="Medium" Foreground="#fafafa" />
-                                                    <TextBlock Text="同时下载的连接数，大文件会拆成多段并行。"
-                                                               FontSize="12" Foreground="#71717a" />
-                                                </neg:NegiStackPanel>
-                                                <neg:NegiStackPanel Grid.Column="1" Orientation="Horizontal" Spacing="12" Width="280" VerticalAlignment="Center">
-                                                    <Slider Value="{Binding DownloadThreads}" Minimum="1" Maximum="64" Width="210" />
-                                                    <TextBlock Text="{Binding DownloadThreads, StringFormat='{}{0}'}"
-                                                               Width="48" TextAlignment="Right" VerticalAlignment="Center"
-                                                               Foreground="#fafafa" />
-                                                </neg:NegiStackPanel>
-                                            </neg:NegiGrid>
-                                        </Border>
-
-                                        <Border Padding="0,16,0,18">
-                                            <neg:NegiStackPanel Spacing="10">
-                                                <neg:NegiGrid Columns="* Auto">
-                                                    <TextBlock Text="下载中心" FontWeight="Medium" Foreground="#fafafa"
-                                                               VerticalAlignment="Center" />
-                                                    <Button Grid.Column="1" Style="{StaticResource BtnSmOutlineStyle}" Content="清除已完成"
-                                                            Command="{Binding ClearDownloadsCommand}" />
-                                                </neg:NegiGrid>
-                                                <Border BorderBrush="#26262b" BorderThickness="1" CornerRadius="10"
-                                                        ClipToBounds="True" Visibility="{Binding HasDownloads, Converter={StaticResource BoolToVis}}">
-                                                    <ScrollViewer MaxHeight="320">
-                                                        <ItemsControl ItemsSource="{Binding Downloads}"
-                                                                      ItemTemplate="{StaticResource DownloadRowTemplate}" />
-                                                    </ScrollViewer>
-                                                </Border>
-                                                <TextBlock Text="暂无下载任务" Visibility="{Binding HasDownloads, Converter={StaticResource BoolToVis}, ConverterParameter=invert}"
-                                                           FontSize="13" Foreground="#71717a"
-                                                           HorizontalAlignment="Center" Margin="0,16,0,16" />
-                                            </neg:NegiStackPanel>
-                                        </Border>
-                                    </neg:NegiStackPanel>
-                                </Border>
-
-                                <!-- 外观 -->
-                                <Border Background="#111114" BorderBrush="#26262b" BorderThickness="1" CornerRadius="14" Padding="18,0"
-                                        Visibility="{Binding CurrentSettingsTab, Converter={StaticResource Equals}, ConverterParameter=外观}">
-                                    <neg:NegiStackPanel>
-                                        <Border Height="58" BorderBrush="#26262b" BorderThickness="0,0,0,1">
-                                            <neg:NegiGrid Columns="* Auto">
-                                                <TextBlock Text="主题" FontWeight="Medium" VerticalAlignment="Center" Foreground="#fafafa" />
-                                                <Button Grid.Column="1" Style="{StaticResource BtnSmOutlineStyle}" Command="{Binding ToggleThemeCommand}">
-                                                    <neg:NegiStackPanel Orientation="Horizontal" Spacing="6">
-                                                        <materialIcons:MaterialIcon Kind="WeatherSunny" Width="14" Height="14" />
-                                                        <TextBlock Text="切换深浅色" VerticalAlignment="Center" />
-                                                    </neg:NegiStackPanel>
-                                                </Button>
-                                            </neg:NegiGrid>
-                                        </Border>
-
-                                        <Border Height="58" BorderBrush="#26262b" BorderThickness="0,0,0,1">
-                                            <neg:NegiGrid Columns="* Auto">
-                                                <neg:NegiStackPanel VerticalAlignment="Center" Spacing="2" Margin="0,0,16,0">
-                                                    <TextBlock Text="首页 3D 模型" FontWeight="Medium" Foreground="#fafafa" />
-                                                    <TextBlock Text="左键拖它的位置（会记住），右键转角度。关掉它会把拖过的位置一起清掉，重开回到默认站位。"
-                                                               FontSize="12" Foreground="#71717a" TextWrapping="Wrap" />
-                                                </neg:NegiStackPanel>
-                                                <neg:NegiStackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
-                                                    <!-- 只清位置、不动开关：拖乱了想回原点，不该顺手把模型也关掉 -->
-                                                    <Button Style="{StaticResource BtnSmOutlineStyle}" Content="复位位置"
-                                                            Command="{Binding ResetHomeSkinModelPositionCommand}"
-                                                            Visibility="{Binding HasHomeSkinModelPosition, Converter={StaticResource BoolToVis}}" />
-                                                    <CheckBox IsChecked="{Binding HomeSkinModelVisible}" />
-                                                </neg:NegiStackPanel>
-                                            </neg:NegiGrid>
-                                        </Border>
-
-                                        <Border Height="58">
-                                            <neg:NegiGrid Columns="* Auto">
-                                                <TextBlock Text="背景" FontWeight="Medium" VerticalAlignment="Center" Foreground="#fafafa" />
-                                                <neg:NegiStackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
-                                                    <!-- 当前背景，一眼能认出选的是哪张 -->
-                                                    <Border Width="52" Height="34" CornerRadius="8" ClipToBounds="True"
-                                                            BorderBrush="#26262b" BorderThickness="1"
-                                                            Visibility="{Binding IsCustomBackground, Converter={StaticResource BoolToVis}}">
-                                                        <Grid>
-                                                            <!-- 缩略位不参与取景：50x32 上裁切差看不出东西，
-                                                                 绑尺寸反而多一条布局依赖。 -->
-                                                            <Image Source="{Binding BgCustomArt, Converter={StaticResource PixelsToBitmap}}"
-                                                                   Stretch="UniformToFill" />
-                                                            <Border Background="#ffffff" Opacity="{Binding BgLightOpacity}" />
-                                                            <Border Background="#000000" Opacity="{Binding BgDarkOpacity}" />
-                                                        </Grid>
-                                                    </Border>
-                                                    <!-- 视频壁纸的缩略位：不另开一个播放器去抽首帧（那要多一份解码），
-                                                         只放个胶片图标表示"这里挂的是视频"。 -->
-                                                    <Border Width="52" Height="34" CornerRadius="8"
-                                                            Background="#18181b" BorderBrush="#26262b" BorderThickness="1"
-                                                            Visibility="{Binding IsVideoBackground, Converter={StaticResource BoolToVis}}">
-                                                        <materialIcons:MaterialIcon Kind="VideoFilm" Width="18" Height="18"
-                                                                                    HorizontalAlignment="Center" VerticalAlignment="Center"
-                                                                                    Foreground="#a1a1aa" />
-                                                    </Border>
-                                                    <Button Style="{StaticResource BtnSmOutlineStyle}" Content="调整"
-                                                            Command="{Binding OpenBgTuningCommand}"
-                                                            Visibility="{Binding HasCustomBackground, Converter={StaticResource BoolToVis}}" />
-                                                    <!-- 这颗是"换回默认壁纸"（连背景一起清掉）。
-                                                         调节窗里那颗同名的只归零参数、不动壁纸 —— 两件事，
-                                                         所以文案必须分开写清楚。 -->
-                                                    <Button Style="{StaticResource BtnSmOutlineStyle}" Content="恢复默认壁纸"
-                                                            Command="{Binding ResetBackgroundCommand}"
-                                                            Visibility="{Binding HasCustomBackground, Converter={StaticResource BoolToVis}}" />
-                                                    <Button Style="{StaticResource BtnSmOutlineStyle}" Click="OnPickBackgroundClick">
-                                                        <neg:NegiStackPanel Orientation="Horizontal" Spacing="6">
-                                                            <materialIcons:MaterialIcon Kind="ImageFrame" Width="14" Height="14" />
-                                                            <TextBlock Text="选择图片" VerticalAlignment="Center" />
-                                                        </neg:NegiStackPanel>
-                                                    </Button>
-                                                    <Button Style="{StaticResource BtnSmOutlineStyle}" Click="OnPickVideoBackgroundClick">
-                                                        <neg:NegiStackPanel Orientation="Horizontal" Spacing="6">
-                                                            <materialIcons:MaterialIcon Kind="VideoFilm" Width="14" Height="14" />
-                                                            <TextBlock Text="选择视频" VerticalAlignment="Center" />
-                                                        </neg:NegiStackPanel>
-                                                    </Button>
-                                                    <!-- 一键搬 Wallpaper Engine 当前壁纸：只搬视频壁纸，
-                                                         场景 / 网页 / 应用只提示类型、不动背景 -->
-                                                    <Button Style="{StaticResource BtnSmOutlineStyle}" Click="OnSyncWallpaperEngineClick">
-                                                        <neg:NegiStackPanel Orientation="Horizontal" Spacing="6">
-                                                            <materialIcons:MaterialIcon Kind="Wallpaper" Width="14" Height="14" />
-                                                            <TextBlock Text="同步 Wallpaper Engine" VerticalAlignment="Center" />
-                                                        </neg:NegiStackPanel>
-                                                    </Button>
-                                                </neg:NegiStackPanel>
-                                            </neg:NegiGrid>
-                                        </Border>
-                                    </neg:NegiStackPanel>
-                                </Border>
-
-                                <!-- 桌宠 -->
-                                <Border Background="#111114" BorderBrush="#26262b" BorderThickness="1" CornerRadius="14" Padding="18,0"
-                                        Visibility="{Binding CurrentSettingsTab, Converter={StaticResource Equals}, ConverterParameter=桌宠}">
-                                    <neg:NegiStackPanel>
-                                        <Border Height="58" BorderBrush="#26262b" BorderThickness="0,0,0,1">
-                                            <neg:NegiGrid Columns="* Auto">
-                                                <neg:NegiStackPanel VerticalAlignment="Center" Spacing="2" Margin="0,0,16,0">
-                                                    <TextBlock Text="GPU 渲染（硬件加速）" FontWeight="Medium" Foreground="#fafafa" />
-                                                    <TextBlock Text="桌宠改用显卡渲染。关闭时走软件光栅化，稳定锁 60 帧、静止时停渲染。"
-                                                               FontSize="12" Foreground="#71717a" TextWrapping="Wrap" />
-                                                </neg:NegiStackPanel>
-                                                <CheckBox Grid.Column="1" IsChecked="{Binding PetUseGpu}" />
-                                            </neg:NegiGrid>
-                                        </Border>
-
-                                        <Border Height="58">
-                                            <neg:NegiStackPanel VerticalAlignment="Center" Spacing="2">
-                                                <TextBlock Text="仅对桌宠生效" FontWeight="Medium" Foreground="#fafafa" />
-                                                <TextBlock Text="启动器主页的皮肤预览始终走软件光栅化 —— 那条路要出确定性截图做像素回归。"
-                                                           FontSize="12" Foreground="#71717a" TextWrapping="Wrap" />
-                                            </neg:NegiStackPanel>
-                                        </Border>
-                                    </neg:NegiStackPanel>
-                                </Border>
-
-                                <!-- 关于 -->
-                                <Border Background="#111114" BorderBrush="#26262b" BorderThickness="1" CornerRadius="14" Padding="18,18"
-                                        Visibility="{Binding CurrentSettingsTab, Converter={StaticResource Equals}, ConverterParameter=关于}">
-                                    <neg:NegiStackPanel Spacing="14">
-                                        <neg:NegiStackPanel Orientation="Horizontal" Spacing="12">
-                                            <Image Source="pack://application:,,,/Assets/app.png" Width="40" Height="40" />
-                                            <neg:NegiStackPanel VerticalAlignment="Center" Spacing="2">
-                                                <TextBlock Text="NegiCraft Launcher" FontSize="16" FontWeight="SemiBold" Foreground="#fafafa" />
-                                                <TextBlock Text="{Binding LauncherVersion, StringFormat='版本 {0}'}"
-                                                           FontSize="12" Foreground="#a1a1aa" />
-                                            </neg:NegiStackPanel>
-                                        </neg:NegiStackPanel>
-                                        <TextBlock FontSize="12" Foreground="#71717a" TextWrapping="Wrap" LineHeight="20"
-                                                   Text="本项目与 Mojang Studios 及 Microsoft 无关联。Minecraft 是 Mojang Studios 的商标。" />
-                                    </neg:NegiStackPanel>
-                                </Border>
-                            </Grid>
+                            <ContentControl x:Name="PageSettingsNavHost" HorizontalContentAlignment="Stretch"
+                                            VerticalContentAlignment="Top" />
+                            <ScrollViewer x:Name="PageSettingsScroll" Grid.Column="2"
+                                          VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                                <ContentControl x:Name="PageSettingsCardsHost" HorizontalContentAlignment="Stretch" />
+                            </ScrollViewer>
                         </neg:NegiGrid>
                     </neg:NegiGrid>
                 </Grid>
             </Grid>
+
+        </Grid>
+
+                <!-- 设置浮窗：背景冻结后模糊，弹窗沿用已优化的动画。 -->
+                <Grid x:Name="SettingsOverlay" Panel.ZIndex="70" Visibility="Collapsed"
+                      PreviewKeyDown="OnSettingsPreviewKeyDown">
+                    <Grid x:Name="SettingsScrim" MouseLeftButtonDown="OnSettingsBackdropClick" Background="#09090b">
+                        <Image x:Name="SettingsBackdrop" Stretch="Fill" IsHitTestVisible="False" />
+                        <Border Background="#68000000" IsHitTestVisible="False" />
+                    </Grid>
+                    <Grid x:Name="SettingsDialog" MaxWidth="1020" MaxHeight="620" Margin="32"
+                          Style="{StaticResource PopoverStyle}"
+                          pop:Pop.Anchor="Center" pop:Pop.SlideOnly="True"
+                          KeyboardNavigation.TabNavigation="Cycle"
+                          KeyboardNavigation.ControlTabNavigation="Cycle"
+                          FocusManager.IsFocusScope="True">
+                    <Border Background="#18181b" BorderBrush="#3b3b40" BorderThickness="1" CornerRadius="8"
+                            SizeChanged="OnSettingsFrameSizeChanged">
+
+                        <neg:NegiGrid Columns="184 *">
+                            <Border Background="#141416" BorderBrush="#343438" BorderThickness="0,0,1,0" Padding="14,22,14,16">
+                            <neg:NegiGrid Rows="Auto * Auto">
+                                <neg:NegiStackPanel Orientation="Horizontal" Spacing="10" Margin="10,0,0,22">
+                                    <materialIcons:MaterialIcon Kind="CogOutline" Width="18" Height="18" />
+                                    <TextBlock Text="设置" FontSize="18" FontWeight="SemiBold" VerticalAlignment="Center" />
+                                </neg:NegiStackPanel>
+                            <ContentControl x:Name="DialogSettingsNavHost" Grid.Row="1"
+                                            HorizontalContentAlignment="Stretch" VerticalContentAlignment="Top" />
+                                <TextBlock Grid.Row="2" Text="NegiCraft Launcher" FontSize="11" Foreground="#81818b" Margin="10,16,0,0" />
+                            </neg:NegiGrid>
+                            </Border>
+                            <neg:NegiGrid Grid.Column="1" Rows="Auto *" Margin="24,20,18,20">
+                                <neg:NegiGrid Columns="* Auto Auto" Margin="0,0,4,20">
+                                    <TextBlock Text="{Binding CurrentSettingsTab}" FontSize="21" FontWeight="SemiBold" VerticalAlignment="Center" />
+                                    <Button x:Name="SettingsPageModeButton" Grid.Column="1"
+                                            Style="{StaticResource BtnSmOutlineStyle}" Height="32" Margin="12,0,8,0"
+                                            Click="OnSettingsModeClick" ToolTip="将设置的默认打开方式改为页面"
+                                            AutomationProperties.Name="切换为页面模式">
+                                        <neg:NegiStackPanel Orientation="Horizontal" Spacing="6">
+                                            <materialIcons:MaterialIcon Kind="CogOutline" Width="16" Height="16" />
+                                            <TextBlock Text="切换为页面模式" VerticalAlignment="Center" />
+                                        </neg:NegiStackPanel>
+                                    </Button>
+                                    <Button x:Name="SettingsCloseButton" Grid.Column="2" Style="{StaticResource WinCtrlStyle}"
+                                            Width="32" Height="32" Click="OnSettingsCloseClick" ToolTip="关闭设置"
+                                            AutomationProperties.Name="关闭设置">
+                                        <materialIcons:MaterialIcon Kind="Close" Width="18" Height="18" />
+                                    </Button>
+                                </neg:NegiGrid>
+                            <ScrollViewer x:Name="SettingsScroll" Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+
+                            <!-- .set-card：每个标签一张卡，让每组都以一条无边框的行收尾。
+                                 Debug 卡同样由 MainWindow.Debug.cs 代码追加（仅 Debug 构建）。 -->
+                            <ContentControl x:Name="DialogSettingsCardsHost" HorizontalContentAlignment="Stretch" />
+                            </ScrollViewer>
+                            </neg:NegiGrid>
+                        </neg:NegiGrid>
+                    </Border>
+                    </Grid>
+                </Grid>
 
             <!-- ========================================== -->
             <!-- 6. 弹层外的点击遮罩（点外面就关）             -->
