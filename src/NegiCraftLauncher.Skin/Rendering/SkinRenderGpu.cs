@@ -72,7 +72,7 @@ public sealed class SkinRenderGpu : SkinRenderBase
     /// <summary>本体层贴图（A 已被强制成 255）。</summary>
     public ImageSource? BaseTexture { get; private set; }
 
-    /// <summary>第二层贴图（保留原始 alpha）。</summary>
+    /// <summary>第二层贴图（保留外层区域的原始 alpha，其余区域透明）。</summary>
     public ImageSource? TopTexture { get; private set; }
 
     public SkinRenderGpu()
@@ -109,7 +109,7 @@ public sealed class SkinRenderGpu : SkinRenderBase
         EnableTop = type != SkinType.Old;
 
         BaseTexture = ToTexture(_skinPixels, _textureWidth, _textureHeight, forceOpaque: true, TextureUpscale);
-        TopTexture = ToTexture(_skinPixels, _textureWidth, _textureHeight, forceOpaque: false, TextureUpscale);
+        TopTexture = ToTexture(OverlayPixels(), _textureWidth, _textureHeight, forceOpaque: false, TextureUpscale);
 
         _modelBuilt = false;
         ModelVersion++;
@@ -149,7 +149,9 @@ public sealed class SkinRenderGpu : SkinRenderBase
 
         foreach (var part in SkinModel.Build(_skinType, top: true, LimbJoints, spineSegs, limbSegs))
         {
-            _topLayer.Add((part.Type, BuildMesh(part)));
+            var mesh = BuildMesh(part, overlay: true);
+            if (mesh.TriangleIndices.Count > 0)
+                _topLayer.Add((part.Type, mesh));
         }
 
         _modelBuilt = true;
@@ -252,7 +254,7 @@ public sealed class SkinRenderGpu : SkinRenderBase
     /// 所以索引要反着发（<c>0,2,1</c> / <c>0,3,2</c>）—— 发错的表现是模型里外翻转：
     /// 看到的是盒子远端那一面、左右镜像，而且第二层永远被本体挡住。</para>
     /// </summary>
-    private MeshGeometry3D BuildMesh(SkinPart part)
+    private MeshGeometry3D BuildMesh(SkinPart part, bool overlay = false)
     {
         var quads = new List<SkinQuad>(6);
         SkinModel.AppendQuads(part, quads);
@@ -261,8 +263,34 @@ public sealed class SkinRenderGpu : SkinRenderBase
         var texCoords = new PointCollection(quads.Count * 4);
         var indices = new Int32Collection(quads.Count * 6);
 
+        // Inset each complete cube face by half a baked texel so linear filtering cannot
+        // borrow opaque pixels from neighboring atlas regions into a transparent overlay.
+        // Subdivided strips share one mapping to keep their internal seams continuous.
+        var faceBounds = new Dictionary<Vector3, (Vector2 Min, Vector2 Max)>();
         foreach (var q in quads)
         {
+            var min = Vector2.Min(Vector2.Min(q.T0, q.T1), Vector2.Min(q.T2, q.T3));
+            var max = Vector2.Max(Vector2.Max(q.T0, q.T1), Vector2.Max(q.T2, q.T3));
+            if (faceBounds.TryGetValue(q.Normal, out var bounds))
+            {
+                min = Vector2.Min(min, bounds.Min);
+                max = Vector2.Max(max, bounds.Max);
+            }
+            faceBounds[q.Normal] = (min, max);
+        }
+        var texture = (BitmapSource)BaseTexture!;
+        var inset = new Vector2(0.5f / texture.PixelWidth, 0.5f / texture.PixelHeight);
+        // At grazing angles the GPU's filtering footprint can exceed the UV inset.
+        // Empty overlay faces must not be rasterized at all, regardless of filtering.
+        var visibleFaces = overlay
+            ? faceBounds.Where(face => HasVisibleTexels(face.Value.Min, face.Value.Max))
+                .Select(face => face.Key).ToHashSet()
+            : null;
+
+        foreach (var q in quads)
+        {
+            if (visibleFaces is not null && !visibleFaces.Contains(q.Normal)) continue;
+
             var b = positions.Count;
 
             positions.Add(new Point3D(q.P0.X, q.P0.Y, q.P0.Z));
@@ -270,10 +298,17 @@ public sealed class SkinRenderGpu : SkinRenderBase
             positions.Add(new Point3D(q.P2.X, q.P2.Y, q.P2.Z));
             positions.Add(new Point3D(q.P3.X, q.P3.Y, q.P3.Z));
 
-            texCoords.Add(new Point(q.T0.X, q.T0.Y));
-            texCoords.Add(new Point(q.T1.X, q.T1.Y));
-            texCoords.Add(new Point(q.T2.X, q.T2.Y));
-            texCoords.Add(new Point(q.T3.X, q.T3.Y));
+            var bounds = faceBounds[q.Normal];
+            var span = bounds.Max - bounds.Min;
+            Point TexturePoint(Vector2 uv)
+            {
+                var mapped = bounds.Min + inset + (uv - bounds.Min) / span * (span - 2 * inset);
+                return new Point(mapped.X, mapped.Y);
+            }
+            texCoords.Add(TexturePoint(q.T0));
+            texCoords.Add(TexturePoint(q.T1));
+            texCoords.Add(TexturePoint(q.T2));
+            texCoords.Add(TexturePoint(q.T3));
 
             // 反向绕序：逆时针朝外。
             indices.Add(b + 0); indices.Add(b + 2); indices.Add(b + 1);
@@ -293,7 +328,7 @@ public sealed class SkinRenderGpu : SkinRenderBase
                            (LimbFlexible && (part.Type == ModelPartType.LeftArm || part.Type == ModelPartType.RightArm ||
                                              part.Type == ModelPartType.LeftLeg || part.Type == ModelPartType.RightLeg));
 
-        if (isDeformable)
+        if (isDeformable && positions.Count > 0)
         {
             var rest = new Point3DCollection(positions.Count);
             foreach (var p in positions) rest.Add(p);
@@ -305,6 +340,43 @@ public sealed class SkinRenderGpu : SkinRenderBase
         }
 
         return mesh;
+    }
+
+    private bool HasVisibleTexels(Vector2 min, Vector2 max)
+    {
+        var x0 = Math.Clamp((int)MathF.Round(min.X * _textureWidth), 0, _textureWidth);
+        var y0 = Math.Clamp((int)MathF.Round(min.Y * _textureHeight), 0, _textureHeight);
+        var x1 = Math.Clamp((int)MathF.Round(max.X * _textureWidth), 0, _textureWidth);
+        var y1 = Math.Clamp((int)MathF.Round(max.Y * _textureHeight), 0, _textureHeight);
+        for (var y = y0; y < y1; y++)
+        for (var x = x0; x < x1; x++)
+            if ((_skinPixels[y * _textureWidth + x] >> 24) != 0) return true;
+        return false;
+    }
+
+    private uint[] OverlayPixels()
+    {
+        // The overlay material must never sample base-layer or unused atlas pixels,
+        // including when oblique faces use a wider minification filter.
+        var pixels = new uint[_skinPixels.Length];
+        foreach (var part in SkinModel.Build(_skinType, top: true))
+        {
+            var quads = new List<SkinQuad>(6);
+            SkinModel.AppendQuads(part, quads);
+            foreach (var q in quads)
+            {
+                var min = Vector2.Min(Vector2.Min(q.T0, q.T1), Vector2.Min(q.T2, q.T3));
+                var max = Vector2.Max(Vector2.Max(q.T0, q.T1), Vector2.Max(q.T2, q.T3));
+                var x0 = Math.Clamp((int)MathF.Round(min.X * _textureWidth), 0, _textureWidth);
+                var y0 = Math.Clamp((int)MathF.Round(min.Y * _textureHeight), 0, _textureHeight);
+                var x1 = Math.Clamp((int)MathF.Round(max.X * _textureWidth), 0, _textureWidth);
+                var y1 = Math.Clamp((int)MathF.Round(max.Y * _textureHeight), 0, _textureHeight);
+                for (var y = y0; y < y1; y++)
+                    Array.Copy(_skinPixels, y * _textureWidth + x0,
+                        pixels, y * _textureWidth + x0, x1 - x0);
+            }
+        }
+        return pixels;
     }
 
     /// <summary>
