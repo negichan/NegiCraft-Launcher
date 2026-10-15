@@ -50,11 +50,19 @@ internal static class Program
         PetWindow? pet = null;
         try
         {
+            if (Environment.GetCommandLineArgs().Contains("--pet-texture-only"))
+            {
+                GpuTextureChecks.Run(Check);
+                return;
+            }
+
             if (Environment.GetCommandLineArgs().Contains("--fox-only"))
             {
                 await CheckFoxSqueeze();
                 return;
             }
+
+            GpuTextureChecks.Run(Check);
 
             var renderer = new SkinRenderSoftware { Width = 110, Height = 171 };
             renderer.SetSkin(SkinTexture.Decode(DefaultSkins.Bytes(false))!);
