@@ -273,10 +273,19 @@
         </Style>
 
         <!-- 弹层留在树里（靠透明 + 不吃点击隐藏），因为切 Visibility 会把它踢出布局。
-             开合的全部动效由 Controls/Pop.cs 接管，含透明度。 -->
+             开合的全部动效由 Controls/Pop.cs 接管，含透明度。
+             ⚠️ CacheMode 是性能必需，不是可选优化：弹层一直挂在可视树里（关着也是），
+               里面那块卡片挂着 DropShadowEffect —— 位图 Effect 每帧都要重新分配中间
+               渲染目标，8 个弹层叠着就是页面切换掉到 39fps 的主因。挂上 BitmapCache 后
+               效果只在内容变化时烘焙一次，之后是一次位图合成。 -->
         <Style x:Key="PopoverStyle" TargetType="{x:Type FrameworkElement}">
             <Setter Property="Opacity" Value="0" />
             <Setter Property="IsHitTestVisible" Value="False" />
+            <Setter Property="CacheMode">
+                <Setter.Value>
+                    <BitmapCache />
+                </Setter.Value>
+            </Setter>
         </Style>
 
         <!-- 页面仅在过渡期间缓存；结束后恢复文字的正常渲染。 -->
@@ -732,6 +741,12 @@
             <Setter Property="FontSize" Value="13" />
             <Setter Property="FontWeight" Value="SemiBold" />
             <Setter Property="Effect" Value="{StaticResource ShadowLg}" />
+            <!-- 同上：挂 Effect 的常驻元素必须缓存，否则每帧重算阴影。 -->
+            <Setter Property="CacheMode">
+                <Setter.Value>
+                    <BitmapCache />
+                </Setter.Value>
+            </Setter>
         </Style>
 
         <!-- 卡片底行那颗「启动」：当前实例是主色实心，其余是灰图标。
