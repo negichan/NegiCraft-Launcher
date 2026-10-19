@@ -1470,8 +1470,7 @@
                 <Button x:Name="VideoSoundButton"
                         Style="{StaticResource WinCtrlStyle}"
                         Visibility="{Binding ShowVideoSoundButton, Converter={StaticResource BoolToVis}}"
-                        Click="OnVideoSoundClick"
-                        MouseEnter="OnVideoSoundMouseEnter">
+                        Click="OnVideoSoundClick">
                     <Grid Width="17" Height="17">
                         <materialIcons:MaterialIcon Kind="VolumeHigh" Width="17" Height="17"
                                                     Visibility="{Binding VideoBackgroundSound, Converter={StaticResource BoolToVis}}" />
@@ -1491,7 +1490,7 @@
             <!-- 音量浮层：挂在喇叭正下方那条竖排音量条。
                  ⚠️ 之前做的是"悬停时从喇叭左边滑出一条横的"，那个鼠标很难挪上去
                    （条子在往左长、指针却在按钮上）。改成挂在按钮正下方的浮层，
-                   指针往下走就进得去；开合靠 MainWindow 里的进出轮询兜底。
+                   指针往下走就进得去；开合靠 controls:HoverReveal 的进出轮询兜底。
                  ⚠️ **宽度写死 48**：浮层靠"喇叭中心 − 浮层宽/2"横向定位（见 RepositionVolumePanel），
                    宽度要是由内容决定，拖动时百分比从 "5%" 变到 "100%" 会让整块变宽，
                    而那个定位只在打开那一刻算一次 ⇒ 箭头自己就飘走了。这就是"音量条没对上喇叭"。
@@ -1514,8 +1513,11 @@
                     Opacity="0" IsHitTestVisible="False"
                     pop:Pop.Tip="True"
                     pop:Pop.IsOpen="{Binding IsVolumePopOpen}"
-                    Panel.ZIndex="46"
-                    MouseEnter="OnVolumePanelMouseEnter">
+                    controls:HoverReveal.IsOpen="{Binding IsVolumePopOpen}"
+                    controls:HoverReveal.Targets="{Binding ElementName=VideoSoundButton}"
+                    controls:HoverReveal.Delay="0"
+                    controls:HoverReveal.PollInterval="180"
+                    Panel.ZIndex="46">
                 <neg:NegiStackPanel Spacing="0" HorizontalAlignment="Center">
                     <!-- 指向喇叭的小尖角。和面板同色，接缝在面板上边的直线段上（圆角在两侧，碰不到）。 -->
                     <Polygon Points="0,7 7,0 14,7" Fill="#111114" HorizontalAlignment="Center" />
@@ -1695,7 +1697,6 @@
                             Margin="0,6,0,0"
                             Cursor="Hand"
                             Command="{Binding ToggleAccPopCommand}"
-                            MouseEnter="OnAccountAvatarMouseEnter"
                             HorizontalAlignment="Center"
                             HorizontalContentAlignment="Center"
                             VerticalContentAlignment="Center">
@@ -3041,8 +3042,11 @@
                     Opacity="0" IsHitTestVisible="False"
                     pop:Pop.Tip="True" pop:Pop.TipAxis="X"
                     pop:Pop.IsOpen="{Binding IsAccountInfoOpen}"
-                    Panel.ZIndex="44"
-                    MouseEnter="OnAccountInfoPanelMouseEnter">
+                    controls:HoverReveal.IsOpen="{Binding IsAccountInfoOpen}"
+                    controls:HoverReveal.Targets="{Binding ElementName=AccountAvatar}"
+                    controls:HoverReveal.Delay="130"
+                    controls:HoverReveal.PollInterval="140"
+                    Panel.ZIndex="44">
                 <Border Background="#111114" BorderBrush="#26262b" BorderThickness="1"
                         CornerRadius="12" Padding="12,10" Margin="16,0,0,0"
                         Effect="{StaticResource ShadowLg}">
