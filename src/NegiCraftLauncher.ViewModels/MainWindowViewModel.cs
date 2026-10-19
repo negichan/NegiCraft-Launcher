@@ -863,6 +863,20 @@ public partial class MainWindowViewModel : ViewModelBase
     [ObservableProperty]
     private bool _isAccPopOpen;
 
+    /// <summary>
+    /// 悬停侧栏底部头像弹出的账户信息卡。与 <see cref="IsAccPopOpen"/>（点出来的账户列表）
+    /// 互斥：列表开着时不显示这张卡，反过来点头像开列表时这张卡也让位。
+    /// 开合由 view 侧的悬停轮询驱动，这里只存状态。
+    /// </summary>
+    [ObservableProperty]
+    private bool _isAccountInfoOpen;
+
+    /// <summary>信息卡上的账户名。没有账户时说清楚是"未登录"，别留一片空白。</summary>
+    public string AccountInfoName => CurrentAccount?.Name ?? "未登录";
+
+    /// <summary>信息卡上的登录方式；一个账户都没有时，这行改成引导去添加。</summary>
+    public string AccountInfoType => CurrentAccount?.Type ?? "点击头像添加账户";
+
     partial void OnCurrentAccountChanged(AccountModel? value)
     {
         foreach (var a in Accounts) a.IsCurrent = ReferenceEquals(a, value);
@@ -870,12 +884,16 @@ public partial class MainWindowViewModel : ViewModelBase
         OnPropertyChanged(nameof(HasAccount));
         OnPropertyChanged(nameof(ShowHomeSkinModel));
         OnPropertyChanged(nameof(EffectivePetName));
+        OnPropertyChanged(nameof(AccountInfoName));
+        OnPropertyChanged(nameof(AccountInfoType));
     }
 
     [RelayCommand]
     private void ToggleAccPop()
     {
         IsAccPopOpen = !IsAccPopOpen;
+        // 悬停信息卡和点出来的列表不同时在场：头像正悬着的时候点头，这张卡先让位。
+        IsAccountInfoOpen = false;
         IsInstPopOpen = false;
     }
 
@@ -1144,6 +1162,7 @@ public partial class MainWindowViewModel : ViewModelBase
     private void CloseAllPopovers()
     {
         IsAccPopOpen = false;
+        IsAccountInfoOpen = false;
         IsInstPopOpen = false;
         IsDlPopOpen = false;
         IsLoaderPopOpen = false;

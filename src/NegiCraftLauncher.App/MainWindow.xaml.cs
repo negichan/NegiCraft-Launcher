@@ -114,6 +114,18 @@ public partial class MainWindow : Window
         };
         _volumeHoverTimer.Tick += (_, _) => CheckVolumeHover();
 
+        _accountHoverTimer = new DispatcherTimer(DispatcherPriority.Background)
+        {
+            Interval = TimeSpan.FromMilliseconds(AccountHoverPollMs),
+        };
+        _accountHoverTimer.Tick += (_, _) => CheckAccountHover();
+
+        _accountInfoDelayTimer = new DispatcherTimer(DispatcherPriority.Background)
+        {
+            Interval = TimeSpan.FromMilliseconds(AccountInfoOpenDelayMs),
+        };
+        _accountInfoDelayTimer.Tick += (_, _) => ShowAccountInfo();
+
         // 首帧就要定色，不能等第一个 tick —— 否则窗口会先闪一下错色的图标。
         Loaded += (_, _) => SyncToneSampling();
 
@@ -909,6 +921,65 @@ public partial class MainWindow : Window
 
         _volumeHoverTimer.Stop();
         _vm.IsVolumePopOpen = false;
+    }
+
+    // ==========================================================
+    // 账户信息卡的开合（悬停侧栏底部头像）
+    // ==========================================================
+
+    /// <summary>
+    /// 悬停头像弹出的账户信息卡，收合跟音量浮层同一套办法：轮询 <c>IsMouseOver</c>，
+    /// 不只认 MouseEnter / MouseLeave。指针从头像横移到卡片途中会先离开按钮、再落进卡片，
+    /// 只认事件的话卡会在半路被收掉 —— 音量浮层踩过这个坑。
+    /// <para>间隔 140ms：移开最多等这么久就收。180ms 那版收得明显有点黏。</para>
+    /// </summary>
+    private readonly DispatcherTimer _accountHoverTimer;
+
+    /// <summary>
+    /// 打开前的犹豫期。鼠标扫过侧边栏不该一路点亮卡片，停稳 130ms 才弹 —— 260ms 那版
+    /// 被嫌"出来得慢"，压到这个量级还拦得住横扫，又不至于让人等。指针已经移进卡片
+    /// （OnAccountInfoPanelMouseEnter）就取消它，立刻显示。
+    /// </summary>
+    private readonly DispatcherTimer _accountInfoDelayTimer;
+
+    private const int AccountHoverPollMs = 140;
+    private const int AccountInfoOpenDelayMs = 130;
+
+    private void OnAccountAvatarMouseEnter(object sender, MouseEventArgs e)
+    {
+        // 账户列表开着就别弹：两层浮层叠在一起只会互相打架。
+        if (_vm is null || _vm.IsAccPopOpen || _vm.IsAccountInfoOpen) return;
+        _accountInfoDelayTimer.Stop();
+        _accountInfoDelayTimer.Start();
+    }
+
+    private void OnAccountInfoPanelMouseEnter(object sender, MouseEventArgs e)
+    {
+        // 指针已经落在卡片上：等不及了，立刻显示并把收合交给轮询。
+        _accountInfoDelayTimer.Stop();
+        ShowAccountInfo();
+    }
+
+    private void ShowAccountInfo()
+    {
+        _accountInfoDelayTimer.Stop();
+        if (_vm is null || _vm.IsAccPopOpen) return;
+        _vm.IsAccountInfoOpen = true;
+        _accountHoverTimer.Start();
+    }
+
+    private void CheckAccountHover()
+    {
+        if (_vm is null || !_vm.IsAccountInfoOpen)
+        {
+            _accountHoverTimer.Stop();
+            return;
+        }
+
+        if (AccountAvatar.IsMouseOver || AccountInfoPanel.IsMouseOver) return;
+
+        _accountHoverTimer.Stop();
+        _vm.IsAccountInfoOpen = false;
     }
 
     /// <summary>

@@ -309,6 +309,44 @@
             </Style.Triggers>
         </Style>
 
+        <!-- 账户信息卡（悬停侧栏底部头像弹出）。跟音量浮层同一套做法：淡入 + 位移，
+             命中从一开始就开着，收合交给 MainWindow 里的 IsMouseOver 轮询。
+             两点区别：绑的是 IsAccountInfoOpen，位移走 X 而不是 Y —— 它从侧栏右边
+             飞出来，横向滑更像"从头像那儿展开"。 -->
+        <Style x:Key="AccInfoPopStyle" TargetType="{x:Type Border}">
+            <Setter Property="Opacity" Value="0" />
+            <Setter Property="IsHitTestVisible" Value="False" />
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding IsAccountInfoOpen}" Value="True">
+                    <Setter Property="IsHitTestVisible" Value="True" />
+                    <DataTrigger.EnterActions>
+                        <BeginStoryboard>
+                            <Storyboard>
+                                <DoubleAnimation Storyboard.TargetProperty="Opacity"
+                                                 To="1" Duration="0:0:0.1" />
+                                <DoubleAnimation Storyboard.TargetProperty="(UIElement.RenderTransform).(TranslateTransform.X)"
+                                                 To="0" Duration="0:0:0.14">
+                                    <DoubleAnimation.EasingFunction>
+                                        <CubicEase EasingMode="EaseOut" />
+                                    </DoubleAnimation.EasingFunction>
+                                </DoubleAnimation>
+                            </Storyboard>
+                        </BeginStoryboard>
+                    </DataTrigger.EnterActions>
+                    <DataTrigger.ExitActions>
+                        <BeginStoryboard>
+                            <Storyboard>
+                                <DoubleAnimation Storyboard.TargetProperty="Opacity"
+                                                 To="0" Duration="0:0:0.1" />
+                                <DoubleAnimation Storyboard.TargetProperty="(UIElement.RenderTransform).(TranslateTransform.X)"
+                                                 To="-8" Duration="0:0:0.1" />
+                            </Storyboard>
+                        </BeginStoryboard>
+                    </DataTrigger.ExitActions>
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
+
         <!-- 页面仅在过渡期间缓存；结束后恢复文字的正常渲染。 -->
         <Style x:Key="PageAnimStyle" TargetType="{x:Type Grid}">
             <Setter Property="controls:PageTransition.Enabled" Value="True" />
@@ -1720,6 +1758,8 @@
                     </Button>
 
                     <!-- 底部导航：账户头像 -->
+        <!-- ⚠️ ToolTip 摘掉了：悬停时出的是下面那张账户信息卡（名称 + 登录方式），
+             系统那个浅色小提示会跟它抢镜头。 -->
                     <Button x:Name="AccountAvatar"
                             Grid.Row="3"
                             Width="42" Height="42"
@@ -1730,7 +1770,7 @@
                             Margin="0,6,0,0"
                             Cursor="Hand"
                             Command="{Binding ToggleAccPopCommand}"
-                            ToolTip="账户"
+                            MouseEnter="OnAccountAvatarMouseEnter"
                             HorizontalAlignment="Center"
                             HorizontalContentAlignment="Center"
                             VerticalContentAlignment="Center">
@@ -3059,6 +3099,42 @@
             <!-- ========================================== -->
             <!-- 7. 弹层                                      -->
             <!-- ========================================== -->
+            <!-- 7.5 账户信息卡：悬停侧栏底部头像弹出，只报信息（名称 + 登录方式）；
+                   点头像照旧开账户列表，两件事互斥（见 MainWindowViewModel.ToggleAccPop）。
+                   ⚠️ 外层这块透明矩形从 x=64 起（头像右缘在 63）：头像与卡片之间那 17px
+                     缝隙必须算进命中区 —— 指针横移途中两边都不算"悬停"，140ms 的轮询
+                     正好会在这段路里把卡关掉，和音量浮层当初那个"鼠标放不过去"是同一个坑。
+                     内层 Margin="16" 把卡片本体推到 x=80，于是卡片净宽 240。
+                   ⚠️ ZIndex 44 压在弹层遮罩（45）之下：点开账户列表时这张卡自然被遮住，
+                     不用再单独写一套互斥动画。 -->
+            <Border x:Name="AccountInfoPanel"
+                    HorizontalAlignment="Left" VerticalAlignment="Bottom"
+                    Margin="64,0,0,18" Width="256"
+                    Background="Transparent"
+                    Style="{StaticResource AccInfoPopStyle}"
+                    Panel.ZIndex="44"
+                    MouseEnter="OnAccountInfoPanelMouseEnter">
+                <Border.RenderTransform>
+                    <TranslateTransform X="-8" />
+                </Border.RenderTransform>
+                <Border Background="#111114" BorderBrush="#26262b" BorderThickness="1"
+                        CornerRadius="12" Padding="12,10" Margin="16,0,0,0"
+                        Effect="{StaticResource ShadowLg}">
+                    <neg:NegiGrid Columns="Auto *">
+                        <Border Grid.Column="0" Width="34" Height="34" CornerRadius="9"
+                                ClipToBounds="True" VerticalAlignment="Center">
+                            <Image Source="{Binding AvatarBitmap, Converter={StaticResource PixelsToBitmap}}"
+                                   Width="34" Height="34" RenderOptions.BitmapScalingMode="NearestNeighbor" />
+                        </Border>
+                        <neg:NegiStackPanel Grid.Column="1" Margin="10,0,0,0" VerticalAlignment="Center" Spacing="1">
+                            <TextBlock Text="{Binding AccountInfoName}" FontWeight="Bold" FontSize="13"
+                                       Foreground="#fafafa" TextTrimming="CharacterEllipsis" />
+                            <TextBlock Text="{Binding AccountInfoType}" FontSize="12" Foreground="#a1a1aa" />
+                        </neg:NegiStackPanel>
+                    </neg:NegiGrid>
+                </Border>
+            </Border>
+
             <!-- #accPop：left 84 / bottom 12 / 宽 280 -->
             <Grid HorizontalAlignment="Left" VerticalAlignment="Bottom"
                     Margin="84,0,0,12" Width="280"
