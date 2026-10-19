@@ -18,6 +18,18 @@ recorded press position to trigger a drag without moving the user's cursor.
 Settings ownership, topmost synchronization, and save/cancel tests are outside its scope.
 Avalonia mouse bindings are not exercised by this WPF suite.
 
+GPU texture checks cover transparent, translucent, and opaque overlays on classic and
+slim skins, with jointed and subdivided meshes. They check bilinear samples along face
+edges for atlas bleed, verify continuous UVs between adjacent strips, and ensure that the
+overlay atlas contains no base-layer pixels. Empty overlay faces must be absent from the
+GPU mesh, while even a single texel with alpha 1 must survive. Rendered comparisons cover
+three sizes and combinations of head pitch/yaw, including looking down and to the right.
+Run just these checks without opening test windows:
+
+```powershell
+dotnet run --project tests/WindowsRegression -c Release -- --pet-texture-only
+```
+
 The movement checks are not keyboard-to-display latency measurements. Check fast real A/D + Space input, animated popover clicks, and multi-monitor DPI transitions before merging the performance PR.
 
 Button checks use the real theme template and assert a stable hit area, continuous
