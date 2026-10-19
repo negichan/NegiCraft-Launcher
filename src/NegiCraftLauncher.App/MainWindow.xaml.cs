@@ -11,6 +11,7 @@ using System.Windows.Interop;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Threading;
+using NegiCraftLauncher.App.Controls;
 using NegiCraftLauncher.Pet;
 using NegiCraftLauncher.Raster;
 using NegiCraftLauncher.ViewModels;
@@ -108,23 +109,7 @@ public partial class MainWindow : Window
         IsVisibleChanged += (_, _) => SyncToneSampling();
         StateChanged += (_, _) => SyncToneSampling();
 
-        _volumeHoverTimer = new DispatcherTimer(DispatcherPriority.Background)
-        {
-            Interval = TimeSpan.FromMilliseconds(VolumeHoverPollMs),
-        };
-        _volumeHoverTimer.Tick += (_, _) => CheckVolumeHover();
-
-        _accountHoverTimer = new DispatcherTimer(DispatcherPriority.Background)
-        {
-            Interval = TimeSpan.FromMilliseconds(AccountHoverPollMs),
-        };
-        _accountHoverTimer.Tick += (_, _) => CheckAccountHover();
-
-        _accountInfoDelayTimer = new DispatcherTimer(DispatcherPriority.Background)
-        {
-            Interval = TimeSpan.FromMilliseconds(AccountInfoOpenDelayMs),
-        };
-        _accountInfoDelayTimer.Tick += (_, _) => ShowAccountInfo();
+        // 悬停浮层的开合时序不在这里：见 Controls/HoverReveal.cs。
 
         // 首帧就要定色，不能等第一个 tick —— 否则窗口会先闪一下错色的图标。
         Loaded += (_, _) => SyncToneSampling();
@@ -383,7 +368,7 @@ public partial class MainWindow : Window
         // 不 Close 掉 MediaPlayer 会留一个解码线程不放。
         _videoBackground.Dispose();
         _bgToneTimer.Stop();
-        _volumeHoverTimer.Stop();
+        HoverReveal.SetSuspended(VolumePanel, true);
 
         base.OnClosing(e);
     }
@@ -751,33 +736,8 @@ public partial class MainWindow : Window
     // 音量浮层的开合
     // ==========================================================
 
-    /// <summary>
-    /// 浮层的收合看门狗。
-    ///
-    /// <para><b>为什么不能只靠 MouseLeave</b>：浮层挂在喇叭正下方，指针从按钮往下走的瞬间
-    /// 会先离开按钮、再落进浮层，中间那一小段两边都不算"悬停"。只认事件的话浮层会在半路被关掉，
-    /// 用户看到的就是"鼠标放不过去"。所以这里改成轮询：每次 tick 直接问两个元素
-    /// <c>IsMouseOver</c>，只要还在任意一个里面就继续等。</para>
-    ///
-    /// <para>浮层那块死区靠 XAML 兜掉了（上边距贴住按钮下沿 + <c>Background="Transparent"</c>
-    /// 把整块矩形都变成可命中）。开合动画是 <c>VolumePopStyle</c> 自己的那套，全程可命中，
-    /// 所以这里不需要像 <c>Pop</c> 那样再配一段"动画飞行期间别判"的宽限期。</para>
-    /// </summary>
-    private readonly DispatcherTimer _volumeHoverTimer;
-
-    private const int VolumeHoverPollMs = 180;
-
-    private void OnVideoSoundMouseEnter(object sender, MouseEventArgs e) => ShowVolumePanel();
-
-    private void OnVolumePanelMouseEnter(object sender, MouseEventArgs e) => ShowVolumePanel();
-
-    private void ShowVolumePanel()
-    {
-        if (_vm is null) return;
-        RepositionVolumePanel();
-        _vm.IsVolumePopOpen = true;
-        _volumeHoverTimer.Start();
-    }
+    // 开合的时序（悬停犹豫期、收合轮询、暂停）全在 Controls/HoverReveal.cs，
+    // 这里只剩"开之前把横向位置算准"这一件浮层特有的事。
 
     /// <summary>
     /// 把浮层横向摆到"喇叭正下方"。
@@ -909,78 +869,12 @@ public partial class MainWindow : Window
         }
     }
 
-    private void CheckVolumeHover()
-    {
-        if (_vm is null || !_vm.IsVolumePopOpen)
-        {
-            _volumeHoverTimer.Stop();
-            return;
-        }
-
-        if (VideoSoundButton.IsMouseOver || VolumePanel.IsMouseOver) return;
-
-        _volumeHoverTimer.Stop();
-        _vm.IsVolumePopOpen = false;
-    }
-
     // ==========================================================
-    // 账户信息卡的开合（悬停侧栏底部头像）
+    // 账户信息卡（悬停侧栏底部头像）
     // ==========================================================
 
-    /// <summary>
-    /// 悬停头像弹出的账户信息卡，收合跟音量浮层同一套办法：轮询 <c>IsMouseOver</c>，
-    /// 不只认 MouseEnter / MouseLeave。指针从头像横移到卡片途中会先离开按钮、再落进卡片，
-    /// 只认事件的话卡会在半路被收掉 —— 音量浮层踩过这个坑。
-    /// <para>间隔 140ms：移开最多等这么久就收。180ms 那版收得明显有点黏。</para>
-    /// </summary>
-    private readonly DispatcherTimer _accountHoverTimer;
-
-    /// <summary>
-    /// 打开前的犹豫期。鼠标扫过侧边栏不该一路点亮卡片，停稳 130ms 才弹 —— 260ms 那版
-    /// 被嫌"出来得慢"，压到这个量级还拦得住横扫，又不至于让人等。指针已经移进卡片
-    /// （OnAccountInfoPanelMouseEnter）就取消它，立刻显示。
-    /// </summary>
-    private readonly DispatcherTimer _accountInfoDelayTimer;
-
-    private const int AccountHoverPollMs = 140;
-    private const int AccountInfoOpenDelayMs = 130;
-
-    private void OnAccountAvatarMouseEnter(object sender, MouseEventArgs e)
-    {
-        // 账户列表开着就别弹：两层浮层叠在一起只会互相打架。
-        if (_vm is null || _vm.IsAccPopOpen || _vm.IsAccountInfoOpen) return;
-        _accountInfoDelayTimer.Stop();
-        _accountInfoDelayTimer.Start();
-    }
-
-    private void OnAccountInfoPanelMouseEnter(object sender, MouseEventArgs e)
-    {
-        // 指针已经落在卡片上：等不及了，立刻显示并把收合交给轮询。
-        _accountInfoDelayTimer.Stop();
-        ShowAccountInfo();
-    }
-
-    private void ShowAccountInfo()
-    {
-        _accountInfoDelayTimer.Stop();
-        if (_vm is null || _vm.IsAccPopOpen) return;
-        _vm.IsAccountInfoOpen = true;
-        _accountHoverTimer.Start();
-    }
-
-    private void CheckAccountHover()
-    {
-        if (_vm is null || !_vm.IsAccountInfoOpen)
-        {
-            _accountHoverTimer.Stop();
-            return;
-        }
-
-        if (AccountAvatar.IsMouseOver || AccountInfoPanel.IsMouseOver) return;
-
-        _accountHoverTimer.Stop();
-        _vm.IsAccountInfoOpen = false;
-    }
+    // 和音量浮层同一套开合时序，也一并搬到 Controls/HoverReveal.cs 了。
+    // 犹豫期 130ms / 收合轮询 140ms 这两个数字现在写在 XAML 的附加属性上。
 
     /// <summary>
     /// 播放器该不该在跑。
@@ -1472,7 +1366,7 @@ public partial class MainWindow : Window
         _dragPerfHold = true;
         _videoBackground.FreezeForDrag();
         _bgToneTimer.Stop();
-        _volumeHoverTimer.Stop();
+        HoverReveal.SetSuspended(VolumePanel, true);
 
         // 拖动中别去更新头的朝向：窗口的可视变换在移动过程中是旧的，而光标位置是新的，
         // 两者相减得到的偏移会让头先拧到一个错方向、下一帧再纠正 —— 看着就是"闪一下朝向"。
@@ -1490,7 +1384,7 @@ public partial class MainWindow : Window
         _dragPerfHold = false;
         SkinPreview.SuspendPointerLook = false;
         SyncToneSampling();
-        _volumeHoverTimer.Start();
+        HoverReveal.SetSuspended(VolumePanel, false);
 
         // 恢复播放也推到本轮渲染之后：松手那一帧不该还有别的事做。
         Dispatcher.BeginInvoke(_videoBackground.ResumeAfterDrag, DispatcherPriority.Background);
