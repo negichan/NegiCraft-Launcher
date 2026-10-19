@@ -39,13 +39,17 @@ public sealed class MotionTween
         _property = property;
     }
 
-    /// <summary>从当前显示值过渡到 <paramref name="to"/>。</summary>
+    /// <summary>
+    /// 从当前显示值过渡到 <paramref name="to"/>。
+    /// <paramref name="from"/> 给出时改从它起步（等价旧代码的 <c>DoubleAnimation.From</c>，
+    /// 用于"元素还没显示就先设起点"的场景，不必为了设起点去覆盖 LocalValue）。
+    /// </summary>
     public static MotionTween Start(
         DependencyObject target, DependencyProperty property, double to,
-        TimeSpan duration, KeySpline? curve = null, Action? completed = null)
+        TimeSpan duration, KeySpline? curve = null, Action? completed = null, double? from = null)
     {
         var tween = new MotionTween(target, property);
-        tween.Run([(duration, to)], curve, completed);
+        tween.Run([(duration, to)], curve, completed, from);
         return tween;
     }
 
@@ -55,10 +59,11 @@ public sealed class MotionTween
     /// </summary>
     public static MotionTween Keyframes(
         DependencyObject target, DependencyProperty property,
-        IReadOnlyList<(TimeSpan At, double Value)> frames, KeySpline? curve = null, Action? completed = null)
+        IReadOnlyList<(TimeSpan At, double Value)> frames, KeySpline? curve = null,
+        Action? completed = null, double? from = null)
     {
         var tween = new MotionTween(target, property);
-        tween.Run(frames, curve, completed);
+        tween.Run(frames, curve, completed, from);
         return tween;
     }
 
@@ -69,21 +74,29 @@ public sealed class MotionTween
     /// <summary>
     /// 取消：把属性钉在当前显示值上（不是跳回起点）并释放时钟。
     /// 元素被重置/隐藏时调它，避免残留时钟继续驱动属性。
+    /// 过渡已经结束（自己收尾过）时是无操作。
     /// </summary>
     public void Cancel()
     {
         _version++;
+        if (!_counted)
+        {
+            Unregister();
+            return;
+        }
         var current = (double)_target.GetValue(_property);
         Settle(current);
         Unregister();
         EndCount();
     }
 
-    private void Run(IReadOnlyList<(TimeSpan At, double Value)> frames, KeySpline? curve, Action? completed)
+    private void Run(
+        IReadOnlyList<(TimeSpan At, double Value)> frames, KeySpline? curve,
+        Action? completed, double? from = null)
     {
         var version = Replace();
-        var current = (double)_target.GetValue(_property);
-        var last = frames.Count > 0 ? frames[^1].Value : current;
+        var start = from ?? (double)_target.GetValue(_property);
+        var last = frames.Count > 0 ? frames[^1].Value : start;
         var total = frames.Count > 0 ? frames[^1].At : TimeSpan.Zero;
 
         if (!MotionEngine.Enabled || frames.Count == 0 || total <= TimeSpan.Zero)
@@ -94,10 +107,10 @@ public sealed class MotionTween
             return;
         }
 
-        _target.SetValue(_property, current);
+        _target.SetValue(_property, start);
 
         var animation = new DoubleAnimationUsingKeyFrames { FillBehavior = FillBehavior.Stop };
-        animation.KeyFrames.Add(new LinearDoubleKeyFrame(current, KeyTime.FromTimeSpan(TimeSpan.Zero)));
+        animation.KeyFrames.Add(new LinearDoubleKeyFrame(start, KeyTime.FromTimeSpan(TimeSpan.Zero)));
         foreach (var (at, value) in frames)
         {
             animation.KeyFrames.Add(new SplineDoubleKeyFrame(

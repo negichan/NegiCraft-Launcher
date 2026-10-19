@@ -90,6 +90,9 @@ internal static class UiPerformance
                     ("home", nameof(MainWindowViewModel.IsPackImportOpen)),
                     ("home", nameof(MainWindowViewModel.IsAddFolderOpen)),
                     ("home", nameof(MainWindowViewModel.IsClosePromptOpen)),
+                    // 两个悬停提示条走 Pop 的 Tip 模式（无锚定定位、无缩放），单独覆盖一遍
+                    ("home", nameof(MainWindowViewModel.IsVolumePopOpen)),
+                    ("home", nameof(MainWindowViewModel.IsAccountInfoOpen)),
                 })
                 {
                     vm.GoCommand.Execute(page);

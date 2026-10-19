@@ -270,83 +270,6 @@
             <Setter Property="IsHitTestVisible" Value="False" />
         </Style>
 
-        <!-- 音量浮层只做淡入和位移，不用菜单的缩放回弹。
-             淡入 130ms + 从按钮底下滑出 6px（180ms ease-out），关掉时 100ms 原路收回。
-             命中从一开始就可用，悬停轮询不需要等待动画结束。
-             ⚠️ `RenderTransform` 写在元素自己身上而不是这个 Style 里：样式 setter 里的
-               `Freezable` 有被冻结的风险，冻住就动不了了。 -->
-        <Style x:Key="VolumePopStyle" TargetType="{x:Type Border}">
-            <Setter Property="Opacity" Value="0" />
-            <Setter Property="IsHitTestVisible" Value="False" />
-            <Style.Triggers>
-                <DataTrigger Binding="{Binding IsVolumePopOpen}" Value="True">
-                    <Setter Property="IsHitTestVisible" Value="True" />
-                    <DataTrigger.EnterActions>
-                        <BeginStoryboard>
-                            <Storyboard>
-                                <DoubleAnimation Storyboard.TargetProperty="Opacity"
-                                                 To="1" Duration="0:0:0.13" />
-                                <DoubleAnimation Storyboard.TargetProperty="(UIElement.RenderTransform).(TranslateTransform.Y)"
-                                                 To="0" Duration="0:0:0.18">
-                                    <DoubleAnimation.EasingFunction>
-                                        <CubicEase EasingMode="EaseOut" />
-                                    </DoubleAnimation.EasingFunction>
-                                </DoubleAnimation>
-                            </Storyboard>
-                        </BeginStoryboard>
-                    </DataTrigger.EnterActions>
-                    <DataTrigger.ExitActions>
-                        <BeginStoryboard>
-                            <Storyboard>
-                                <DoubleAnimation Storyboard.TargetProperty="Opacity"
-                                                 To="0" Duration="0:0:0.1" />
-                                <DoubleAnimation Storyboard.TargetProperty="(UIElement.RenderTransform).(TranslateTransform.Y)"
-                                                 To="-6" Duration="0:0:0.1" />
-                            </Storyboard>
-                        </BeginStoryboard>
-                    </DataTrigger.ExitActions>
-                </DataTrigger>
-            </Style.Triggers>
-        </Style>
-
-        <!-- 账户信息卡（悬停侧栏底部头像弹出）。跟音量浮层同一套做法：淡入 + 位移，
-             命中从一开始就开着，收合交给 MainWindow 里的 IsMouseOver 轮询。
-             两点区别：绑的是 IsAccountInfoOpen，位移走 X 而不是 Y —— 它从侧栏右边
-             飞出来，横向滑更像"从头像那儿展开"。 -->
-        <Style x:Key="AccInfoPopStyle" TargetType="{x:Type Border}">
-            <Setter Property="Opacity" Value="0" />
-            <Setter Property="IsHitTestVisible" Value="False" />
-            <Style.Triggers>
-                <DataTrigger Binding="{Binding IsAccountInfoOpen}" Value="True">
-                    <Setter Property="IsHitTestVisible" Value="True" />
-                    <DataTrigger.EnterActions>
-                        <BeginStoryboard>
-                            <Storyboard>
-                                <DoubleAnimation Storyboard.TargetProperty="Opacity"
-                                                 To="1" Duration="0:0:0.1" />
-                                <DoubleAnimation Storyboard.TargetProperty="(UIElement.RenderTransform).(TranslateTransform.X)"
-                                                 To="0" Duration="0:0:0.14">
-                                    <DoubleAnimation.EasingFunction>
-                                        <CubicEase EasingMode="EaseOut" />
-                                    </DoubleAnimation.EasingFunction>
-                                </DoubleAnimation>
-                            </Storyboard>
-                        </BeginStoryboard>
-                    </DataTrigger.EnterActions>
-                    <DataTrigger.ExitActions>
-                        <BeginStoryboard>
-                            <Storyboard>
-                                <DoubleAnimation Storyboard.TargetProperty="Opacity"
-                                                 To="0" Duration="0:0:0.1" />
-                                <DoubleAnimation Storyboard.TargetProperty="(UIElement.RenderTransform).(TranslateTransform.X)"
-                                                 To="-8" Duration="0:0:0.1" />
-                            </Storyboard>
-                        </BeginStoryboard>
-                    </DataTrigger.ExitActions>
-                </DataTrigger>
-            </Style.Triggers>
-        </Style>
-
         <!-- 页面仅在过渡期间缓存；结束后恢复文字的正常渲染。 -->
         <Style x:Key="PageAnimStyle" TargetType="{x:Type Grid}">
             <Setter Property="controls:PageTransition.Enabled" Value="True" />
@@ -1579,18 +1502,20 @@
                    否则指针从按钮往下挪时要穿过一段谁都不算"悬停"的死区，
                    收合看门狗正好在那 180ms 里轮询一次就会把浮层关掉。
                  ⚠️ ZIndex 46：画中画（BgShot，45）就在右上角，浮层必须压在它上面。
-                 ⚠️ 开合动画**不用 `Pop`**，用资源里 VolumePopStyle 那套自己的。 -->
+                 ⚠️ 开合走 `Pop` 的提示条模式（Tip）：淡入 + 6px 归位，开合时长
+                   /降级/抢占策略统一由动画层处理，这里只管布局。
+                   静止态（透明度 0 + 不吃命中）必须写在元素自己身上 —— `Pop`
+                   收合后是回到"属性当前值"，不是把属性清空。 -->
             <Border x:Name="VolumePanel"
                     HorizontalAlignment="Right" VerticalAlignment="Top"
                     Width="48"
                     Margin="0,44,0,0"
                     Background="Transparent"
-                    Style="{StaticResource VolumePopStyle}"
+                    Opacity="0" IsHitTestVisible="False"
+                    pop:Pop.Tip="True"
+                    pop:Pop.IsOpen="{Binding IsVolumePopOpen}"
                     Panel.ZIndex="46"
                     MouseEnter="OnVolumePanelMouseEnter">
-                <Border.RenderTransform>
-                    <TranslateTransform Y="-6" />
-                </Border.RenderTransform>
                 <neg:NegiStackPanel Spacing="0" HorizontalAlignment="Center">
                     <!-- 指向喇叭的小尖角。和面板同色，接缝在面板上边的直线段上（圆角在两侧，碰不到）。 -->
                     <Polygon Points="0,7 7,0 14,7" Fill="#111114" HorizontalAlignment="Center" />
@@ -3106,17 +3031,18 @@
                      正好会在这段路里把卡关掉，和音量浮层当初那个"鼠标放不过去"是同一个坑。
                      内层 Margin="16" 把卡片本体推到 x=80，于是卡片净宽 240。
                    ⚠️ ZIndex 44 压在弹层遮罩（45）之下：点开账户列表时这张卡自然被遮住，
-                     不用再单独写一套互斥动画。 -->
+                     不用再单独写一套互斥动画。
+                   ⚠️ 开合同音量浮层，走 `Pop` 的 Tip 模式，只是位移方向改成 X
+                     （它从侧栏右边飞出来，横向滑更像"从头像那儿展开"）。 -->
             <Border x:Name="AccountInfoPanel"
                     HorizontalAlignment="Left" VerticalAlignment="Bottom"
                     Margin="64,0,0,18" Width="256"
                     Background="Transparent"
-                    Style="{StaticResource AccInfoPopStyle}"
+                    Opacity="0" IsHitTestVisible="False"
+                    pop:Pop.Tip="True" pop:Pop.TipAxis="X"
+                    pop:Pop.IsOpen="{Binding IsAccountInfoOpen}"
                     Panel.ZIndex="44"
                     MouseEnter="OnAccountInfoPanelMouseEnter">
-                <Border.RenderTransform>
-                    <TranslateTransform X="-8" />
-                </Border.RenderTransform>
                 <Border Background="#111114" BorderBrush="#26262b" BorderThickness="1"
                         CornerRadius="12" Padding="12,10" Margin="16,0,0,0"
                         Effect="{StaticResource ShadowLg}">

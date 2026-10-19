@@ -7,6 +7,7 @@ using System.Windows.Media.Imaging;
 using System.Windows.Threading;
 using NegiCraftLauncher.App.Controls;
 using NegiCraftLauncher.App.Services;
+using NegiCraftLauncher.Theme;
 
 namespace NegiCraftLauncher.App;
 
@@ -123,12 +124,12 @@ public partial class MainWindow
             if (_settingsVersion != version || IsSettingsOpen) return;
             SettingsScrim.Opacity = 0;
             SettingsScrim.BeginAnimation(UIElement.OpacityProperty,
-                new DoubleAnimation(1, 0, TimeSpan.FromMilliseconds(Pop.SlideCloseDurationMs))
+                new DoubleAnimation(1, 0, Motion.Slow)
                 {
                     EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut },
                     FillBehavior = FillBehavior.Stop,
                 });
-            await Task.Delay(Pop.SlideCloseDurationMs + 20);
+            await Task.Delay(Motion.Slow + TimeSpan.FromMilliseconds(20));
         }
         if (_settingsVersion != version || IsSettingsOpen) return;
 

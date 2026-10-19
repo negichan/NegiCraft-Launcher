@@ -1,7 +1,7 @@
 using System.Runtime.CompilerServices;
 using System.Windows;
 using System.Windows.Media;
-using System.Windows.Media.Animation;
+using NegiCraftLauncher.Theme;
 
 namespace NegiCraftLauncher.App.Controls;
 
@@ -38,7 +38,7 @@ public static class PageTransition
         private readonly BitmapCache _cache = new();
         private CacheMode? _priorCache;
         private bool _active;
-        private int _version;
+        private MotionTween? _tweenFade, _tweenMove;
 
         public Runner(FrameworkElement target)
         {
@@ -57,7 +57,7 @@ public static class PageTransition
         {
             if (!_target.IsLoaded || !_target.IsVisible || !GetEnabled(_target)) return;
             Reset();
-            if (!SystemParameters.ClientAreaAnimation || GetSuppressEnterAnimation(_target)) return;
+            if (!MotionEngine.Enabled || GetSuppressEnterAnimation(_target)) return;
 
             // A parent transition already moves this content; avoid invalidating its cache.
             for (var parent = VisualTreeHelper.GetParent(_target); parent is not null;
@@ -68,35 +68,21 @@ public static class PageTransition
                     return;
             }
 
-            var version = ++_version;
             _active = true;
             _priorCache = _target.CacheMode;
             _target.SetCurrentValue(UIElement.CacheModeProperty, _cache);
-            _position.Y = 0;
-            var ease = new CubicEase { EasingMode = EasingMode.EaseOut };
-            var fade = new DoubleAnimation(0, _target.Opacity, TimeSpan.FromMilliseconds(160))
-            {
-                EasingFunction = ease,
-                FillBehavior = FillBehavior.Stop,
-            };
-            var move = new DoubleAnimation(6, 0, TimeSpan.FromMilliseconds(190))
-            {
-                EasingFunction = ease,
-                FillBehavior = FillBehavior.Stop,
-            };
-            move.Completed += (_, _) =>
-            {
-                if (_version == version) Reset();
-            };
-            _target.BeginAnimation(UIElement.OpacityProperty, fade, HandoffBehavior.SnapshotAndReplace);
-            _position.BeginAnimation(TranslateTransform.YProperty, move, HandoffBehavior.SnapshotAndReplace);
+            // 起点交给 from 参数，不去写 Opacity/TranslateY 的 LocalValue —— 否则会踩掉样式或绑定给的值。
+            _tweenFade = MotionTween.Start(
+                _target, UIElement.OpacityProperty, _target.Opacity, Motion.Base, Motion.Enter, from: 0);
+            _tweenMove = MotionTween.Start(
+                _position, TranslateTransform.YProperty, 0, Motion.Slow, Motion.Enter, Reset, from: 6);
         }
 
         public void Reset()
         {
-            ++_version;
-            _target.BeginAnimation(UIElement.OpacityProperty, null);
-            _position.BeginAnimation(TranslateTransform.YProperty, null);
+            _tweenFade?.Cancel();
+            _tweenMove?.Cancel();
+            _tweenFade = _tweenMove = null;
             _position.Y = 0;
             if (_active)
             {
