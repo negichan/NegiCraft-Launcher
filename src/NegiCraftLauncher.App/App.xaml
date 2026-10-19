@@ -19,12 +19,18 @@
 
             <conv:BoolToVisibilityConverter x:Key="BoolToVis" />
 
-            <!-- BoxShadow 的等价物。x:Shared="False" 是必须的：Freezable 不能被两个元素共用。 -->
+            <!-- BoxShadow 的等价物。x:Shared="False" 是必须的：Freezable 不能被两个元素共用。
+                 ⚠️ 用在哪里，那层就必须挂 BitmapCache（见 MainWindow 的 PopoverStyle）：
+                 位图 Effect 每帧都要重新分配中间渲染目标，而弹层一直挂在可视树里（关着也是），
+                 不缓存的话页面切换会从 55fps 掉到 37fps。
+                 ⚠️ BlurRadius 也别往 80 加回来：开合动画动的是宿主的不透明度，缓存会随每帧
+                 失效，等于每帧重画一整圈 80px 光晕 —— 实测弹层场景反而从 53fps 掉到 44fps。
+                 24 在 2× DPI 下实际像素半径 48，视觉上已经够"浮起来"。 -->
             <DropShadowEffect x:Key="ShadowLg" x:Shared="False"
-                              BlurRadius="80" ShadowDepth="30" Direction="270"
+                              BlurRadius="24" ShadowDepth="12" Direction="270"
                               Color="#000000" Opacity="0.80" RenderingBias="Performance" />
             <DropShadowEffect x:Key="ShadowToast" x:Shared="False"
-                              BlurRadius="50" ShadowDepth="20" Direction="270"
+                              BlurRadius="20" ShadowDepth="10" Direction="270"
                               Color="#000000" Opacity="0.87" RenderingBias="Performance" />
 
             <!-- 主窗口那圈 shadow-lg 的参数（宽的那一层，见 MainWindow 里的 ShellShadowWide）：
