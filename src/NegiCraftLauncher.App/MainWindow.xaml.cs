@@ -101,13 +101,25 @@ public partial class MainWindow : Window
         StateChanged += (_, _) => SyncBackgroundTuningVisibility();
         LocationChanged += (_, _) => FollowMainWindowIfNotPlaced();
 
+        // 只有视频壁纸才需要这个轮询（静态背景走 InvalidateWindowButtonTone 按需采）。
+        // 2s 一次而不是 600ms：单次采样实测 43ms（≈丢 2~3 帧），因为它要让 WPF 把整窗
+        // 背景重新栅格化一遍 —— VisualBrush 不会只渲染 Viewbox 那一小块，采样区写多小
+        // 都一样。视频壁纸的取色本来就是"看起来差不多就行"，没必要为此每秒抖两次。
         _bgToneTimer = new DispatcherTimer(DispatcherPriority.Background)
         {
-            Interval = TimeSpan.FromMilliseconds(600),
+            Interval = TimeSpan.FromMilliseconds(2000),
         };
         _bgToneTimer.Tick += (_, _) => UpdateWindowButtonTone();
         IsVisibleChanged += (_, _) => SyncToneSampling();
         StateChanged += (_, _) => SyncToneSampling();
+        // 窗口在后台时没人看那几个图标，别让那 43ms 按时打断（视频还照样在放）。
+        // 切回来时先标脏再恢复轮询：在后台这段时间背景可能已经变了。
+        Deactivated += (_, _) => SyncToneSampling();
+        Activated += (_, _) =>
+        {
+            _bgToneDirty = true;
+            SyncToneSampling();
+        };
 
         // 悬停浮层的开合时序不在这里：见 Controls/HoverReveal.cs。
 
@@ -585,7 +597,7 @@ public partial class MainWindow : Window
     }
 
     private bool CanSampleTone => IsLoaded && IsVisible && LauncherScene.IsVisible &&
-        WindowState != WindowState.Minimized && !_dragPerfHold;
+        WindowState != WindowState.Minimized && !_dragPerfHold && IsActive;
 
     private void SyncToneSampling()
     {
