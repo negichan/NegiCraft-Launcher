@@ -2932,6 +2932,14 @@ public partial class MainWindowViewModel : ViewModelBase
                 ExitApplicationRequested?.Invoke();
                 break;
             default:
+                // 桌宠没在跑就不必问：这个询问窗存在的唯一理由是"直接退出会连同桌宠一起结束"
+                // （弹窗文案原话），没有桌宠时那句话是空话 —— 直接退出即可。
+                // 桌宠在跑才让用户在「收进托盘 / 直接退出」之间选。
+                if (!IsPetActive)
+                {
+                    ExitApplicationRequested?.Invoke();
+                    break;
+                }
                 ClosePromptRemember = false;
                 IsClosePromptOpen = true;
                 break;
