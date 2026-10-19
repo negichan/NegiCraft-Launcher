@@ -37,7 +37,9 @@ public static class ButtonMotion
         private readonly FrameworkElement _target;
         private readonly ScaleTransform _scale = new();
         private readonly TranslateTransform _position = new();
-        private int _version;
+        private MotionTween? _scaleX;
+        private MotionTween? _scaleY;
+        private MotionTween? _offsetY;
 
         public Runner(FrameworkElement target)
         {
@@ -67,43 +69,17 @@ public static class ButtonMotion
             var hovered = GetHovered(_target);
             var scale = pressed ? 0.965 : hovered ? 1.012 : 1;
             var y = pressed ? 0.8 : hovered ? -0.5 : 0;
-            var milliseconds = pressed ? 60 : hovered ? 125 : 150;
-            var version = ++_version;
-            Animate(_scale, ScaleTransform.ScaleXProperty, scale, milliseconds, version);
-            Animate(_scale, ScaleTransform.ScaleYProperty, scale, milliseconds, version);
-            Animate(_position, TranslateTransform.YProperty, y, milliseconds, version);
-        }
-
-        private void Animate(Animatable target, DependencyProperty property, double value, int milliseconds, int version)
-        {
-            var current = (double)target.GetValue(property);
-            if (!SystemParameters.ClientAreaAnimation || Math.Abs(current - value) < 0.00001)
-            {
-                target.SetValue(property, value);
-                target.BeginAnimation(property, null);
-                return;
-            }
-            target.SetValue(property, current);
-            var animation = new DoubleAnimationUsingKeyFrames { FillBehavior = FillBehavior.Stop };
-            animation.KeyFrames.Add(new LinearDoubleKeyFrame(current, KeyTime.FromTimeSpan(TimeSpan.Zero)));
-            animation.KeyFrames.Add(new SplineDoubleKeyFrame(value,
-                KeyTime.FromTimeSpan(TimeSpan.FromMilliseconds(milliseconds)),
-                new KeySpline(0.2, 0.75, 0.25, 1)));
-            animation.Completed += (_, _) =>
-            {
-                if (_version != version) return;
-                target.SetValue(property, value);
-                target.BeginAnimation(property, null);
-            };
-            target.BeginAnimation(property, animation, HandoffBehavior.SnapshotAndReplace);
+            var duration = pressed ? Motion.Press : hovered ? Motion.Hover : Motion.Base;
+            _scaleX = MotionTween.Start(_scale, ScaleTransform.ScaleXProperty, scale, duration, Motion.Enter);
+            _scaleY = MotionTween.Start(_scale, ScaleTransform.ScaleYProperty, scale, duration, Motion.Enter);
+            _offsetY = MotionTween.Start(_position, TranslateTransform.YProperty, y, duration, Motion.Enter);
         }
 
         public void Reset()
         {
-            ++_version;
-            _scale.BeginAnimation(ScaleTransform.ScaleXProperty, null);
-            _scale.BeginAnimation(ScaleTransform.ScaleYProperty, null);
-            _position.BeginAnimation(TranslateTransform.YProperty, null);
+            _scaleX?.Cancel();
+            _scaleY?.Cancel();
+            _offsetY?.Cancel();
             _scale.ScaleX = _scale.ScaleY = 1;
             _position.Y = 0;
         }
