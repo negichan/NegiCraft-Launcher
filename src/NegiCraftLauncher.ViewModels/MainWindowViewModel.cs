@@ -2306,7 +2306,7 @@ public partial class MainWindowViewModel : ViewModelBase
 
         // GetHashCode is randomised per process, so hash by hand to keep the icon stable.
         var hash = instance.Id.Aggregate(0, (acc, c) => acc * 31 + c);
-        return PixelArt.CreateBlock(BlockIcons[Math.Abs(hash) % BlockIcons.Length]);
+        return PixelArt.CreateBlockCube(BlockIcons[Math.Abs(hash) % BlockIcons.Length]);
     }
 
     private void OpenFolder(string path)
@@ -2615,7 +2615,7 @@ public partial class MainWindowViewModel : ViewModelBase
             var installed = new HashSet<string>(
                 _launcher.Instances.Instances.Select(i => i.VersionId), StringComparer.OrdinalIgnoreCase);
 
-            var icon = PixelArt.CreateBlock("grass");
+            var icon = PixelArt.CreateBlockCube("grass");
 
             _gameResources.Clear();
             foreach (var version in manifest.Versions.Where(v => v.IsRelease).Take(200))
@@ -2678,7 +2678,7 @@ public partial class MainWindowViewModel : ViewModelBase
 
             if (ct.IsCancellationRequested || CurrentResCategory != category) return;
 
-            var icon = PixelArt.CreateBlock(category switch
+            var icon = PixelArt.CreateBlockCube(category switch
             {
                 "mod" => "dirt",
                 "shader" => "log",
