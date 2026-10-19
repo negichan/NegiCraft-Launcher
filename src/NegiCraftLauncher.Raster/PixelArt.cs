@@ -23,6 +23,10 @@ public static class PixelArt
         new uint[] { 0xFF6B4F2A, 0xFF7A5C33, 0xFF5C4322, 0xFF8A6A3C },
     };
 
+    /// <summary>
+    /// 一块方块的<b>平铺纹理</b>（8x8）。直接当图标是一张方形贴图，
+    /// 现在只作为 <see cref="CreateBlockCube"/> 的源纹理用。
+    /// </summary>
     public static PixelBuffer CreateBlock(string type)
     {
         var bmp = new PixelBuffer(8, 8);
@@ -70,6 +74,83 @@ public static class PixelArt
         }
 
         return bmp;
+    }
+
+    /// <summary>
+    /// 等距立方体图标 —— PCL / HMCL 那种「一块方块摆在眼前」的样子，而不是一张平铺贴图。
+    ///
+    /// <para><b>几何</b>：2:1 等距投影，立方体正好吃满 size×size。四个关键点
+    /// <c>T(size/2,0) R(size,size/4) B(size/2,size/2) L(0,size/4)</c>，
+    /// 顶面是 T-R-B-L 那个菱形，左面从 L 往右下铺、右面从 B 往右上铺，各占一半高度。
+    /// 每个屏幕像素反解 (u,v) 再采纹理，比正向画三个平行四边形少一层边界接缝。</para>
+    ///
+    /// <para><b>明暗</b>：光源在左上，顶 1.0 / 左 0.78 / 右 0.62 —— 和 MC 的物品图标
+    /// 同一个方向感。这一层是「看着像方块」而不是「看着像贴纸」的关键，别去掉。</para>
+    ///
+    /// <para>纹理只有 8x8，铺到 16px 宽的一个面是 2 倍放大，正好是粗颗粒的像素风；
+    /// 想更细就改 <see cref="CreateBlock"/> 的尺寸，这里不用动。</para>
+    /// </summary>
+    public static PixelBuffer CreateBlockCube(string type, int size = 32)
+    {
+        var tex = CreateBlock(type);
+        var bmp = new PixelBuffer(size, size);
+        var ptr = bmp.Pixels;
+
+        double s = size;
+        var half = s / 2;
+        var quarter = s / 4;
+
+        for (var y = 0; y < size; y++)
+        {
+            for (var x = 0; x < size; x++)
+            {
+                // 取像素中心再反解，避免斜边整像素错位。
+                double px = x + 0.5, py = y + 0.5;
+                double u, v, shade;
+
+                // 顶面：u 沿「右下」，v 沿「左下」。
+                var topU = ((px - half) / half + py / quarter) / 2;
+                var topV = (py / quarter - (px - half) / half) / 2;
+                if (topU is >= 0 and <= 1 && topV is >= 0 and <= 1)
+                {
+                    u = topU;
+                    v = topV;
+                    shade = 1.0;
+                }
+                else if (px < half)
+                {
+                    // 左面：u 沿 +x 往下走，v 是纯垂直方向。
+                    u = px / half;
+                    v = (py - quarter - quarter * u) / half;
+                    shade = 0.78;
+                    if (u is < 0 or > 1 || v is < 0 or > 1) continue;
+                }
+                else
+                {
+                    // 右面：和左面镜像，u 从立方体的中脊往右走。
+                    u = (px - half) / half;
+                    v = (py - half + quarter * u) / half;
+                    shade = 0.62;
+                    if (u is < 0 or > 1 || v is < 0 or > 1) continue;
+                }
+
+                var tx = Math.Min(7, (int)(u * 8));
+                var ty = Math.Min(7, (int)(v * 8));
+                ptr[y * size + x] = Shade(tex.Pixels[ty * 8 + tx], shade);
+            }
+        }
+
+        return bmp;
+    }
+
+    /// <summary>按系数压暗 RGB，alpha 保持不变 —— 三个面靠这个拉开层次。</summary>
+    private static uint Shade(uint col, double k)
+    {
+        if (k >= 1.0) return col;
+        var r = (uint)(((col >> 16) & 0xFF) * k);
+        var g = (uint)(((col >> 8) & 0xFF) * k);
+        var b = (uint)((col & 0xFF) * k);
+        return (col & 0xFF000000u) | (r << 16) | (g << 8) | b;
     }
 
     public static PixelBuffer CreateBackground(bool dark)
