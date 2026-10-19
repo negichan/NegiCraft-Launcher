@@ -10,12 +10,22 @@ public sealed class SqueezeButton : Button
 {
     private const double SqueezedWidth = 1.48;
     private const double SqueezedHeight = 0.50;
-    private const double SqueezedTilt = -7;
+
+    /// <summary>
+    /// 按下倾斜角在 [-TiltRange, +TiltRange] 之间随机取，每次按压都不一样。
+    /// </summary>
+    private const double TiltRange = 7;
 
     private readonly ScaleTransform _scale = new();
     private readonly RotateTransform _tilt = new();
     private FrameworkElement? _visual;
     private int _motionVersion;
+
+    /// <summary>
+    /// 本次按压实际使用的倾斜角。松手回弹的第一帧要接这个值，
+    /// 不能重新随机 —— 否则抬手瞬间角度会跳变。
+    /// </summary>
+    private double _squeezedTilt;
 
     public SqueezeButton()
     {
@@ -49,9 +59,11 @@ public sealed class SqueezeButton : Button
         if (IsPressed)
         {
             var version = ++_motionVersion;
+            // [-TiltRange, +TiltRange] 闭区间均匀随机，每次按压换个方向倒。
+            _squeezedTilt = TiltRange * (2 * Random.Shared.NextDouble() - 1);
             AnimatePress(_scale, ScaleTransform.ScaleXProperty, SqueezedWidth, version);
             AnimatePress(_scale, ScaleTransform.ScaleYProperty, SqueezedHeight, version);
-            AnimatePress(_tilt, RotateTransform.AngleProperty, SqueezedTilt, version);
+            AnimatePress(_tilt, RotateTransform.AngleProperty, _squeezedTilt, version);
         }
         else
         {
@@ -93,7 +105,12 @@ public sealed class SqueezeButton : Button
         var version = ++_motionVersion;
         AnimateRelease(_scale, ScaleTransform.ScaleXProperty, version, SqueezedWidth, 0.76, 1.18, 0.94, 1);
         AnimateRelease(_scale, ScaleTransform.ScaleYProperty, version, SqueezedHeight, 1.42, 0.79, 1.10, 1);
-        AnimateRelease(_tilt, RotateTransform.AngleProperty, version, SqueezedTilt, 6.5, -3.0, 1.2, 0);
+        // 回弹过冲走按压的反方向：倾角固定 -7° 时曲线写死 +6.5 / -3 / +1.2；
+        // 现在左右随机，整条振荡要按方向镜像过去 —— 否则倒向右（正角）时过冲同向叠加，
+        // 回弹那一下会发肉。sign = 0（随机到 0 或键盘首触发）就不摆，直接回正。
+        var sign = Math.Sign(_squeezedTilt);
+        AnimateRelease(_tilt, RotateTransform.AngleProperty, version, _squeezedTilt,
+            -6.5 * sign, 3.0 * sign, -1.2 * sign, 0);
     }
 
     private void AnimateRelease(
