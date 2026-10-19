@@ -9,67 +9,79 @@ namespace NegiCraftLauncher.Raster;
 /// </summary>
 public static class PixelArt
 {
-    private static readonly uint[][] Pal =
-    {
-        // grass: ["#5b8f3a","#6aa84f","#4e7a32","#7cbd5a"]
-        new uint[] { 0xFF5B8F3A, 0xFF6AA84F, 0xFF4E7A32, 0xFF7CBD5A },
-        // stone: ["#7f7f7f","#8f8f8f","#6e6e6e","#9a9a9a"]
-        new uint[] { 0xFF7F7F7F, 0xFF8F8F8F, 0xFF6E6E6E, 0xFF9A9A9A },
-        // tnt: ["#c0392b","#e74c3c","#a93226","#d35445"]
-        new uint[] { 0xFFC0392B, 0xFFE74C3C, 0xFFA93226, 0xFFD35445 },
-        // dirt: ["#8b5a2b","#9b6a3b","#7a4a1f","#a87442"]
-        new uint[] { 0xFF8B5A2B, 0xFF9B6A3B, 0xFF7A4A1F, 0xFFA87442 },
-        // log: ["#6b4f2a","#7a5c33","#5c4322","#8a6a3c"]
-        new uint[] { 0xFF6B4F2A, 0xFF7A5C33, 0xFF5C4322, 0xFF8A6A3C },
-    };
+    // MC 的调色板（平原生物群系的草、泥土、石头、TNT、原木）。
+    // 这些值照真方块的平均色取，不是随手调的 —— 换成别的绿或棕，一眼就不像 MC 了。
+    private static readonly uint[] GrassPal = { 0xFF91BD59, 0xFF7FB84E, 0xFF9CCB63, 0xFF86B44F };
+    private static readonly uint[] DirtPal = { 0xFF866043, 0xFF79553A, 0xFF966F4F, 0xFF6E4A31 };
+    private static readonly uint[] StonePal = { 0xFF7F7F7F, 0xFF8A8A8A, 0xFF737373, 0xFF949494 };
+    private static readonly uint[] TntPal = { 0xFFDB5B3F, 0xFFE04F35, 0xFFC94C33, 0xFFD9674C };
+    private static readonly uint[] LogPal = { 0xFF6A5030, 0xFF8A6A3C, 0xFF5A4428, 0xFF9B7A48 };
 
     /// <summary>
-    /// 一块方块的<b>平铺纹理</b>（8x8）。直接当图标是一张方形贴图，
-    /// 现在只作为 <see cref="CreateBlockCube"/> 的源纹理用。
+    /// 一块方块的纹理（16x16 —— MC 的原生分辨率）。
+    ///
+    /// <para><b>顶面和侧面是两张不同的图</b>：grass 的顶面是纯草绿，侧面是「上面几行草
+    /// + 参差的草边 + 下面泥土」。三个面共用一张纹理的话，立方体的顶面会压着一条泥土色横边，
+    /// 一眼就假 —— 这一处是「像 MC 方块」和「像一张噪点贴图」的分界。</para>
     /// </summary>
-    public static PixelBuffer CreateBlock(string type)
+    private static PixelBuffer BlockTexture(string type, bool top)
     {
-        var bmp = new PixelBuffer(8, 8);
+        const int n = 16;
+        var bmp = new PixelBuffer(n, n);
+        var ptr = bmp.Pixels;
 
-        long seed = type.Length * 97 + 7;
+        long seed = type.Length * 97 + (top ? 7 : 13);
         double Rnd()
         {
             seed = (seed * 16807) % 2147483647;
             return (double)seed / 2147483647.0;
         }
 
-        var p = type switch
+        uint Pick(uint[] pal) => pal[(int)(Rnd() * pal.Length)];
+
+        var main = type switch
         {
-            "grass" => Pal[0],
-            "stone" => Pal[1],
-            "tnt" => Pal[2],
-            "dirt" => Pal[3],
-            "log" => Pal[4],
-            _ => Pal[3],
+            "grass" => GrassPal,
+            "stone" => StonePal,
+            "tnt" => TntPal,
+            "log" => LogPal,
+            _ => DirtPal,
         };
-        var dirtPal = Pal[3];
 
-        for (var i = 0; i < 8; i++) // X column
+        // 侧面草边的深度：每列 3~6 行、每列不同 —— 真 grass_block_side 就是这种毛边，
+        // 一条直线会立刻暴露是画出来的。
+        var grassDepth = new int[n];
+        for (var i = 0; i < n; i++) grassDepth[i] = 3 + (int)(Rnd() * 4);
+
+        for (var y = 0; y < n; y++)
         {
-            for (var j = 0; j < 8; j++) // Y row
+            for (var x = 0; x < n; x++)
             {
-                var col = p[(int)(Rnd() * 4)];
-                if (type == "grass" && j > 2)
+                uint col;
+
+                if (type == "grass")
                 {
-                    col = dirtPal[(int)(Rnd() * 4)];
+                    col = top || y < grassDepth[x] ? Pick(GrassPal) : Pick(DirtPal);
+                }
+                else if (type == "log")
+                {
+                    // 竖纹：每 4 列一组深浅，偶尔插一列结节。
+                    col = LogPal[(x / 4 + (Rnd() < 0.08 ? 1 : 0)) % LogPal.Length];
+                }
+                else if (type == "tnt")
+                {
+                    // 红底 + 中间一条白带。真 TNT 的白带上是黑字，16px 画不下，
+                    // 用两道深色竖条示意。
+                    col = y is >= 6 and <= 9
+                        ? (x % 6 is 2 or 3 ? 0xFF2B2B2B : 0xFFE8E8E8)
+                        : Pick(TntPal);
+                }
+                else
+                {
+                    col = Pick(main);
                 }
 
-                if (type == "tnt" && (j == 3 || j == 4))
-                {
-                    col = i % 2 == 1 ? 0xFF2A2A2A : 0xFFEEEEEE;
-                }
-
-                if (type == "log" && (i == 0 || i == 7))
-                {
-                    col = 0xFF4A3519;
-                }
-
-                bmp.Pixels[j * 8 + i] = col;
+                ptr[y * n + x] = col;
             }
         }
 
@@ -87,12 +99,20 @@ public static class PixelArt
     /// <para><b>明暗</b>：光源在左上，顶 1.0 / 左 0.78 / 右 0.62 —— 和 MC 的物品图标
     /// 同一个方向感。这一层是「看着像方块」而不是「看着像贴纸」的关键，别去掉。</para>
     ///
-    /// <para>纹理只有 8x8，铺到 16px 宽的一个面是 2 倍放大，正好是粗颗粒的像素风；
-    /// 想更细就改 <see cref="CreateBlock"/> 的尺寸，这里不用动。</para>
+    /// <para>顶面采 top 版、左右面采 side 版（草方块因此只有侧面才有土色）。</para>
     /// </summary>
-    public static PixelBuffer CreateBlockCube(string type, int size = 32)
+    public static PixelBuffer CreateBlockCube(string type, int size = 32) =>
+        CreateBlockCube(BlockTexture(type, top: true), BlockTexture(type, top: false), size);
+
+    /// <summary>
+    /// 用<b>两张现成的纹理</b>拼等距立方体 —— 游戏 jar 里的真方块贴图就走这条路
+    /// （纹理从 <c>assets/minecraft/textures/block/*.png</c> 读出来，原样 16x16）。
+    ///
+    /// <para>纹理尺寸不限于 16 —— 采样按 <c>tex.Width/Height</c> 归一化，32x32 的高清包
+    /// 或 8x8 的老资源包都能直接喂进来。</para>
+    /// </summary>
+    public static PixelBuffer CreateBlockCube(PixelBuffer topTex, PixelBuffer sideTex, int size = 32)
     {
-        var tex = CreateBlock(type);
         var bmp = new PixelBuffer(size, size);
         var ptr = bmp.Pixels;
 
@@ -107,6 +127,7 @@ public static class PixelArt
                 // 取像素中心再反解，避免斜边整像素错位。
                 double px = x + 0.5, py = y + 0.5;
                 double u, v, shade;
+                PixelBuffer tex;
 
                 // 顶面：u 沿「右下」，v 沿「左下」。
                 var topU = ((px - half) / half + py / quarter) / 2;
@@ -116,6 +137,7 @@ public static class PixelArt
                     u = topU;
                     v = topV;
                     shade = 1.0;
+                    tex = topTex;
                 }
                 else if (px < half)
                 {
@@ -124,6 +146,7 @@ public static class PixelArt
                     v = (py - quarter - quarter * u) / half;
                     shade = 0.78;
                     if (u is < 0 or > 1 || v is < 0 or > 1) continue;
+                    tex = sideTex;
                 }
                 else
                 {
@@ -132,11 +155,12 @@ public static class PixelArt
                     v = (py - half + quarter * u) / half;
                     shade = 0.62;
                     if (u is < 0 or > 1 || v is < 0 or > 1) continue;
+                    tex = sideTex;
                 }
 
-                var tx = Math.Min(7, (int)(u * 8));
-                var ty = Math.Min(7, (int)(v * 8));
-                ptr[y * size + x] = Shade(tex.Pixels[ty * 8 + tx], shade);
+                var tx = Math.Min(tex.Width - 1, (int)(u * tex.Width));
+                var ty = Math.Min(tex.Height - 1, (int)(v * tex.Height));
+                ptr[y * size + x] = Shade(tex.Pixels[ty * tex.Width + tx], shade);
             }
         }
 

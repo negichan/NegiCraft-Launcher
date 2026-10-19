@@ -21,6 +21,23 @@ public partial class MainWindowViewModel : ViewModelBase
 {
     private static readonly string[] BlockIcons = { "grass", "stone", "tnt", "dirt", "log" };
 
+    /// <summary>
+    /// 方块图标要用的三张纹理文件名（顶 / 侧）。这些都在游戏 jar 的
+    /// <c>assets/minecraft/textures/block/</c> 下，读出来就是原版贴图本身。
+    /// </summary>
+    private static readonly (string Type, string Top, string Side)[] BlockTextureFiles =
+    {
+        ("grass", "grass_block_top.png", "grass_block_side.png"),
+        ("stone", "stone.png", "stone.png"),
+        ("tnt", "tnt_top.png", "tnt_side.png"),
+        ("dirt", "dirt.png", "dirt.png"),
+        ("log", "oak_log_top.png", "oak_log.png"),
+    };
+
+    /// <summary>按 jar 路径缓存读出来的方块纹理 —— 同一个版本只开一次压缩包。</summary>
+    private readonly Dictionary<string, Dictionary<string, (PixelBuffer Top, PixelBuffer Side)>> _blockTextures =
+        new(StringComparer.OrdinalIgnoreCase);
+
     private readonly Launcher _launcher;
     private readonly ModrinthClient _modrinth = new();
     private ModrinthInstaller _modrinthInstaller = new();
@@ -2306,7 +2323,74 @@ public partial class MainWindowViewModel : ViewModelBase
 
         // GetHashCode is randomised per process, so hash by hand to keep the icon stable.
         var hash = instance.Id.Aggregate(0, (acc, c) => acc * 31 + c);
-        return PixelArt.CreateBlockCube(BlockIcons[Math.Abs(hash) % BlockIcons.Length]);
+        var type = BlockIcons[Math.Abs(hash) % BlockIcons.Length];
+
+        // 优先用游戏自己那套贴图：玩家装的是什么版本，图标就是那个版本的原版方块。
+        if (VanillaBlockTextures(instance.VersionId).TryGetValue(type, out var tex))
+        {
+            return PixelArt.CreateBlockCube(tex.Top, tex.Side);
+        }
+
+        // 读不到（实例没装、jar 被清、模组包残缺）就退回程序化画的那套，不让图标开天窗。
+        return PixelArt.CreateBlockCube(type);
+    }
+
+    /// <summary>
+    /// 从版本 jar 里读<b>原版方块贴图</b>（<c>assets/minecraft/textures/block/*.png</c>）。
+    ///
+    /// <para><b>为什么读 jar 而不是打包图片</b>：这些文件本来就在用户自己电脑上 ——
+    /// 用的是他装的那份游戏，拿到的就是这个版本（甚至是他改过的资源包）的真贴图，
+    /// 项目里一张美术资源都不必带。</para>
+    ///
+    /// <para>按 jar 路径缓存，同一个版本只开一次 <c>ZipArchive</c>，五张图一起读。
+    /// 任何一步失败都返回空表，调用方回退到 <see cref="PixelArt"/> 里画的那套。</para>
+    /// </summary>
+    private Dictionary<string, (PixelBuffer Top, PixelBuffer Side)> VanillaBlockTextures(string versionId)
+    {
+        if (string.IsNullOrWhiteSpace(versionId)) return [];
+
+        var jar = Path.Combine(_launcher.Instances.GameRoot, "versions", versionId, versionId + ".jar");
+        if (!File.Exists(jar)) return [];
+        if (_blockTextures.TryGetValue(jar, out var cached)) return cached;
+
+        var map = new Dictionary<string, (PixelBuffer Top, PixelBuffer Side)>(StringComparer.OrdinalIgnoreCase);
+        try
+        {
+            using var zip = System.IO.Compression.ZipFile.OpenRead(jar);
+            foreach (var (type, topName, sideName) in BlockTextureFiles)
+            {
+                var top = ReadBlockPng(zip, topName);
+                if (top is null) continue;
+                var side = topName == sideName ? top : ReadBlockPng(zip, sideName);
+                if (side is null) continue;
+                map[type] = (top, side);
+            }
+        }
+        catch
+        {
+            // 压缩包坏了 / 正被游戏占着：当没有，回退程序化图标。
+        }
+
+        _blockTextures[jar] = map;
+        return map;
+    }
+
+    private static PixelBuffer? ReadBlockPng(System.IO.Compression.ZipArchive zip, string fileName)
+    {
+        var entry = zip.GetEntry("assets/minecraft/textures/block/" + fileName);
+        if (entry is null) return null;
+
+        try
+        {
+            using var stream = entry.Open();
+            using var buffer = new MemoryStream();
+            stream.CopyTo(buffer);
+            return PngCodec.Decode(buffer.ToArray()).ToPixelBuffer();
+        }
+        catch
+        {
+            return null;
+        }
     }
 
     private void OpenFolder(string path)
