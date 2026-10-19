@@ -128,7 +128,11 @@ public partial class MainWindow : Window
 
         // 首页小人的落点要在排版彻底落定之后再摆一次：障碍是量出来的，量得太早会把人推歪，
         // 而推开之后没人再把它摆回来（Avalonia 侧实测踩过，见那边 Opened 里的注释）。
-        ContentRendered += (_, _) => LayoutHomeSkinPreview();
+        ContentRendered += (_, _) =>
+        {
+            LayoutHomeSkinPreview();
+            ScheduleSettingsWarmup();
+        };
     }
 
     /// <summary>调试桥通过它拿桌宠窗口（可以关着，所以可空）。</summary>
@@ -1085,17 +1089,33 @@ public partial class MainWindow : Window
 
     private void OnViewModelPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
-        if (!_settingsBackdropPrepared ||
-            e.PropertyName is not (nameof(MainWindowViewModel.CurrentSettingsTab)
-                                or nameof(MainWindowViewModel.IsJavaChooserOpen)
-                                or nameof(MainWindowViewModel.JavaOptions)))
-            _settingsBackdropCache = null;
+        // 弹窗背后那张"冻住的启动器"快照什么时候该作废：
+        // 开着的时候只有"改的是弹窗自己那几样"才留（那些不影响快照）；
+        // 关着的时候只认真正会改变画面的属性 —— 之前是"任何属性变化都作废"，
+        // 于是下载进度这种高频变化每秒把快照打掉十几次，每次打开设置都得重抓
+        // （实测重抓一次 220ms，是设置首开卡顿的全部来源）。
+        if (_settingsBackdropPrepared)
+        {
+            if (e.PropertyName is not (nameof(MainWindowViewModel.CurrentSettingsTab)
+                                    or nameof(MainWindowViewModel.IsJavaChooserOpen)
+                                    or nameof(MainWindowViewModel.JavaOptions)))
+                InvalidateSettingsBackdrop();
+        }
+        else if (e.PropertyName is nameof(MainWindowViewModel.CurrentPage)
+                                     or nameof(MainWindowViewModel.BgArt)
+                                     or nameof(MainWindowViewModel.BgBrightness)
+                                     or nameof(MainWindowViewModel.BgBlur)
+                                     or nameof(MainWindowViewModel.IsCustomBackground)
+                                     or nameof(MainWindowViewModel.IsVideoBackground))
+        {
+            InvalidateSettingsBackdrop();
+        }
 
         if (e.PropertyName == nameof(MainWindowViewModel.CurrentSettingsTab))
         {
             SettingsScroll.ScrollToTop();
             PageSettingsScroll.ScrollToTop();
-            _settingsBackdropCache = null;
+            InvalidateSettingsBackdrop();
         }
 
         if (e.PropertyName is nameof(MainWindowViewModel.BgArt)
