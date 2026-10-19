@@ -55,6 +55,10 @@ internal static class UiPerformance
             var settingsOpenTimes = new List<double>();
             results.Add(await Measure("settings-dialog", window, async () =>
             {
+                // 先给"空闲预热"一个窗口：上一次换页会把背景快照作废，而重抓一次要 220ms。
+                // 真实路径是"操作一阵子 → 停下来 → 打开设置"，这段时间必须算进去，
+                // 否则测出来的是"换页 350ms 后立刻开设置"这个最坏组合。
+                await Task.Delay(1800);
                 for (var i = 0; i < 4; i++)
                 {
                     var stamp = Stopwatch.GetTimestamp();
