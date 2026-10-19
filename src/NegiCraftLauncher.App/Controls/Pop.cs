@@ -1,15 +1,12 @@
 using System.Runtime.CompilerServices;
 using System.Windows;
 using System.Windows.Media;
-using System.Windows.Media.Animation;
+using NegiCraftLauncher.Theme;
 
 namespace NegiCraftLauncher.App.Controls;
 
 public static class Pop
 {
-    internal const int SlideOpenDurationMs = 260;
-    internal const int SlideCloseDurationMs = 210;
-
     private static readonly ConditionalWeakTable<FrameworkElement, Runner> Runners = new();
 
     public static readonly DependencyProperty IsOpenProperty = DependencyProperty.RegisterAttached(
@@ -24,6 +21,10 @@ public static class Pop
         "PinGap", typeof(double), typeof(Pop), new PropertyMetadata(6.0));
     public static readonly DependencyProperty SlideOnlyProperty = DependencyProperty.RegisterAttached(
         "SlideOnly", typeof(bool), typeof(Pop), new PropertyMetadata(false));
+    public static readonly DependencyProperty TipProperty = DependencyProperty.RegisterAttached(
+        "Tip", typeof(bool), typeof(Pop), new PropertyMetadata(false));
+    public static readonly DependencyProperty TipAxisProperty = DependencyProperty.RegisterAttached(
+        "TipAxis", typeof(string), typeof(Pop), new PropertyMetadata("Y"));
 
     public static bool GetIsOpen(DependencyObject target) => (bool)target.GetValue(IsOpenProperty);
     public static void SetIsOpen(DependencyObject target, bool value) => target.SetValue(IsOpenProperty, value);
@@ -37,6 +38,10 @@ public static class Pop
     public static void SetPinGap(DependencyObject target, double value) => target.SetValue(PinGapProperty, value);
     public static bool GetSlideOnly(DependencyObject target) => (bool)target.GetValue(SlideOnlyProperty);
     public static void SetSlideOnly(DependencyObject target, bool value) => target.SetValue(SlideOnlyProperty, value);
+    public static bool GetTip(DependencyObject target) => (bool)target.GetValue(TipProperty);
+    public static void SetTip(DependencyObject target, bool value) => target.SetValue(TipProperty, value);
+    public static string GetTipAxis(DependencyObject target) => (string)target.GetValue(TipAxisProperty);
+    public static void SetTipAxis(DependencyObject target, string value) => target.SetValue(TipAxisProperty, value);
 
     private static void OnIsOpenChanged(DependencyObject target, DependencyPropertyChangedEventArgs args)
     {
@@ -48,20 +53,33 @@ public static class Pop
 
     private sealed class Runner
     {
+        /// <summary>提示条模式的位移量：够看出"从哪儿出来"，又不会让小块头上下窜。</summary>
+        private const double TipTravel = 6;
+
         private readonly FrameworkElement _target;
         private readonly ScaleTransform _scale = new();
         private readonly TranslateTransform _position = new();
         private readonly TransformGroup _transform = new();
         private readonly BitmapCache _cache = new(1.1);
+
+        /// <summary>
+        /// 收合后应该回到的透明度。不能靠 <c>ClearValue</c> —— 调用点的"隐藏态"
+        /// 可能写在样式里（PopoverStyle 的 Opacity=0），清掉本地值不等于回到隐藏态。
+        /// </summary>
+        private readonly double _restOpacity;
+
         private CacheMode? _priorCache;
         private bool _cacheApplied;
         private bool _visible;
-        private int _version;
-        private double _pinX, _pinY, _enterY;
+        private double _pinX, _pinY, _enterX, _enterY;
+
+        /// <summary>在飞的过渡句柄，只用于取消 —— 属性落值一律交给 <see cref="MotionTween"/>。</summary>
+        private MotionTween? _tweenScaleX, _tweenScaleY, _tweenX, _tweenY, _tweenOpacity;
 
         public Runner(FrameworkElement target)
         {
             _target = target;
+            _restOpacity = target.Opacity;
             _transform.Children.Add(_scale);
             _transform.Children.Add(_position);
             target.Unloaded += (_, _) => Rest();
@@ -73,13 +91,13 @@ public static class Pop
 
         public void Open()
         {
-            var version = ++_version;
             Measure();
+            var tip = GetTip(_target);
             var slideOnly = GetSlideOnly(_target);
             if (!_visible)
             {
-                _scale.ScaleX = _scale.ScaleY = slideOnly ? 1 : 0.94;
-                _position.X = _pinX;
+                _scale.ScaleX = _scale.ScaleY = tip || slideOnly ? 1 : 0.94;
+                _position.X = _pinX + _enterX;
                 _position.Y = _pinY + _enterY;
                 _target.Opacity = 0;
             }
@@ -87,77 +105,82 @@ public static class Pop
             _target.RenderTransform = _transform;
             _target.Clip = null;
             _target.IsHitTestVisible = true;
-            if (!SystemParameters.ClientAreaAnimation || !_target.IsLoaded)
+            if (!MotionEngine.Enabled || !_target.IsLoaded)
             {
                 Settle();
                 return;
             }
-            CacheForAnimation();
-            if (slideOnly)
+            if (tip)
             {
-                Animate(_position, TranslateTransform.XProperty, version, (SlideOpenDurationMs, _pinX));
-                Animate(_position, TranslateTransform.YProperty, version, (SlideOpenDurationMs, _pinY));
-                Animate(_target, UIElement.OpacityProperty, version, (220, 1), (SlideOpenDurationMs, 1), completed: Settle);
+                // 提示条只做"淡入 + 6px 归位"：它挂在鼠标边上的时间很短，
+                // 加缩放或缓存只会让它显脏。
+                _tweenX = MotionTween.Start(
+                    _position, TranslateTransform.XProperty, _pinX, Motion.Hover, Motion.Enter);
+                _tweenY = MotionTween.Start(
+                    _position, TranslateTransform.YProperty, _pinY, Motion.Hover, Motion.Enter);
+                _tweenOpacity = MotionTween.Start(
+                    _target, UIElement.OpacityProperty, 1, Motion.Hover, Motion.Enter, Settle);
                 return;
             }
-            Animate(_scale, ScaleTransform.ScaleXProperty, version, (150, 1.014), (220, 1));
-            Animate(_scale, ScaleTransform.ScaleYProperty, version, (150, 1.014), (220, 1));
-            Animate(_position, TranslateTransform.XProperty, version, (220, _pinX));
-            Animate(_position, TranslateTransform.YProperty, version, (180, _pinY), (220, _pinY));
-            Animate(_target, UIElement.OpacityProperty, version, (100, 1), (220, 1), completed: Settle);
+            CacheForAnimation();
+            var curve = slideOnly ? Motion.Glide : Motion.Enter;
+            if (slideOnly)
+            {
+                _tweenX = MotionTween.Start(_position, TranslateTransform.XProperty, _pinX, Motion.Slide, curve);
+                _tweenY = MotionTween.Start(_position, TranslateTransform.YProperty, _pinY, Motion.Slide, curve);
+                // 淡入比滑入略早收尾，视觉上"到了就已经不透明"。
+                _tweenOpacity = MotionTween.Keyframes(
+                    _target, UIElement.OpacityProperty,
+                    [(Motion.Slow, 1), (Motion.Slide, 1)], curve, Settle);
+                return;
+            }
+            // 缩放的轻微过冲（0.94 → 1.014 → 1）是浮层"弹出来"的关键，去掉就变生硬。
+            _tweenScaleX = MotionTween.Keyframes(
+                _scale, ScaleTransform.ScaleXProperty,
+                [(Motion.Base, 1.014), (Motion.Slow, 1)], curve);
+            _tweenScaleY = MotionTween.Keyframes(
+                _scale, ScaleTransform.ScaleYProperty,
+                [(Motion.Base, 1.014), (Motion.Slow, 1)], curve);
+            _tweenX = MotionTween.Start(_position, TranslateTransform.XProperty, _pinX, Motion.Slow, curve);
+            _tweenY = MotionTween.Start(_position, TranslateTransform.YProperty, _pinY, Motion.Slow, curve);
+            // 点开就要立刻见字，所以淡入用最短档；靠第二帧把时长撑到和位移同刻结束，
+            // Settle 只在这一刻跑一次。
+            _tweenOpacity = MotionTween.Keyframes(
+                _target, UIElement.OpacityProperty, [(Motion.Fast, 1), (Motion.Slow, 1)], curve, Settle);
         }
 
         public void Close()
         {
-            var version = ++_version;
             _target.IsHitTestVisible = false;
-            if (!_visible || !SystemParameters.ClientAreaAnimation || !_target.IsLoaded)
+            if (!_visible || !MotionEngine.Enabled || !_target.IsLoaded)
             {
                 Rest();
                 return;
             }
             _target.RenderTransform = _transform;
+            if (GetTip(_target))
+            {
+                _tweenX = MotionTween.Start(
+                    _position, TranslateTransform.XProperty, _pinX + _enterX, Motion.Fast, Motion.Exit);
+                _tweenY = MotionTween.Start(
+                    _position, TranslateTransform.YProperty, _pinY + _enterY, Motion.Fast, Motion.Exit);
+                _tweenOpacity = MotionTween.Start(
+                    _target, UIElement.OpacityProperty, 0, Motion.Fast, Motion.Exit, Rest);
+                return;
+            }
             CacheForAnimation();
             var slideOnly = GetSlideOnly(_target);
-            var duration = slideOnly ? SlideCloseDurationMs : 110;
-            Animate(_position, TranslateTransform.XProperty, version, (duration, _pinX));
+            var curve = slideOnly ? Motion.Glide : Motion.Exit;
+            var duration = slideOnly ? Motion.Slow : Motion.Fast;
+            _tweenX = MotionTween.Start(_position, TranslateTransform.XProperty, _pinX, duration, curve);
             if (!slideOnly)
             {
-                Animate(_scale, ScaleTransform.ScaleXProperty, version, (110, 0.96));
-                Animate(_scale, ScaleTransform.ScaleYProperty, version, (110, 0.96));
+                _tweenScaleX = MotionTween.Start(_scale, ScaleTransform.ScaleXProperty, 0.96, duration, curve);
+                _tweenScaleY = MotionTween.Start(_scale, ScaleTransform.ScaleYProperty, 0.96, duration, curve);
             }
             var exitY = slideOnly ? Math.Sign(_enterY) * 12 : _enterY * 0.75;
-            Animate(_position, TranslateTransform.YProperty, version, (duration, _pinY + exitY));
-            Animate(_target, UIElement.OpacityProperty, version, (duration, 0), completed: Rest);
-        }
-
-        private void Animate(
-            DependencyObject target, DependencyProperty property, int version,
-            (int Ms, double Value) first, (int Ms, double Value)? second = null, Action? completed = null)
-        {
-            var current = (double)target.GetValue(property);
-            var rest = second?.Value ?? first.Value;
-            target.SetValue(property, current);
-            var animation = new DoubleAnimationUsingKeyFrames { FillBehavior = FillBehavior.Stop };
-            animation.KeyFrames.Add(new LinearDoubleKeyFrame(current, KeyTime.FromTimeSpan(TimeSpan.Zero)));
-            Add(first);
-            if (second is { } next) Add(next);
-            animation.Completed += (_, _) =>
-            {
-                if (_version != version) return;
-                target.SetValue(property, rest);
-                if (target is Animatable value) value.BeginAnimation(property, null);
-                else ((UIElement)target).BeginAnimation(property, null);
-                completed?.Invoke();
-            };
-            if (target is Animatable animatable)
-                animatable.BeginAnimation(property, animation, HandoffBehavior.SnapshotAndReplace);
-            else
-                ((UIElement)target).BeginAnimation(property, animation, HandoffBehavior.SnapshotAndReplace);
-
-            void Add((int Ms, double Value) frame) => animation.KeyFrames.Add(new SplineDoubleKeyFrame(
-                frame.Value, KeyTime.FromTimeSpan(TimeSpan.FromMilliseconds(frame.Ms)),
-                GetSlideOnly(_target) ? new KeySpline(0.22, 0.55, 0.35, 1) : new KeySpline(0.2, 0.75, 0.25, 1)));
+            _tweenY = MotionTween.Start(_position, TranslateTransform.YProperty, _pinY + exitY, duration, curve);
+            _tweenOpacity = MotionTween.Start(_target, UIElement.OpacityProperty, 0, duration, curve, Rest);
         }
 
         private void CacheForAnimation()
@@ -168,13 +191,19 @@ public static class Pop
             _cacheApplied = true;
         }
 
+        private void CancelTweens()
+        {
+            _tweenScaleX?.Cancel();
+            _tweenScaleY?.Cancel();
+            _tweenX?.Cancel();
+            _tweenY?.Cancel();
+            _tweenOpacity?.Cancel();
+            _tweenScaleX = _tweenScaleY = _tweenX = _tweenY = _tweenOpacity = null;
+        }
+
         private void ClearClocks()
         {
-            _scale.BeginAnimation(ScaleTransform.ScaleXProperty, null);
-            _scale.BeginAnimation(ScaleTransform.ScaleYProperty, null);
-            _position.BeginAnimation(TranslateTransform.XProperty, null);
-            _position.BeginAnimation(TranslateTransform.YProperty, null);
-            _target.BeginAnimation(UIElement.OpacityProperty, null);
+            CancelTweens();
             if (_cacheApplied)
             {
                 if (ReferenceEquals(_target.CacheMode, _cache))
@@ -195,14 +224,13 @@ public static class Pop
 
         private void Rest()
         {
-            ++_version;
             ClearClocks();
             _visible = false;
             _scale.ScaleX = _scale.ScaleY = 1;
             _position.X = _position.Y = 0;
             _target.RenderTransform = null;
             _target.Clip = null;
-            _target.ClearValue(UIElement.OpacityProperty);
+            _target.Opacity = _restOpacity;
             _target.IsHitTestVisible = false;
         }
 
@@ -210,8 +238,15 @@ public static class Pop
         {
             var (fx, fy) = AnchorFraction(GetAnchor(_target));
             _target.RenderTransformOrigin = new Point(fx, fy);
+            _pinX = _pinY = _enterX = 0;
+            if (GetTip(_target))
+            {
+                // 提示条不做锚定定位：它靠对齐方式固定位置，只需要一个"从哪边冒出来"的偏移。
+                if (GetTipAxis(_target) == "X") _enterX = -TipTravel;
+                else _enterY = -TipTravel;
+                return;
+            }
             _enterY = (fy >= 0.5 ? 1 : -1) * (GetSlideOnly(_target) ? 14 : 8);
-            _pinX = _pinY = 0;
             var pin = GetPin(_target);
             var trigger = GetTrigger(_target);
             if (pin.Length == 0 || trigger is null || !trigger.IsVisible ||
