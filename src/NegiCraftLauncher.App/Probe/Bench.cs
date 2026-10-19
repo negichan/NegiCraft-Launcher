@@ -29,7 +29,17 @@ internal static class Bench
     /// <summary>桌宠窗口的尺寸；2× 超采样即内部 480×960 ≈ 46 万像素/帧。</summary>
     private const int Width = 240;
     private const int Height = 480;
-    private const int SampleScale = 2;
+
+    /// <summary>
+    /// 实际运行时用的倍数。必须和 <c>SkinPreviewControl</c> 构造函数里那行保持一致 ——
+    /// 基准测的和线上跑的不是同一个配置，结论就没有意义（之前一直按 2× 测，
+    /// 于是永远显示"超预算"，而线上的 1× 其实早就达标了）。
+    /// </summary>
+    private const int ProductionSampleScale = 1;
+
+    /// <summary>两个倍数都量一遍：2× 留着当"以后想开抗锯齿要付多少"的参考。</summary>
+    private static readonly int[] BenchScales = [ProductionSampleScale, 2];
+
     private const int WarmupFrames = 20;
     private const int MeasuredFrames = 300;
 
@@ -50,7 +60,6 @@ internal static class Bench
         log.AppendLine("  ⚠ Debug 构建下 Roslyn 不做内联/死代码消除，实测会翻倍（Debug 6.7ms vs Release 3.4ms）。");
         log.AppendLine("    性能结论一律以 Release 为准：dotnet build -c Release && NegiCraftLauncher.exe --bench");
 #endif
-        log.AppendLine($"画布: {Width}x{Height}，超采样 {SampleScale}x（内部 {Width * SampleScale}x{Height * SampleScale}）");
         log.AppendLine($"帧数: 预热 {WarmupFrames} + 计时 {MeasuredFrames}");
         log.AppendLine();
 
@@ -59,19 +68,74 @@ internal static class Bench
         log.AppendLine($"几何: {quads.Count} 个四边形（6 个身体部件 + 6 个覆盖层部件）");
         log.AppendLine();
 
-        var renderer = new SoftwareRenderer();
-        renderer.Configure(Width, Height, SampleScale);
-
-        var target = new PixelBuffer(Width, Height);
-
         var view = Matrix4x4.CreateLookAt(new Vector3(0f, 0f, 3.4f), new Vector3(0f, 0f, 0f), Vector3.UnitY);
         var projection = Matrix4x4.CreatePerspectiveFieldOfView(
             MathF.PI / 4f, (float)Width / Height, 0.1f, 100f);
 
-        // 超采样后的视口尺寸：顶点要投到内部分辨率上。
-        float vw = renderer.InternalWidth;
-        float vh = renderer.InternalHeight;
+        SoftwareRenderer? productionRenderer = null;
+        PixelBuffer? productionFrame = null;
+        float productionVw = 0, productionVh = 0;
+        double productionMean = 0;
 
+        foreach (var scale in BenchScales)
+        {
+            var renderer = new SoftwareRenderer();
+            renderer.Configure(Width, Height, scale);
+            log.AppendLine($"—— 超采样 {scale}x（内部 {Width * scale}x{Height * scale}）" +
+                           (scale == ProductionSampleScale ? "　← 线上配置" : "　← 参考"));
+
+            var mean = Measure(log, renderer, quads, texture, view, projection,
+                out var vw, out var vh, out var lastFrame);
+            log.AppendLine();
+
+            if (scale == ProductionSampleScale)
+            {
+                productionRenderer = renderer;
+                productionVw = vw;
+                productionVh = vh;
+                productionMean = mean;
+                productionFrame = lastFrame;
+            }
+        }
+
+        log.AppendLine(productionMean < 4.0
+            ? $"结论: 线上配置（{ProductionSampleScale}x）平均 {productionMean:F2} ms/帧 < 4 ms —— 达标，" +
+              "60fps 有充足余量（预算 16.7ms）。"
+            : $"结论: 线上配置（{ProductionSampleScale}x）平均 {productionMean:F2} ms/帧 ≥ 4 ms —— " +
+              "需要降级（先试只清脏矩形 / 独立渲染线程）。");
+
+        // 存一张图肉眼核对几何与朝向（用线上那个倍数）。
+        try
+        {
+            var preview = Path.Combine(Path.GetTempPath(), "ncl-raster-preview.png");
+            File.WriteAllBytes(preview, PngCodec.Encode(productionFrame ?? new PixelBuffer(Width, Height)));
+            log.AppendLine($"预览图: {preview}");
+
+            // 四视角对照图：正 / 右 / 背 / 左。镜像与背面剔除是否正确，看这张一眼就能判。
+            var sheet = Path.Combine(Path.GetTempPath(), "ncl-raster-views.png");
+            File.WriteAllBytes(sheet, PngCodec.Encode(
+                RenderViewSheet(productionRenderer!, view, projection, productionVw, productionVh, texture)));
+            log.AppendLine($"四视角: {sheet}");
+        }
+        catch (Exception ex)
+        {
+            log.AppendLine($"预览图写入失败: {ex.Message}");
+        }
+
+        File.WriteAllText(ResultPath, log.ToString());
+    }
+
+    /// <summary>在给定超采样倍数下跑一轮，报告分段耗时，返回总耗时均值。</summary>
+    private static double Measure(
+        StringBuilder log, SoftwareRenderer renderer, IReadOnlyList<Quad> quads, uint[] texture,
+        Matrix4x4 view, Matrix4x4 projection, out float vw, out float vh, out PixelBuffer lastFrame)
+    {
+        // 超采样后的视口尺寸：顶点要投到内部分辨率上。
+        vw = renderer.InternalWidth;
+        vh = renderer.InternalHeight;
+
+        var target = new PixelBuffer(Width, Height);
+        lastFrame = target;
         var clear = new double[MeasuredFrames];
         var draw = new double[MeasuredFrames];
         var resolve = new double[MeasuredFrames];
@@ -137,31 +201,7 @@ internal static class Bench
         Report(log, "光栅化合计（Begin + 72 个四边形 + 降采样）", raster);
         Report(log, "上屏（WriteableBitmap.WritePixels）", blit);
         Report(log, "合计（每帧）", total);
-
-        var mean = Mean(total);
-        log.AppendLine();
-        log.AppendLine(mean < 4.0
-            ? $"结论: 平均 {mean:F2} ms/帧 < 4 ms —— 达标，60fps 有充足余量（预算 16.7ms）。"
-            : $"结论: 平均 {mean:F2} ms/帧 ≥ 4 ms —— 需要降级（先试关超采样 / 只清脏矩形 / 独立渲染线程）。");
-
-        // 存一张图肉眼核对几何与朝向。
-        try
-        {
-            var preview = Path.Combine(Path.GetTempPath(), "ncl-raster-preview.png");
-            File.WriteAllBytes(preview, PngCodec.Encode(target));
-            log.AppendLine($"预览图: {preview}");
-
-            // 四视角对照图：正 / 右 / 背 / 左。镜像与背面剔除是否正确，看这张一眼就能判。
-            var sheet = Path.Combine(Path.GetTempPath(), "ncl-raster-views.png");
-            File.WriteAllBytes(sheet, PngCodec.Encode(RenderViewSheet(renderer, view, projection, vw, vh, texture)));
-            log.AppendLine($"四视角: {sheet}");
-        }
-        catch (Exception ex)
-        {
-            log.AppendLine($"预览图写入失败: {ex.Message}");
-        }
-
-        File.WriteAllText(ResultPath, log.ToString());
+        return Mean(total);
     }
 
     /// <summary>
