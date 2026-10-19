@@ -3163,7 +3163,10 @@
                 </Border>
             </Grid>
 
-            <!-- #instPop：正好在停靠栏上方 8px（bottom 100）/ 宽 380 -->
+            <!-- #instPop：正好在停靠栏上方 8px（bottom 100）/ 宽 380
+                 ⚠️ 这张卡不挂投影：它离停靠栏只有 8px，ShadowLg 又没有 spread ⇒
+                   阴影从卡片左边/上边直接糊出去一圈暗晕，压在停靠栏那块玻璃上也把
+                   底色压暗，看着像卡片本身发脏。靠 #111114 的底色 + 1px 边框分层次就够了。 -->
             <Grid HorizontalAlignment="Right" VerticalAlignment="Bottom"
                     Margin="0,0,20,100" Width="380"
                     Style="{StaticResource PopoverStyle}"
@@ -3172,7 +3175,7 @@
                     pop:Pop.IsOpen="{Binding IsInstPopOpen}"
                     Panel.ZIndex="50">
                 <Border Background="#111114" BorderBrush="#26262b" BorderThickness="1"
-                        CornerRadius="14" Padding="6" Effect="{StaticResource ShadowLg}">
+                        CornerRadius="14" Padding="6">
                 <neg:NegiStackPanel Spacing="2">
                     <ScrollViewer MaxHeight="300">
                         <ItemsControl ItemsSource="{Binding Instances}">
