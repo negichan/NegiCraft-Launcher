@@ -1851,7 +1851,10 @@
                 <Border Background="#111114" BorderBrush="#26262b" BorderThickness="1"
                         CornerRadius="14" Padding="6" Effect="{StaticResource ShadowLg}">
                 <neg:NegiStackPanel Spacing="2">
-                    <ScrollViewer MaxHeight="260">
+                    <!-- ⚠️ 必须写 VerticalScrollBarVisibility="Auto"：WPF 的默认值是 Visible，
+                         哪怕只有三行、根本不用滚，ScrollViewer 也会在右边留出滚动条那一列
+                         （实测卡片内右侧空出一条 10px 的死白，左右不对称）。 -->
+                    <ScrollViewer MaxHeight="260" VerticalScrollBarVisibility="Auto">
                         <ItemsControl ItemsSource="{Binding Accounts}">
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate>
@@ -1928,7 +1931,9 @@
                 <Border Background="#111114" BorderBrush="#26262b" BorderThickness="1"
                         CornerRadius="14" Padding="6">
                 <neg:NegiStackPanel Spacing="2">
-                    <ScrollViewer MaxHeight="300">
+                    <!-- ⚠️ 同 #accPop：不写 Auto 的话右边会一直空出滚动条那一列，
+                         每一行的右圆角都被那条坑切掉，看着像"圆角不见了 + 侧面空一块"。 -->
+                    <ScrollViewer MaxHeight="300" VerticalScrollBarVisibility="Auto">
                         <ItemsControl ItemsSource="{Binding Instances}">
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate>
@@ -2143,7 +2148,8 @@
                                 Command="{Binding ClearDownloadsCommand}" />
                     </neg:NegiGrid>
 
-                    <ScrollViewer Grid.Row="1" MaxHeight="380" Visibility="{Binding HasDownloads, Converter={StaticResource BoolToVis}}">
+                    <ScrollViewer Grid.Row="1" MaxHeight="380" VerticalScrollBarVisibility="Auto"
+                                  Visibility="{Binding HasDownloads, Converter={StaticResource BoolToVis}}">
                         <ItemsControl ItemsSource="{Binding Downloads}"
                                       ItemTemplate="{StaticResource DownloadRowTemplate}" />
                     </ScrollViewer>
