@@ -12,6 +12,8 @@ design/
 docs/
 # 本地 Agent 工作区（记忆、日志等，不随源码分发）
 .workbuddy-ai/
+# WorkBuddy 的项目记忆与性能探针输出（docs/perf 同属本机产物）
+.workbuddy/
 # 本机 Agent 约定笔记：硬编码本机路径与踩坑记录，不随源码分发
 # （它大量引用 design/ 下的私有脚本，两者配套，一起留在本地）
 AGENTS.md
