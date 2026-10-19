@@ -331,6 +331,9 @@ public partial class MainWindow : Window
 
     public void ExitApplication()
     {
+        // 幂等：OnClosing 排队进来的 RequestClose 和托盘"退出"可能前后脚到，
+        // 第二趟再跑一遍 Close/Shutdown 只会对着已关闭的窗口抛异常。
+        if (_isExplicitExit) return;
         _isExplicitExit = true;
 
         _petWindow?.Close();
@@ -356,7 +359,11 @@ public partial class MainWindow : Window
             // 这一趟一律先拦下，去向交给 VM 的 RequestClose（托盘 / 退出 / 弹询问窗）。
             // ✕ 按钮也走同一个入口，两条路不会分出两种行为。
             e.Cancel = true;
-            _vm?.RequestClose();
+            // ⚠️ 必须推迟到 Closing 走完之后再问策略：RequestClose 可能直接触发
+            // ExitApplication → Close()，而此时窗口还在 Closing 流程里（Cancel 只标记了这一趟），
+            // 重入 Close 会让 WPF 抛 "在窗口关闭期间…无法调用 Close"（VerifyNotClosing）。
+            // 没桌宠时"直接退出"这条新策略正好每次都走那段路，所以这里必须排队。
+            Dispatcher.BeginInvoke(() => _vm?.RequestClose(), DispatcherPriority.Normal);
             return;
         }
 
