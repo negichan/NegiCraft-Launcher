@@ -101,6 +101,15 @@
                                               VerticalAlignment="Center"
                                               Opacity="0.75" />
                         </Grid>
+                        <!-- hover / active 的**透明度**仍走声明式故事板，刻意不并进 ButtonMotion：
+                             ButtonMotion 管的是 RenderTransform（缩放 + 位移），这里是两层背景
+                             Border 和内容各自的 Opacity，端点也不一样（内容停在 0.75）。
+                             ⚠️ 别再为这四段做"共享 Storyboard 资源"的抽象：全项目 XAML 里的
+                               动画标记只有这里 6 处 + 进度条 1 处，且这些 TargetName 是**本模板
+                               私有**的，提到资源里换到别处就解析不到；`Duration` 也不能用
+                               `{StaticResource}` 引 TimeSpan（运行期类型异常）。
+                               降级（系统关动画时不动）的可行方案见 docs/motion-engine.md §4.5c，
+                               代价是维护一份 Duration 全为 0 的主题副本，暂不做。 -->
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
                                 <Trigger.EnterActions>
