@@ -238,39 +238,56 @@ public sealed class InstanceManager
         Path.Combine(_repository.DirectoryOf(instance.Id), "icon.png");
 
     /// <summary>
-    /// 把一张已经处理好的 PNG 字节写成实例图标，同时把 <see cref="Instance.IconPath"/> 指过去。
-    /// 写盘失败（目录被占用、磁盘满）返回 <c>false</c>，界面那边给提示。
+    /// 把预设方块设成实例图标，顺手清掉旧的 <c>icon.png</c> —— 两种来源只留一个，
+    /// 免得「选过预设之后老的自选图还压在下面」。
+    ///
+    /// <para>写的是<b>键</b>（<c>grass</c> / <c>anvil</c> …）不是图片：图标本体在程序集里，
+    /// 复制一份到实例目录只是多占一份空间、多一次解码。</para>
+    ///
+    /// <para><paramref name="key"/> 传 <c>null</c> / 空白等于「恢复默认」。</para>
     /// </summary>
-    public bool WriteIcon(Instance instance, byte[] png)
+    public bool SetIconPreset(Instance instance, string? key)
     {
+        var trimmed = string.IsNullOrWhiteSpace(key) ? null : key.Trim();
+        if (trimmed is null) return ClearIcon(instance);
+
         try
         {
-            var path = IconPathFor(instance);
-            Directory.CreateDirectory(Path.GetDirectoryName(path)!);
-            File.WriteAllBytes(path, png);
-            instance.IconPath = path;
-            return true;
+            DeleteIconFile(instance);
         }
         catch (Exception)
         {
-            return false;
+            // 旧文件删不掉（被占用）不算失败：图标读的是 IconPreset，文件留着也不影响显示。
         }
+
+        instance.IconPath = null;
+        instance.IconPreset = trimmed;
+        Save();
+        return true;
     }
 
-    /// <summary>删掉实例图标，回落到加载器标志 / 方块。本来就没有也算成功。</summary>
+    /// <summary>清掉实例图标，回落到加载器标志 / 方块。本来就没有也算成功。</summary>
     public bool ClearIcon(Instance instance)
     {
         try
         {
-            var path = IconPathFor(instance);
-            if (File.Exists(path)) File.Delete(path);
-            instance.IconPath = null;
-            return true;
+            DeleteIconFile(instance);
         }
         catch (Exception)
         {
             return false;
         }
+
+        instance.IconPath = null;
+        instance.IconPreset = null;
+        Save();
+        return true;
+    }
+
+    private void DeleteIconFile(Instance instance)
+    {
+        var path = IconPathFor(instance);
+        if (File.Exists(path)) File.Delete(path);
     }
 
     public static bool IsValidId(string? id) =>

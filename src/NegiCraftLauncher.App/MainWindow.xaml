@@ -1105,7 +1105,7 @@
                                     <neg:NegiStackPanel Spacing="16" Margin="0,0,10,0">
                                         <Border Background="#18181b" BorderBrush="#26262b" BorderThickness="1" CornerRadius="12" Padding="16,0">
                                             <neg:NegiStackPanel>
-                                                <!-- 图标：默认跟着加载器走，也可以换成自己的一张 PNG -->
+                                                <!-- 图标：默认跟着加载器走，也可以用笔改成本程序预设的方块 -->
                                                 <Border Height="54" BorderBrush="#26262b" BorderThickness="0,0,0,1">
                                                     <neg:NegiGrid Columns="* Auto">
                                                         <neg:NegiStackPanel VerticalAlignment="Center" Spacing="2" Margin="0,0,16,0">
@@ -1119,12 +1119,38 @@
                                                                        Width="36" Height="36" RenderOptions.BitmapScalingMode="HighQuality" />
                                                             </Border>
                                                             <Button Style="{StaticResource BtnSmOutlineStyle}" Content="更换…"
-                                                                    Click="OnPickInstanceIconClick" />
+                                                                    Command="{Binding ToggleIconPickerCommand}" />
                                                             <Button Style="{StaticResource BtnSmOutlineStyle}" Content="恢复默认"
                                                                     Command="{Binding ResetInstanceIconCommand}"
                                                                     Visibility="{Binding HasCustomIcon, Converter={StaticResource BoolToVis}}" />
                                                         </neg:NegiStackPanel>
                                                     </neg:NegiGrid>
+                                                </Border>
+
+                                                <!-- 预设方块：只给程序自带的这十几块，不开放自选图片 -->
+                                                <Border BorderBrush="#26262b" BorderThickness="0,0,0,1" Padding="0,12,0,2"
+                                                        Visibility="{Binding IsIconPickerOpen, Converter={StaticResource BoolToVis}}">
+                                                    <ItemsControl ItemsSource="{Binding IconPresets}">
+                                                        <ItemsControl.ItemsPanel>
+                                                            <ItemsPanelTemplate>
+                                                                <WrapPanel Orientation="Horizontal" />
+                                                            </ItemsPanelTemplate>
+                                                        </ItemsControl.ItemsPanel>
+                                                        <ItemsControl.ItemTemplate>
+                                                            <DataTemplate>
+                                                                <Button Style="{StaticResource IconTileStyle}"
+                                                                        ToolTip="{Binding Name}"
+                                                                        neg:Negi.On="{Binding IsSelected}"
+                                                                        Command="{Binding DataContext.SetInstanceIconPresetCommand,
+                                                                                          RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                                                        CommandParameter="{Binding}">
+                                                                    <Image Source="{Binding Bitmap, Converter={StaticResource PixelsToBitmap}}"
+                                                                           Width="34" Height="34"
+                                                                           RenderOptions.BitmapScalingMode="HighQuality" />
+                                                                </Button>
+                                                            </DataTemplate>
+                                                        </ItemsControl.ItemTemplate>
+                                                    </ItemsControl>
                                                 </Border>
                                                 <Border Height="54" BorderBrush="#26262b" BorderThickness="0,0,0,1">
                                                     <neg:NegiGrid Columns="* Auto">

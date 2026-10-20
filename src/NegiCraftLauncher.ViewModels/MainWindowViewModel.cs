@@ -22,14 +22,17 @@ public partial class MainWindowViewModel : ViewModelBase
 {
     /// <summary>
     /// 方块图标的 key 清单 —— 每个 key 对应 <c>Raster/Assets/block_&lt;key&gt;.png</c>
-    /// 一张内嵌的 128x128 等距渲染图（见 <see cref="BlockAssets"/>）。
+    /// 一张内嵌的 <b>1024x1024 原图</b>等距渲染图（见 <see cref="BlockAssets"/>）。
     ///
-    /// <para>整张表就是「原版实例按 id 散列挑一块」的候选池。<b>挑的都是 40px 下还认得出、
-    /// 且彼此颜色/造型差得开</b>的：土石木做底色，带图案的那几块最认得出，矿物块饱和度高、
-    /// 适合拉开实例之间的差异。宁可少几块，也别让实例列表出现一排分不清的灰方块。</para>
+    /// <para>整张表有两个用处：原版实例按 id 散列挑一块；「实例图标」里给用户挑的预设。</para>
+    ///
+    /// <para><b>挑的都是 40px 下还认得出、且彼此颜色/造型差得开</b>的：土石木做底色，
+    /// 带图案的那几块最认得出，矿物块饱和度高、适合拉开实例之间的差异。宁可少几块，
+    /// 也别让实例列表出现一排分不清的灰方块。</para>
     ///
     /// <para><b>加一块方块</b>：往 <c>Raster/Assets/</c> 丢一张 <c>block_&lt;key&gt;.png</c>，
-    /// 再把 key 加进这张表（csproj 用的是 <c>Assets\block_*.png</c> 通配，不用改工程文件）。
+    /// 再把 key 加进这张表 + 在 <see cref="BlockNames"/> 里补个中文名
+    /// （csproj 用的是 <c>Assets\block_*.png</c> 通配，不用改工程文件）。
     /// </para>
     /// </summary>
     private static readonly string[] BlockIconKeys =
@@ -53,6 +56,36 @@ public partial class MainWindowViewModel : ViewModelBase
     /// </summary>
     private static readonly string[] BlockIcons =
         BlockIconKeys.Where(t => t != ForgeBlockType).ToArray();
+
+    /// <summary>
+    /// 方块 key → 中文名，「实例图标」那排预设的 tooltip 用它。
+    /// 缺一个名字不会崩（<see cref="BlockDisplayName"/> 会退回 key 本身），但挑图时认不出是哪块 ——
+    /// 加方块时顺手补上。
+    /// </summary>
+    private static readonly Dictionary<string, string> BlockNames = new(StringComparer.Ordinal)
+    {
+        ["grass"] = "草方块",
+        ["dirt"] = "泥土",
+        ["stone"] = "石头",
+        ["cobble"] = "圆石",
+        ["planks"] = "橡木木板",
+        ["log"] = "橡木原木",
+        ["sand"] = "沙子",
+        ["brick"] = "砖块",
+        ["bookshelf"] = "书架",
+        ["crafting"] = "工作台",
+        ["furnace"] = "熔炉",
+        ["tnt"] = "TNT",
+        ["gold"] = "金块",
+        ["diamond"] = "钻石块",
+        ["emerald"] = "绿宝石块",
+        ["redstone"] = "红石块",
+        ["glowstone"] = "萤石",
+        ["anvil"] = "铁砧",
+    };
+
+    private static string BlockDisplayName(string key) =>
+        BlockNames.TryGetValue(key, out var name) ? name : key;
     private readonly Launcher _launcher;
     private readonly ModrinthClient _modrinth = new();
     private ModrinthInstaller _modrinthInstaller = new();
@@ -1714,59 +1747,95 @@ public partial class MainWindowViewModel : ViewModelBase
     // ==========================================================
 
     /// <summary>图标那行在空闲时显示的说明（出错时会被换成具体的错误话）。</summary>
-    private const string IconHintIdle = "默认跟随加载器，也可以换成自己的 PNG";
+    private const string IconHintIdle = "默认跟随加载器，也可以选一块预设方块";
 
     /// <summary>这个实例有没有自定义图标 —— 决定「恢复默认」那颗按钮显不显示。</summary>
     public bool HasCustomIcon =>
         EditingInstance is { } model &&
-        !string.IsNullOrEmpty(model.Source.IconPath) &&
-        File.Exists(model.Source.IconPath);
+        (!string.IsNullOrEmpty(model.Source.IconPreset) ||
+         (!string.IsNullOrEmpty(model.Source.IconPath) && File.Exists(model.Source.IconPath)));
 
-    /// <summary>图标那行的小字：平时是说明，选错文件/写不进盘时换成错误原因。</summary>
+    /// <summary>图标那行的小字：平时是说明，选图失败时换成错误原因。</summary>
     [ObservableProperty]
     private string _instanceIconHint = IconHintIdle;
 
+    /// <summary>「选一块方块」那排预设展不展开。</summary>
+    [ObservableProperty]
+    private bool _isIconPickerOpen;
+
     /// <summary>
-    /// 把用户选的图片设成这个实例的图标。
+    /// 可选的预设方块 = <see cref="BlockIconKeys"/> 整张表（含铁砧 —— 它只是不进「按 id 散列」
+    /// 那个池子，用户自己挑它是正当的）。
     ///
-    /// <para><b>统一重编码成 80x80 的 PNG 再落盘</b>，不是原样拷贝：一来列表每次刷新都要解码图标，
-    /// 用户选的可能是 2000x2000 的立绘，缩一次比每次刷新都解大图划算；二来把来源格式统一掉，
-    /// 共享层只认 PNG（<see cref="PngCodec"/>），塞个 webp 进去以后读不出来。</para>
+    /// <para><b>这里取 128 而不是原图</b>：这排格子只有 32 DIP（200% 缩放要 64 物理像素），
+    /// 18 张 1024 全上就是 18 × 4 MB 的位图，为了几十像素的缩略图不值得。128 供 32~128 像素
+    /// 的格子都够用，一整套加起来才 1 MB 出头。真正上屏的实例图标走
+    /// <see cref="BlockIcon"/>，那边是 1024 原图。</para>
+    ///
+    /// <para>第一次用到时才建：18 张解码 + 缩放要两百多毫秒，别在建 VM 的时候干。</para>
+    /// </summary>
+    public ObservableCollection<BlockIconModel> IconPresets { get; } = new();
+
+    /// <summary>预设格子里那张缩略图的边长。见 <see cref="IconPresets"/> 的说明。</summary>
+    private const int IconPresetThumbSize = 128;
+
+    private void EnsureIconPresets()
+    {
+        if (IconPresets.Count > 0) return;
+
+        foreach (var key in BlockIconKeys)
+        {
+            if (BlockAssets.Load(key, IconPresetThumbSize) is not { } thumb) continue;
+            IconPresets.Add(new BlockIconModel(key, BlockDisplayName(key), thumb));
+        }
+    }
+
+    /// <summary>展开/收起预设。展开时顺手把「当前选的是哪块」标出来。</summary>
+    [RelayCommand]
+    private void ToggleIconPicker()
+    {
+        EnsureIconPresets();
+        IsIconPickerOpen = !IsIconPickerOpen;
+        if (IsIconPickerOpen) SyncIconPresetSelection();
+    }
+
+    /// <summary>把当前实例用的图标（如果是预设）在那排方块上标出来。</summary>
+    private void SyncIconPresetSelection()
+    {
+        var key = EditingInstance?.Source.IconPreset;
+        foreach (var preset in IconPresets) preset.IsSelected = preset.Key == key;
+    }
+
+    /// <summary>
+    /// 把选中的预设方块设成实例图标。
+    ///
+    /// <para>写进元数据的是<b>键</b>（<see cref="Instance.IconPreset"/>），不往实例目录落图片：
+    /// 图标本体就在程序集里，复制一份到磁盘只会多占空间、多一次解码，换资源版本后还会留下
+    /// 孤儿旧图。落盘这条路只留给历史数据 —— 老版本存过的 <c>icon.png</c> 仍然认，
+    /// 一旦选了预设就会被清掉。</para>
     /// </summary>
     [RelayCommand]
-    private void SetInstanceIcon(string path)
+    private void SetInstanceIconPreset(BlockIconModel? preset)
     {
-        if (EditingInstance is not { } model || string.IsNullOrWhiteSpace(path)) return;
+        if (EditingInstance is not { } model || preset is null) return;
 
-        byte[] png;
-        try
+        if (!_launcher.Instances.SetIconPreset(model.Source, preset.Key))
         {
-            var source = PngCodec.Decode(File.ReadAllBytes(path)).ToPixelBuffer();
-            if (Math.Max(source.Width, source.Height) > IconSize) source = PixelBuffer.Downsample(source, IconSize);
-            png = PngCodec.Encode(source);
-        }
-        catch (Exception)
-        {
-            InstanceIconHint = "这张图读不了，换一张 PNG 试试。";
+            InstanceIconHint = "写不进实例元数据，检查一下磁盘权限。";
             return;
         }
 
-        if (!_launcher.Instances.WriteIcon(model.Source, png))
-        {
-            InstanceIconHint = "写不进实例目录，检查一下磁盘权限。";
-            return;
-        }
-
-        // 路径没变（还是那个 icon.png），所以必须把缓存里旧的清掉，否则界面还显示上一张。
         _iconCache.Remove(_launcher.Instances.IconPathFor(model.Source));
         model.IconBitmap = IconFor(model.Source);
         if (CurrentInstance is { } current && !ReferenceEquals(current, model)) current.IconBitmap = IconFor(current.Source);
 
+        IsIconPickerOpen = false;
         InstanceIconHint = IconHintIdle;
         OnPropertyChanged(nameof(HasCustomIcon));
+        SyncIconPresetSelection();
     }
 
-    /// <summary>删掉实例目录下的 icon.png，图标自动回落到加载器标志 / 方块。</summary>
+    /// <summary>清掉预设 / 旧的 icon.png，图标自动回落到加载器标志 / 方块。</summary>
     [RelayCommand]
     private void ResetInstanceIcon()
     {
@@ -1782,8 +1851,10 @@ public partial class MainWindowViewModel : ViewModelBase
         model.IconBitmap = IconFor(model.Source);
         if (CurrentInstance is { } current && !ReferenceEquals(current, model)) current.IconBitmap = IconFor(current.Source);
 
+        IsIconPickerOpen = false;
         InstanceIconHint = IconHintIdle;
         OnPropertyChanged(nameof(HasCustomIcon));
+        SyncIconPresetSelection();
     }
 
     // ==========================================================
@@ -1948,6 +2019,8 @@ public partial class MainWindowViewModel : ViewModelBase
         OnPropertyChanged(nameof(EditingVersionSummary));
         OnPropertyChanged(nameof(HasCustomIcon));
         InstanceIconHint = IconHintIdle;
+        IsIconPickerOpen = false;
+        SyncIconPresetSelection();
     }
 
     /// <summary>返回实例列表页并保存可能改过的基本设置。</summary>
@@ -2008,6 +2081,8 @@ public partial class MainWindowViewModel : ViewModelBase
 
         RefreshInstJavaOptions();
         IsInstJavaChooserOpen = false;
+        IsIconPickerOpen = false;
+        InstanceIconHint = IconHintIdle;
         ConfigTab = "概览";
         ModSearch = "";
         RefreshInstanceManageData();
@@ -2551,6 +2626,12 @@ public partial class MainWindowViewModel : ViewModelBase
 
     private PixelBuffer IconFor(Instance instance)
     {
+        // 用户自己挑的预设最优先 —— 它压过加载器标志，也压过盘上可能残留的旧 icon.png。
+        if (!string.IsNullOrEmpty(instance.IconPreset))
+        {
+            return BlockIcon(instance.IconPreset);
+        }
+
         if (!string.IsNullOrEmpty(instance.IconPath) && File.Exists(instance.IconPath))
         {
             if (_iconCache.TryGetValue(instance.IconPath, out var cached)) return cached;
@@ -2588,22 +2669,21 @@ public partial class MainWindowViewModel : ViewModelBase
     }
 
     /// <summary>
-    /// 取某个方块的图标：<b>直接用内嵌的 128x128 源图，不预缩</b>。
+    /// 取某个方块的图标：<b>直接用内嵌的 1024x1024 原图，不预缩</b>。
     ///
-    /// <para>曾经在这里先盒式缩到 <see cref="IconSize"/>（80）再上屏，实测发糊，已改掉。
-    /// 病根是两次重采样叠在一起：</para>
-    /// <list type="number">
-    /// <item>源图是 64x64 的渲染最近邻放大 16 倍得来的（实测 1024 源图上 RGB/alpha
-    /// 都是严格的 16 像素块）。128 正好是它的 2 倍 —— 每个贴图像素占 2x2，和源网格严格对齐，
-    /// 盒式缩下去等于原样取样。缩到 80 之后贴图像素变成 1.25 个，盒式网格和贴图网格错位，
-    /// 每个输出像素都要跨相邻两个贴图平均，棱线和贴图细节就是这一步被抹平的。</item>
-    /// <item>WPF 还要再缩一次：36 DIP 的图标位在 200% 缩放下要 72 物理像素，80→72 又是一次。
-    /// 两次连吃，比一次缩到位明显软。</item>
-    /// </list>
+    /// <para>源的来历决定了「预缩」这一步只有坏处：ccVaults 那批 1024 图其实是 64x64 的渲染
+    /// 最近邻放大 16 倍（实测 RGB/alpha 都是严格的 16 像素块），有效分辨率上限就是 64x64。
+    /// 中间夹任何一次重采样都只是再插值一遍 —— 缩到 128 再缩到 80、或者直接 1024 一次缩到 80，
+    /// 最终落在屏幕上的信息量是一样的，但多一次就是多一层软化。</para>
     ///
-    /// <para>直接给 128 让 WPF 一次缩到设备像素，实测棱线更实（32/36/40 DIP、100%/200%
-    /// 两档 DPI 都比原方案锐）。128 也覆盖得住：最大图标位 40 DIP 在 300% 缩放下才 120
-    /// 物理像素，128 全程是缩小，不会出现放大糊边。</para>
+    /// <para>所以现在把 1024 原图直接交给 WPF，由它<b>一次</b>缩到设备像素。代价是解码慢一点
+    /// （18 张全解约 0.5 秒，但只在真用到的那几块上发生，且有
+    /// <see cref="EmbeddedImages"/> 缓存兜着），换来的是「用户要原图就真的是原图」。</para>
+    ///
+    /// <para>代价是解码慢一点、内存大一点：单张 1024 解码约 25 ms，缓存里每块占 4 MB
+    /// （<see cref="EmbeddedImages"/> 一份 + 视图层位图一份）。实例数 × 不同方块的组合一般
+    /// 在个位数，够用；**真要省就把这里改成 <c>BlockAssets.Load(type, 256)</c>** ——
+    /// 256 对 40 DIP 的槽位仍是 3 倍余量，肉眼无差。</para>
     ///
     /// <para>取不到（资源没打进去 / 解码失败）就退回程序化画的立方体，不让图标开天窗。</para>
     /// </summary>
@@ -2614,20 +2694,7 @@ public partial class MainWindowViewModel : ViewModelBase
         return PixelArt.CreateBlockCube(type, BlockIconSize);
     }
 
-    /// <summary>
-    /// 用户自选图标（实例目录下的 <c>icon.png</c>）落盘时的边长。
-    /// <b>只管写入，不管方块图标</b> —— 方块图标走 <see cref="BlockIcon"/>，用的是 128 源图原样。
-    ///
-    /// <para>为什么自选图要缩：列表每次刷新都要解码，玩家选的可能是 2000x2000 的立绘，
-    /// 缩一次比每次刷新都解大图划算；顺带把来源格式统一成 PNG（共享层只认 PNG，
-    /// 塞个 webp 进去以后读不出来）。</para>
-    ///
-    /// <para>80 = 最大图标位（40 DIP）的 2 倍：200% 缩放下正好 1:1，125%~150% 是缩小。
-    /// DIP 乘系统缩放才是物理像素，按 2 倍出图才不会被合成器非整数放大糊掉。</para>
-    /// </summary>
-    private const int IconSize = 80;
-
-    /// <summary>兜底程序化立方体的边长，和方块资产对齐成 128（见 <see cref="BlockIcon"/>）。</summary>
+    /// <summary>兜底程序化立方体的边长。真实图标走 1024 原图，这条只在资源缺失时出现。</summary>
     private const int BlockIconSize = 128;
 
     /// <summary>

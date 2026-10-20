@@ -21,7 +21,21 @@ public sealed class Instance
     /// <summary>Per-instance overrides; null falls back to the global setting.</summary>
     public bool Isolated { get; set; } = true;
 
+    /// <summary>
+    ///     实例目录下 <c>icon.png</c> 的路径；<b>不落盘</b>，每次 <c>Load()</c> 按盘上有没有这个
+    ///     文件重算（见 <c>InstanceManager.AttachIconPath</c>）。
+    /// </summary>
     public string? IconPath { get; set; }
+
+    /// <summary>
+    ///     用户从预设里挑的那块方块（<c>grass</c> / <c>stone</c> / <c>tnt</c> …，对应
+    ///     <c>Raster/Assets/block_*.png</c> 的文件名）。<c>null</c> 表示没挑过，图标回落到
+    ///     加载器标志 / 按 id 散列的方块。
+    ///
+    ///     <para>存的是<b>键而不是图片</b>：图标本体在程序集里，写一份 <c>icon.png</c> 到实例目录
+    ///     只是把同一张图复制一份（还多一次解码），换资源版本后还会留下孤儿旧图。</para>
+    /// </summary>
+    public string? IconPreset { get; set; }
     public string? JavaPath { get; set; }
     public int? MaxMemoryMb { get; set; }
 
