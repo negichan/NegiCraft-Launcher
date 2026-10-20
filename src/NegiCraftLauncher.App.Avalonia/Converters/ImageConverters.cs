@@ -1,5 +1,6 @@
 using System;
 using System.Globalization;
+using System.Runtime.CompilerServices;
 using Avalonia;
 using Avalonia.Data.Converters;
 using Avalonia.Media.Imaging;
@@ -14,14 +15,20 @@ namespace NegiCraftLauncher.App.Avalonia.Converters;
 /// <para>这是 P0「VM 去 UI 类型化」之后视图层唯一的补偿点：VM 只持有字节，
 /// 上屏这一步由每个平台各自完成（WPF 侧对应的是 <c>BitmapSource.Create</c>）。</para>
 ///
-/// <para>转换器每次绑定求值都会新建一个位图。这些属性（背景、头像、实例图标）一个会话里
-/// 只变几次，量可以忽略；真要高频刷新再换成带缓存的实现。</para>
+/// <para>转换结果按 <see cref="PixelBuffer"/> <b>引用</b>缓存（与 WPF 侧同一个策略）：
+/// VM 里的图标都来自 <c>BlockAssets</c> / <c>EmbeddedImages</c> 的缓存，同一个方块只有一份
+/// <see cref="PixelBuffer"/>，而绑定会在列表重排、滚动虚拟化、切页时反复求值 ——
+/// 源图现在是 1024x1024，每次都重建一遍是纯浪费。</para>
 /// </summary>
 public sealed class PixelBufferToBitmapConverter : IValueConverter
 {
+    private static readonly ConditionalWeakTable<PixelBuffer, WriteableBitmap> Cache = new();
+
     public object? Convert(object? value, Type targetType, object? parameter, CultureInfo culture)
     {
         if (value is not PixelBuffer buffer) return null;
+
+        if (Cache.TryGetValue(buffer, out var cached)) return cached;
 
         var bitmap = new WriteableBitmap(
             new PixelSize(buffer.Width, buffer.Height),
@@ -46,6 +53,7 @@ public sealed class PixelBufferToBitmapConverter : IValueConverter
             }
         }
 
+        Cache.Add(buffer, bitmap);
         return bitmap;
     }
 
