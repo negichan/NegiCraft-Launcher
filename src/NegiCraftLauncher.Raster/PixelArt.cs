@@ -181,6 +181,152 @@ public static class PixelArt
         return bmp;
     }
 
+    /// <summary>
+    /// 按铁砧<b>自己的模型</b>画的等距图标 —— 四段堆叠、腿间镂空，不是一个正方块。
+    ///
+    /// <para><b>为什么不能直接用 <see cref="CreateBlockCube"/>：铁砧在游戏里就不是完整方块。
+    /// jar 里 <c>models/block/template_anvil.json</c> 把它拆成四段（坐标单位 1/16 格）：
+    /// 底座 (2,0,2)-(14,4,14)、收腰 (4,4,3)-(12,5,13)、砧颈 (6,5,4)-(10,10,12)、
+    /// 砧面 (3,10,0)-(13,16,16)。硬塞进立方体模板会得到一块「塌了口的盒子」——
+    /// 顶面砧盘中间是空的，侧面正视图又被斜切，铁砧的造型全丢。
+    /// PCL2 的 <c>Anvil.png</c> 与 HMCL 的 <c>forge.png</c> 也都是这个形状，
+    /// 但那两家的图分别是 LGPL-3.0 / GPL-3.0，不能拿来用，只能自己按几何画。</para>
+    ///
+    /// <para><b>投影</b>：顶面菱形、左右侧面的斜率和 <see cref="CreateBlockCube"/> 用同一套
+    /// 真等距参数，所以和旁边那批方块图标摆在一起是同一个视角、同一套明暗。</para>
+    ///
+    /// <para><b>贴图来源</b>：砧面顶用 <paramref name="topTex"/>（<c>anvil_top.png</c>），
+    /// 其余各面用 <paramref name="sideTex"/>（<c>anvil.png</c>）—— 与模型里
+    /// <c>#top</c> / <c>#body</c> 的指派一致。</para>
+    /// </summary>
+    public static PixelBuffer CreateAnvil(PixelBuffer topTex, PixelBuffer sideTex, int size = 32)
+    {
+        var bmp = new PixelBuffer(size, size);
+        var ptr = bmp.Pixels;
+
+        double s = size;
+
+        // 与 CreateBlockCube 完全相同的三个尺寸，保证同一个视角。
+        var topH = s / 2;
+        var halfW = topH * Math.Sqrt(3) / 2;
+        var sideH = s - topH;
+        var cx = s / 2;
+
+        // 四段按 y0 升序画：上面的段会后画，等距下自然盖住下面那段（砧面外挑压住砧颈）。
+        // anvilTop = 顶面该用 anvil_top.png 的那一段（模型里只有砧面的 up 指向 #top）。
+        (double x0, double y0, double z0, double x1, double y1, double z1, bool anvilTop)[] elements =
+        {
+            (2, 0, 2, 14, 4, 14, false),
+            (4, 4, 3, 12, 5, 13, false),
+            (6, 5, 4, 10, 10, 12, false),
+            (3, 10, 0, 13, 16, 16, true),
+        };
+
+        for (var y = 0; y < size; y++)
+        {
+            for (var x = 0; x < size; x++)
+            {
+                // 取像素中心再反解，避免斜边整像素错位。
+                double px = x + 0.5, py = y + 0.5;
+
+                foreach (var e in elements)
+                {
+                    var dx = e.x1 - e.x0;
+                    var dy = e.y1 - e.y0;
+                    var dz = e.z1 - e.z0;
+
+                    // 反解等距坐标：
+                    //   px = cx + (x - z) · halfW/16
+                    //   py = (x + z) · topH/32 − y · sideH/16
+                    var diff = (px - cx) * 16 / halfW;
+
+                    // --- 顶面：y = y1，解 (x, z) ---
+                    var sum = (py + e.y1 * sideH / 16) * 32 / topH;
+                    var bx = (sum + diff) / 2;
+                    var bz = (sum - diff) / 2;
+
+                    if (bx >= e.x0 && bx <= e.x1 && bz >= e.z0 && bz <= e.z1)
+                    {
+                        var tex = e.anvilTop ? topTex : sideTex;
+                        ptr[y * size + x] = Shade(Pick(tex, (bx - e.x0) / dx, (bz - e.z0) / dz), 1.0);
+                        break;
+                    }
+
+                    // --- 左面：x = x0（朝 −x）---
+                    var lz = e.x0 - diff;
+                    var ly = ((e.x0 + lz) * topH / 32 - py) * 16 / sideH;
+
+                    if (lz >= e.z0 && lz <= e.z1 && ly >= e.y0 && ly <= e.y1)
+                    {
+                        ptr[y * size + x] = Shade(Pick(sideTex, (lz - e.z0) / dz, 1 - (ly - e.y0) / dy), 0.78);
+                        break;
+                    }
+
+                    // --- 右面：z = z1（朝 +z）---
+                    var rx = e.z1 + diff;
+                    var ry = ((rx + e.z1) * topH / 32 - py) * 16 / sideH;
+
+                    if (rx >= e.x0 && rx <= e.x1 && ry >= e.y0 && ry <= e.y1)
+                    {
+                        ptr[y * size + x] = Shade(Pick(sideTex, (rx - e.x0) / dx, 1 - (ry - e.y0) / dy), 0.62);
+                        break;
+                    }
+                }
+            }
+        }
+
+        // 铁砧比一个方块窄（砧面长 16 但座宽只有 12），直接投影只占画布宽 81%、高 87.5%，
+        // 摆在列表里会比旁边的方块图标小一圈。按内容裁齐再放大到满画布。
+        // 纹样是 16x16 的像素画，放大必须最近邻保持硬边 —— 盒式会把方块纹抹糊。
+        return FillFrame(bmp);
+    }
+
+    /// <summary>把图像的内容裁到最小外框，再最近邻放大回原尺寸 —— 让"实际占幅小的物体"也填满图标位。</summary>
+    private static PixelBuffer FillFrame(PixelBuffer source)
+    {
+        var minX = source.Width;
+        var minY = source.Height;
+        var maxX = -1;
+        var maxY = -1;
+
+        for (var y = 0; y < source.Height; y++)
+        for (var x = 0; x < source.Width; x++)
+        {
+            if (((source.Pixels[y * source.Width + x] >> 24) & 0xFF) < 128) continue;
+            if (x < minX) minX = x;
+            if (x > maxX) maxX = x;
+            if (y < minY) minY = y;
+            if (y > maxY) maxY = y;
+        }
+
+        if (maxX < 0) return source;
+
+        var w = maxX - minX + 1;
+        var h = maxY - minY + 1;
+        var result = new PixelBuffer(source.Width, source.Height);
+
+        for (var y = 0; y < result.Height; y++)
+        for (var x = 0; x < result.Width; x++)
+        {
+            var sx = Math.Min(source.Width - 1, minX + x * w / result.Width);
+            var sy = Math.Min(source.Height - 1, minY + y * h / result.Height);
+            result.Set(x, y, source.Pixels[sy * source.Width + sx]);
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// 从纹理上按归一化坐标取一个像素（最近邻）—— 16x16 的贴图放到 80px 上必须保持硬边，
+    /// 双线性会把方块纹样抹糊。
+    /// </summary>
+    private static uint Pick(PixelBuffer tex, double u, double v)
+    {
+        var tx = Math.Clamp((int)(u * tex.Width), 0, tex.Width - 1);
+        var ty = Math.Clamp((int)(v * tex.Height), 0, tex.Height - 1);
+        return tex.Pixels[ty * tex.Width + tx];
+    }
+
     /// <summary>按系数压暗 RGB，alpha 保持不变 —— 三个面靠这个拉开层次。</summary>
     private static uint Shade(uint col, double k)
     {

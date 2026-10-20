@@ -2630,7 +2630,11 @@ public partial class MainWindowViewModel : ViewModelBase
     {
         if (VanillaBlockTextures(instance.VersionId).TryGetValue(type, out var tex))
         {
-            return PixelArt.CreateBlockCube(tex.Top, tex.Side, IconSize);
+            // 铁砧不是完整方块：得按它自己的模型几何画，塞进立方体模板会得到一块
+            // 「塌了口的盒子」（顶面砧盘中空 + 侧面正视图被斜切）。
+            return type == ForgeBlockType
+                ? PixelArt.CreateAnvil(tex.Top, tex.Side, IconSize)
+                : PixelArt.CreateBlockCube(tex.Top, tex.Side, IconSize);
         }
 
         return PixelArt.CreateBlockCube(type, IconSize);
@@ -2685,6 +2689,11 @@ public partial class MainWindowViewModel : ViewModelBase
     /// Forge 实例的图标方块。<b>故意不进 <see cref="BlockIcons"/> 那个散列池</b>：
     /// 铁砧贴图整体偏深，被随机散列到会得到一块近乎黑的立方体；
     /// 它只该出现在「确定是 Forge」的时候。
+    ///
+    /// <para>铁砧**不是完整方块**，所以不走 <see cref="PixelArt.CreateBlockCube"/> 那条路 ——
+    /// 塞进立方体模板会得到一块「塌了口的盒子」（顶面砧盘中空 + 侧面正视图被斜切）。
+    /// 走 <see cref="PixelArt.CreateAnvil"/>，按 jar 里 <c>template_anvil.json</c> 的四段几何画。
+    /// 分派在 <see cref="BlockIcon"/>。</para>
     /// </summary>
     private const string ForgeBlockType = "anvil";
 
