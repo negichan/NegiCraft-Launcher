@@ -2402,13 +2402,18 @@ public partial class MainWindowViewModel : ViewModelBase
 
     /// <summary>
     /// <see cref="Instance.Loader"/> 的第一段（<c>Fabric 0.16.10</c> → <c>Fabric</c>）
-    /// 映射到<b>内置标志</b>的文件名。只有拿得到可再分发方形标志的两家在这里，
-    /// 其余返回 <c>null</c>，回落到按 id 散列的方块。
+    /// 映射到<b>内置标志</b>的文件名 —— 装了谁的加载器就挂谁的标志，和 PCL2 / HMCL 一个道理：
+    /// 一眼能认出这个实例是 Forge 还是 Fabric，比给每个实例随机挑个方块有用得多。
+    ///
+    /// <para>只有 OptiFine 没有条目：它闭源，官方没有任何能当方形标志用的图，
+    /// 所以那一路回落到按 id 散列的方块。</para>
     /// </summary>
     private static string? LoaderIconName(string loader) =>
         loader.Split(' ')[0].ToLowerInvariant() switch
         {
             "fabric" => "fabric",
+            "forge" => "forge",
+            "quilt" => "quilt",
             "neoforge" => NeoForgeIcon,
             _ => null,
         };

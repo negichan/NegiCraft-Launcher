@@ -1,22 +1,32 @@
 # 第三方图标声明 / Third-party icon notice
 
-`icon_fabric.png`、`icon_neoforge.png` 这两张是**加载器官方标志**，不是本项目的作品；
-`icon_neoforge_negi.png` 是**本项目自己的美术**（见文末）。
+`icon_fabric.png`、`icon_forge.png`、`icon_quilt.png`、`icon_neoforge.png` 这四张是
+**加载器官方标志**，不是本项目的作品；`icon_neoforge_negi.png` 是**本项目自己的美术**（见文末）。
 
 | 文件 | 来源仓库 | 原始文件 | 许可 |
 | --- | --- | --- | --- |
 | `icon_fabric.png` | https://github.com/FabricMC/fabricmc.net | `assets/logo.png`（52×56） | MIT |
+| `icon_forge.png` | https://github.com/MinecraftForge/Installer（分支 `1.x`） | `big_logo.png` 里的铁砧；实际取的是 Forge 打进 `forge-*-universal.jar` 的 `forge_icon.png`（48×48） | LGPL-2.1 |
+| `icon_quilt.png` | https://github.com/QuiltMC/art | `brand/1024png/quilt_mini_icon_transparent.png`（1024×1024） | **未附 LICENSE**（GitHub 识别为 NOASSERTION） |
 | `icon_neoforge.png` | https://github.com/neoforged/.github | `art/neoforged_icon_16x16.png`（16×16） | Unlicense（公共领域） |
 | `icon_neoforge_negi.png` | 本项目 `src/NegiCraftLauncher.App/Assets/app.png` | 裁头部 | MIT（本项目） |
 
 ## 处理方式（可复现）
 
-三张都被统一成 **80×80 透明底**。图标位显示尺寸最大 40 DIP，这里出 2 倍图：
-DIP 要乘系统缩放才是物理像素，40 DIP 在 125% 下要 60 个物理像素，出 40 的位图会被
-合成器非整数放大、棱线糊掉；80 在 200% 下正好 1:1，其余缩放档次都是缩小（缩小永远比放大好看）。
+五张都被统一成 **80×80**（Forge 那张自带深蓝底板，其余透明底）。图标位显示尺寸最大 40 DIP，
+这里出 2 倍图：DIP 要乘系统缩放才是物理像素，40 DIP 在 125% 下要 60 个物理像素，
+出 40 的位图会被合成器非整数放大、棱线糊掉；80 在 200% 下正好 1:1，其余缩放档次都是缩小
+（缩小永远比放大好看）。
 
 - Fabric：52×56 → 按 80/56 等比盒式缩到 74×80（在预乘 alpha 空间做平均，不然透明边缘
   会糊出一圈黑边）→ 居中放进 80×80。
+- Forge：48×48 → 等比盒式放到 76×76 → 居中（留 2px 边）。48 和 80 不整除，
+  所以不追求整数倍：源图本身已经比 40 DIP 大，显示时是缩小。
+  **为什么不用那条 256×64 的横幅**：裁出来的铁砧是 74×38，塞进方形槽位只剩一半高度，
+  而且深色铁砧在深色 UI 上几乎看不见；`forge_icon.png` 是 Forge 自己给模组列表用的方形图标，
+  深蓝底 + 白铁砧，40 DIP 下一眼就认得出。
+- Quilt：1024×1024 里图形占 `(140,140)-(1020,1020)`（881×881），先裁掉这圈留白，
+  再盒式缩到 70×70 居中（88%）。
 - NeoForge（官方）：16×16 → 整数 5 倍最近邻扩到 80×80。不用小数倍缩放：16→80 恰好
   整数倍，最近邻不会啃出一半宽一半窄的像素边。
 - NeoForge（自家）：`app.png`（512×512，橙狐狸叼葱）裁 `(157,56)-(505,312)` ——
@@ -31,24 +41,33 @@ DIP 要乘系统缩放才是物理像素，40 DIP 在 125% 下要 60 个物理�
 对得上号）；自家的橙狐狸留在包里，改 `MainWindowViewModel.NeoForgeIcon` 一个常量就能切到
 `neoforge_negi`，让实例列表、停靠栏、桌宠是同一套形象。
 
-**商标**：前两行的标志商标权仍归 FabricMC 与 NeoForged。这里只是「哪家加载器的实例就显示
-哪家的标志」，属于指明来源的用法。
+**商标**：前四行的标志商标权仍归 FabricMC / MinecraftForge / QuiltMC / NeoForged。
+这里只是「哪家加载器的实例就显示哪家的标志」，属于指明来源的用法。
 
-## 为什么没有 Forge / Quilt / OptiFine 的标志
+**Quilt 那行的许可是硬伤**：`QuiltMC/art` 公开挂在 GitHub 上供社区取用，但整个仓库没写
+LICENSE，严格说等于「保留所有权利」。这里按「指明来源」的合理使用处理 —— 只用来标出
+「这个实例跑的是 Quilt Loader」，不修改、不声称归属。真要收紧的话，把这个文件从包里去掉、
+让 `LoaderIconName` 不再映射 `quilt` 即可，其余代码不用动。
 
-去翻过各自的项目，结论是这三家都拿不到能直接塞进 MIT 仓库的方形标志：
+## 为什么只有 OptiFine 没有标志
 
-- **Forge**：官方铁砧只存在于词标横幅里（`MinecraftForge/Installer` 的 `big_logo.png`
-  是 256×64 的「铁砧 + FORGE」，`MinecraftForge/Web` 只有 svg 且该仓库没写许可）。
-  裁出铁砧是 76×41，塞进 40×40 只剩 40×22，一米粒大的铁砧。而且 Installer 仓库是
-  LGPL-2.1 —— 能用但得连带声明，不如换条路。
-- **Quilt**：`QuiltMC/art` 有 `brand/1024png/quilt_logo_dark.png`，但整个仓库
-  **没有 LICENSE**（GitHub 识别为 NOASSERTION），README 是空的，没法主张任何权利。
-- **OptiFine**：闭源，没有仓库也没有可再分发的素材。
+**四家加载器现在都有标志了**，只有 OptiFine 还是按 id 散列的方块 —— 它闭源，没有仓库、
+官网也没有可当方形标志用的图，唯一的官方视觉是「OptiFine」这几个字。拿不到就是拿不到，
+不拿方块硬凑（试过的都在下面这张表里）。
+
+Forge 和 Quilt 是后来补上的，当初卡住的两个点在下面留档：
+
+- **Forge**：一开始只找到 `MinecraftForge/Installer` 的 `big_logo.png`（256×64 的
+  「铁砧 + FORGE」词标）。裁出来的铁砧是 74×38，塞进方形槽位只剩一半高度；
+  深色铁砧在深色 UI 上也看不清。**后来发现 Forge 自己往 `forge-*-universal.jar` 里塞了
+  `forge_icon.png`（48×48，深蓝底白铁砧）** —— 这才是它给模组列表用的图标，直接用它。
+  Installer 仓库是 LGPL-2.1，连带声明写在上面那张表里。
+- **Quilt**：`QuiltMC/art` 有全套品牌图，其中 `quilt_mini_icon_transparent.png` 就是为
+  小尺寸准备的（三个色块 + 一个菱形）。但仓库**没写 LICENSE**，见上一节的说明。
 
 也试过给它们各配一块有象征意义的方块（PCL2 就是这么干的：它的
 `Plain Craft Launcher 2/Images/Blocks/Anvil.png` 拿铁砧方块当 Forge 的图标）。实测在
-40×40 下都不成立，所以放弃了：
+40×40 下都不成立，所以没走这条路：
 
 | 试过的 | 结果 |
 | --- | --- |
@@ -56,7 +75,7 @@ DIP 要乘系统缩放才是物理像素，40 DIP 在 125% 下要 60 个物理�
 | 熔炉 `furnace` | 顶面 + 侧面都是石头灰，只有正面有炉口，看不出是熔炉 |
 | 锻造台 `smithing_table` | 深色近黑，40px 下糊成一团 |
 
-结论：这三家（以及原版）都走**按实例 id 散列挑方块**，不为加载器编造语义。
+结论：OptiFine 与**原版**走**按实例 id 散列挑方块**；有标志的四家一律挂自己的标志。
 
 ## 方块图标从哪来
 
