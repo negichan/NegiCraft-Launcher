@@ -143,6 +143,33 @@ public partial class LoaderOptionModel : ObservableObject
     private bool _isSelected;
 }
 
+/// <summary>
+///     「实例图标」里可选的一块预设方块 —— 键 + 中文名 + 已经解码好的位图。
+///
+///     <para>位图是<b>共享实例</b>（<c>BlockAssets</c> 的缓存），所以 18 个预设不会各解一份；
+///     显示层再按引用缓存一次位图，整排方块就只占一份内存。</para>
+/// </summary>
+public partial class BlockIconModel : ObservableObject
+{
+    public BlockIconModel(string key, string name, PixelBuffer bitmap)
+    {
+        Key = key;
+        Name = name;
+        Bitmap = bitmap;
+    }
+
+    /// <summary>对应 <c>Assets/block_&lt;key&gt;.png</c>，也是写进 <c>Instance.IconPreset</c> 的值。</summary>
+    public string Key { get; }
+
+    public string Name { get; }
+
+    public PixelBuffer Bitmap { get; }
+
+    /// <summary>这个方块就是当前实例正在用的那块 —— 那排图标上给它描一圈高亮。</summary>
+    [ObservableProperty]
+    private bool _isSelected;
+}
+
 public partial class AccountModel : ObservableObject
 {
     public AccountModel(GameAccount source) => Source = source;

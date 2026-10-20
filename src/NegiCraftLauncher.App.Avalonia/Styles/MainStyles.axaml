@@ -305,6 +305,36 @@
             <Setter Property="Background" Value="#3f1218"/>
         </Style>
 
+        <!-- 「实例图标」那排预设方块：每块一个 38x38 的槽（+4 间距 = 步进 42）。
+             步进是量着定的：配置页可用宽约 789 DIP，18 块 × 42 = 756 刚好排成一行；
+             再大一点就掉到第二行只剩铁砧一个，很难看。窗口拉窄时仍然会自动换行，不算错。
+             选中态（On）只换描边不换底 —— 18 个格子全上底色会喧宾夺主，
+             方块自己就是内容，槽位只负责告诉人"点到哪一块"。
+             ⚠️ 与 WPF 的 IconTileStyle 一一对应，改一边记得看另一边。 -->
+        <Style Selector="Button.IconTile">
+            <Setter Property="Width" Value="38"/>
+            <Setter Property="Height" Value="38"/>
+            <Setter Property="Padding" Value="0"/>
+            <Setter Property="Margin" Value="0,0,4,4"/>
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderBrush" Value="Transparent"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="CornerRadius" Value="9"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Focusable" Value="False"/>
+            <Setter Property="FocusAdorner" Value="{x:Null}"/>
+            <Setter Property="HorizontalContentAlignment" Value="Center"/>
+            <Setter Property="VerticalContentAlignment" Value="Center"/>
+        </Style>
+        <Style Selector="Button.IconTile:pointerover">
+            <Setter Property="Background" Value="#111114"/>
+            <Setter Property="BorderBrush" Value="#3f3f46"/>
+        </Style>
+        <Style Selector="Button.IconTile.On">
+            <Setter Property="Background" Value="#111114"/>
+            <Setter Property="BorderBrush" Value="#a1a1aa"/>
+        </Style>
+
         <!-- 实例卡上的 tag（版本 / 加载器 / 模组数）。稿子改成了"有底的胶囊"：
              半透明白底 + 更亮一档的描边，压在卡片底色上才分得出层；圆角按稿子的 6 而不是半高，
              所以它不是药丸而是圆角方块。当前卡的那一份要再亮一档，用 IsCurrent 的数据触发。
