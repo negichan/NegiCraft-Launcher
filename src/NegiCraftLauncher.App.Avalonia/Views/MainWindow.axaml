@@ -944,8 +944,10 @@
                                                                 <Image Source="{Binding EditingInstance.IconBitmap, Converter={StaticResource PixelsToBitmap}}"
                                                                        Width="36" Height="36" RenderOptions.BitmapInterpolationMode="HighQuality"/>
                                                             </Border>
-                                                            <Button Classes="BtnSm BtnOutline" Content="更换…"
-                                                                    Command="{Binding ToggleIconPickerCommand}"/>
+                                                            <Button Classes="IconBtn" Width="28" Height="28" ToolTip.Tip="换一块预设方块"
+                                                                    Command="{Binding ToggleIconPickerCommand}">
+                                                                <materialIcons:MaterialIcon Kind="Pencil" Width="15" Height="15" Foreground="#a1a1aa"/>
+                                                            </Button>
                                                             <Button Classes="BtnSm BtnOutline" Content="恢复默认"
                                                                     Command="{Binding ResetInstanceIconCommand}"
                                                                     IsVisible="{Binding HasCustomIcon}"/>

@@ -1118,8 +1118,11 @@
                                                                 <Image Source="{Binding EditingInstance.IconBitmap, Converter={StaticResource PixelsToBitmap}}"
                                                                        Width="36" Height="36" RenderOptions.BitmapScalingMode="HighQuality" />
                                                             </Border>
-                                                            <Button Style="{StaticResource BtnSmOutlineStyle}" Content="更换…"
-                                                                    Command="{Binding ToggleIconPickerCommand}" />
+                                                            <Button Style="{StaticResource IconBtnStyle}" Width="28" Height="28"
+                                                                    ToolTip="换一块预设方块"
+                                                                    Command="{Binding ToggleIconPickerCommand}">
+                                                                <materialIcons:MaterialIcon Kind="Pencil" Width="15" Height="15" Foreground="#a1a1aa" />
+                                                            </Button>
                                                             <Button Style="{StaticResource BtnSmOutlineStyle}" Content="恢复默认"
                                                                     Command="{Binding ResetInstanceIconCommand}"
                                                                     Visibility="{Binding HasCustomIcon, Converter={StaticResource BoolToVis}}" />
