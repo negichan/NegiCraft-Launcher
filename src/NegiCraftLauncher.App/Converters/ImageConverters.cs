@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.IO;
+using System.Runtime.CompilerServices;
 using System.Windows;
 using System.Windows.Data;
 using System.Windows.Media;
@@ -18,9 +19,23 @@ namespace NegiCraftLauncher.App.Converters;
 /// </summary>
 public sealed class PixelBufferToBitmapConverter : IValueConverter
 {
+    /// <summary>
+    /// 按 <see cref="PixelBuffer"/> <b>引用</b>缓存已经建好的位图。
+    ///
+    /// <para>VM 那边的图标都来自 <c>BlockAssets</c> / <c>EmbeddedImages</c> 的缓存，同一个方块
+    /// 全世界只有一份 <see cref="PixelBuffer"/>；而绑定会在列表重排、滚动虚拟化、切页时反复求值。
+    /// 图标源图现在是 1024x1024（4 MB 一个），每次都新建的话，翻一遍实例列表就是几十 MB 的垃圾。</para>
+    ///
+    /// <para>用 <see cref="ConditionalWeakTable{TKey,TValue}"/> 而不是字典：跟着 PixelBuffer 走，
+    /// 它被回收了位图也一起走，不用自己管生命周期。</para>
+    /// </summary>
+    private static readonly ConditionalWeakTable<PixelBuffer, BitmapSource> Cache = new();
+
     public object? Convert(object? value, Type targetType, object? parameter, CultureInfo culture)
     {
         if (value is not PixelBuffer buffer || buffer.Width <= 0 || buffer.Height <= 0) return null;
+
+        if (Cache.TryGetValue(buffer, out var cached)) return cached;
 
         var bitmap = BitmapSource.Create(
             buffer.Width,
@@ -34,6 +49,7 @@ public sealed class PixelBufferToBitmapConverter : IValueConverter
 
         // 冻结之后可以跨线程用，也省掉一份无谓的拷贝。
         bitmap.Freeze();
+        Cache.Add(buffer, bitmap);
         return bitmap;
     }
 
