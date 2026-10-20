@@ -117,11 +117,20 @@ public sealed class DebugBridge
                 case "cfg-inst":
                     await PetDebugMailbox.Ui(() =>
                     {
-                        var target = _vm.Instances.FirstOrDefault();
+                        // 参数按显示名挑实例（`cfg-inst 1.20.4`），`all` 那个词单独表示"把高级项也摊开"。
+                        // 早先无脑取第一个，结果看的是别的实例，白排查了半天。
+                        var parts = arg.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+                        var filter = parts.FirstOrDefault(p => !string.Equals(p, "all", StringComparison.OrdinalIgnoreCase));
+
+                        var target = _vm.Instances.FirstOrDefault(i =>
+                                         filter is not null &&
+                                         i.Name.Contains(filter, StringComparison.OrdinalIgnoreCase))
+                                     ?? _vm.Instances.FirstOrDefault();
+
                         if (target != null)
                         {
                             _vm.OpenInstanceConfigCommand.Execute(target);
-                            if (arg.Contains("all"))
+                            if (parts.Any(p => string.Equals(p, "all", StringComparison.OrdinalIgnoreCase)))
                             {
                                 _vm.ConfigInstCustomJava = true;
                                 _vm.ConfigInstCustomMemory = true;
