@@ -31,6 +31,26 @@ public sealed class GameFolder
 }
 
 /// <summary>
+/// 一次地区探测的落盘结果。<see cref="Code"/> 是 ISO 3166-1 alpha-2，港澳台按国内口径写
+/// <c>HK</c> / <c>MO</c> / <c>TW</c>；空字符串表示"探到了但没认出来是哪个国家"。
+/// </summary>
+public sealed class DetectedRegion
+{
+    public string Code { get; set; } = "";
+
+    /// <summary>显示名（已经是本地化过的，例如「中国大陆」「日本」）。</summary>
+    public string Name { get; set; } = "";
+
+    /// <summary>省 / 市，可能为空 —— 只有 ipip 那一路给。</summary>
+    public string? City { get; set; }
+
+    public DateTime CheckedAt { get; set; }
+
+    /// <summary>哪一家探到的（见 <c>RegionProbe</c>），排查"它怎么给我判成这个地区"时有用。</summary>
+    public string Source { get; set; } = "";
+}
+
+/// <summary>
 /// Everything the settings page edits, persisted as a single JSON document.
 /// </summary>
 public sealed class LauncherSettings
@@ -357,9 +377,15 @@ public sealed class LauncherSettings
         GameRoot = DefaultFolder.Path;
     }
 
+    /// <summary>
+    /// 上次探测到的所在地区。用途只有一个：按地区决定某些内容 / 镜像给不给、从哪拿。
+    /// <b>判断依据是出口 IP 的注册地</b>，所以换网络结论就变 —— 不读设备信息、不做定位。
+    /// 为 <c>null</c> 表示还没探过（或从来没探到），功能侧按"未知"处理。
+    /// </summary>
+    public DetectedRegion? Region { get; set; }
+
     [JsonIgnore]
     public string FilePath { get; private set; } = NclPaths.SettingsFile;
-
     public static LauncherSettings Load(string? path = null)
     {
         path ??= NclPaths.SettingsFile;

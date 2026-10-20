@@ -1544,6 +1544,9 @@
                                 <Button Classes="SetNavBtn" Content="下载"
                                         Classes.On="{Binding CurrentSettingsTab, Converter={x:Static ObjectConverters.Equal}, ConverterParameter='下载'}"
                                         Command="{Binding SelectSettingsTabCommand}" CommandParameter="下载"/>
+                                <Button Classes="SetNavBtn" Content="地区"
+                                        Classes.On="{Binding CurrentSettingsTab, Converter={x:Static ObjectConverters.Equal}, ConverterParameter='地区'}"
+                                        Command="{Binding SelectSettingsTabCommand}" CommandParameter="地区"/>
                                 <Button Classes="SetNavBtn" Content="外观"
                                         Classes.On="{Binding CurrentSettingsTab, Converter={x:Static ObjectConverters.Equal}, ConverterParameter='外观'}"
                                         Command="{Binding SelectSettingsTabCommand}" CommandParameter="外观"/>
@@ -1766,6 +1769,37 @@
                                                 <TextBlock Text="暂无下载任务" IsVisible="{Binding !HasDownloads}"
                                                            FontSize="13" Foreground="#71717a"
                                                            HorizontalAlignment="Center" Margin="0,16"/>
+                                            </StackPanel>
+                                        </Border>
+                                    </StackPanel>
+                                </Border>
+
+                                <!-- 地区 -->
+                                <Border Background="#111114" BorderBrush="#26262b" BorderThickness="1" CornerRadius="14" Padding="18,0"
+                                        IsVisible="{Binding CurrentSettingsTab, Converter={x:Static ObjectConverters.Equal}, ConverterParameter='地区'}">
+                                    <StackPanel>
+                                        <Border Height="58" BorderBrush="#26262b" BorderThickness="0,0,0,1">
+                                            <Grid ColumnDefinitions="* Auto">
+                                                <StackPanel VerticalAlignment="Center" Spacing="2" Margin="0,0,16,0">
+                                                    <TextBlock Text="所在地区" FontWeight="Medium" Foreground="#fafafa"/>
+                                                    <TextBlock Text="{Binding RegionHint}" FontSize="12" Foreground="#71717a"
+                                                               TextWrapping="Wrap"/>
+                                                </StackPanel>
+                                                <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="10"
+                                                            VerticalAlignment="Center">
+                                                    <TextBlock Text="{Binding RegionLabel}" FontSize="14" FontWeight="Medium"
+                                                               Foreground="#fafafa" VerticalAlignment="Center"/>
+                                                    <Button Classes="BtnSm BtnOutline" Content="重新检测"
+                                                            Command="{Binding RefreshRegionCommand}"/>
+                                                </StackPanel>
+                                            </Grid>
+                                        </Border>
+
+                                        <Border Padding="0,14,0,16">
+                                            <StackPanel VerticalAlignment="Center" Spacing="2">
+                                                <TextBlock Text="为什么需要它" FontWeight="Medium" Foreground="#fafafa"/>
+                                                <TextBlock FontSize="12" Foreground="#71717a" TextWrapping="Wrap"
+                                                           Text="不同国家和地区对内容分发、镜像与在线服务的要求不一样，启动器按这一项决定某些内容给不给、从哪拿。判断只看出口 IP 的注册地：不读设备信息、不做定位，也不会上报给任何人。"/>
                                             </StackPanel>
                                         </Border>
                                     </StackPanel>

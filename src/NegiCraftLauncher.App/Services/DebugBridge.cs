@@ -105,6 +105,16 @@ public sealed class DebugBridge
                 case "tab":
                     await PetDebugMailbox.Ui(() => _vm.CurrentSettingsTab = arg);
                     return "OK";
+                // `region` 读当前地区，`region JP` 把它强制成某个值（只在本进程内存里，不写
+                // settings.json）—— 手上只有一个出口 IP，靠这个看别的地区分支长什么样。
+                case "region":
+                    return await PetDebugMailbox.Ui(() =>
+                    {
+                        // 先改再读：C# 是从左到右求值的，写成 `IsMainlandChina + Force(...)`
+                        // 会拿到改之前的值，回一句错话。
+                        var label = _vm.ForceRegionForDebug(arg);
+                        return $"OK {(_vm.IsMainlandChina ? "mainland " : "")}{label}";
+                    });
                 case "pop":
                     await PetDebugMailbox.Ui(() =>
                     {
