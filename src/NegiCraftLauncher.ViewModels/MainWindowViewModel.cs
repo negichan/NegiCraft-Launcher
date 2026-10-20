@@ -19,20 +19,64 @@ namespace NegiCraftLauncher.ViewModels;
 
 public partial class MainWindowViewModel : ViewModelBase
 {
-    private static readonly string[] BlockIcons = { "grass", "stone", "tnt", "dirt", "log" };
-
     /// <summary>
-    /// 方块图标要用的三张纹理文件名（顶 / 侧）。这些都在游戏 jar 的
-    /// <c>assets/minecraft/textures/block/</c> 下，读出来就是原版贴图本身。
+    /// 方块图标要用的两张纹理文件名（顶 / 侧）。这些都在游戏 jar 的
+    /// <c>assets/minecraft/textures/block/</c> 下，读出来就是原版贴图本身 —— 项目里一张图都不带。
+    ///
+    /// <para>整张表既是「原版实例按 id 散列挑一块」的候选池，也是玩家那台机器上真正读得到的贴图清单。
+    /// 挑的都是 1.16.5 与 1.20.x 都还在的老贴图，
+    /// 免得玩家换个版本就有一半图标退化成程序化画的兜底。</para>
+    ///
+    /// <para><b>为什么没有 anvil / obsidian 这些</b>：40px 下它们就是一块黑，
+    /// 认不出是什么；宁可少几块也别让实例列表出现一排黑方块。</para>
     /// </summary>
     private static readonly (string Type, string Top, string Side)[] BlockTextureFiles =
     {
+        // 土石木：颜色最收敛的一组，做底色。
         ("grass", "grass_block_top.png", "grass_block_side.png"),
-        ("stone", "stone.png", "stone.png"),
-        ("tnt", "tnt_top.png", "tnt_side.png"),
         ("dirt", "dirt.png", "dirt.png"),
+        ("stone", "stone.png", "stone.png"),
+        ("cobble", "cobblestone.png", "cobblestone.png"),
+        ("mossy", "mossy_cobblestone.png", "mossy_cobblestone.png"),
+        ("planks", "oak_planks.png", "oak_planks.png"),
         ("log", "oak_log_top.png", "oak_log.png"),
+        ("sand", "sand.png", "sand.png"),
+        ("gravel", "gravel.png", "gravel.png"),
+        ("brick", "bricks.png", "bricks.png"),
+
+        // 带「图案」的几块：40px 下最认得出的就是它们。
+        ("bookshelf", "oak_planks.png", "bookshelf.png"),
+        ("crafting", "crafting_table_top.png", "crafting_table_side.png"),
+        ("furnace", "furnace_top.png", "furnace_side.png"),
+        ("pumpkin", "pumpkin_top.png", "pumpkin_side.png"),
+        ("melon", "melon_top.png", "melon_side.png"),
+        ("hay", "hay_block_top.png", "hay_block_side.png"),
+        ("tnt", "tnt_top.png", "tnt_side.png"),
+
+        // 矿物块：饱和度高，一眼能区分开，适合拉开实例之间的差异。
+        ("gold", "gold_block.png", "gold_block.png"),
+        ("iron", "iron_block.png", "iron_block.png"),
+        ("diamond", "diamond_block.png", "diamond_block.png"),
+        ("emerald", "emerald_block.png", "emerald_block.png"),
+        ("redstone", "redstone_block.png", "redstone_block.png"),
+        ("lapis", "lapis_block.png", "lapis_block.png"),
+        ("quartz", "quartz_block_top.png", "quartz_block_side.png"),
+
+        // 异界 / 深海 / 末地：给「这个实例不是主世界那套」的观感。
+        ("netherrack", "netherrack.png", "netherrack.png"),
+        ("glowstone", "glowstone.png", "glowstone.png"),
+        ("prismarine", "prismarine.png", "prismarine.png"),
+        ("purpur", "purpur_block.png", "purpur_block.png"),
+        ("slime", "slime_block.png", "slime_block.png"),
+        ("honeycomb", "honeycomb_block.png", "honeycomb_block.png"),
+        ("sealantern", "sea_lantern.png", "sea_lantern.png"),
     };
+
+    /// <summary>
+    /// 原版实例按 id 散列挑方块时的候选池 = 上面整张表。
+    /// 直接引用它而不是另抄一份，省得两边走神（加一块方块要改两个地方是 bug 的温床）。
+    /// </summary>
+    private static readonly string[] BlockIcons = BlockTextureFiles.Select(f => f.Type).ToArray();
 
     /// <summary>按 jar 路径缓存读出来的方块纹理 —— 同一个版本只开一次压缩包。</summary>
     private readonly Dictionary<string, Dictionary<string, (PixelBuffer Top, PixelBuffer Side)>> _blockTextures =
@@ -2321,19 +2365,58 @@ public partial class MainWindowViewModel : ViewModelBase
             }
         }
 
+        // 装了加载器就挂那个加载器的标志 —— 和 PCL2 / HMCL 一个道理：一眼能认出这个实例是
+        // Forge 还是 Fabric，比给每个实例随机挑个方块有用得多。
+        if (LoaderIconName(instance.Loader) is { } logo && BuiltinIcons.Load(logo) is { } bitmap)
+        {
+            return bitmap;
+        }
+
+        // 原版（或标志读不到）：用游戏自己那套贴图，玩家装的是什么版本，图标就是那个版本的原版方块。
         // GetHashCode is randomised per process, so hash by hand to keep the icon stable.
         var hash = instance.Id.Aggregate(0, (acc, c) => acc * 31 + c);
         var type = BlockIcons[Math.Abs(hash) % BlockIcons.Length];
 
-        // 优先用游戏自己那套贴图：玩家装的是什么版本，图标就是那个版本的原版方块。
         if (VanillaBlockTextures(instance.VersionId).TryGetValue(type, out var tex))
         {
-            return PixelArt.CreateBlockCube(tex.Top, tex.Side);
+            return PixelArt.CreateBlockCube(tex.Top, tex.Side, IconSize);
         }
 
         // 读不到（实例没装、jar 被清、模组包残缺）就退回程序化画的那套，不让图标开天窗。
-        return PixelArt.CreateBlockCube(type);
+        return PixelArt.CreateBlockCube(type, IconSize);
     }
+
+    /// <summary>
+    /// 图标位最大 40（首页当前实例与实例卡片），按这个尺寸出图：
+    /// 位图与显示尺寸 1:1 时 <c>NearestNeighbor</c> 才不抖，放大一档就会把像素边啃得毛毛糙糙。
+    /// 列表模式 / 停靠栏那两个 36 / 32 的槽位让视图缩下去，代价比重画一套小图低。
+    /// </summary>
+    private const int IconSize = 40;
+
+    /// <summary>
+    /// <see cref="Instance.Loader"/> 的第一段（<c>Fabric 0.16.10</c> → <c>Fabric</c>）
+    /// 映射到<b>内置标志</b>的文件名。只有拿得到可再分发方形标志的两家在这里，
+    /// 其余返回 <c>null</c>，回落到按 id 散列的方块。
+    /// </summary>
+    private static string? LoaderIconName(string loader) =>
+        loader.Split(' ')[0].ToLowerInvariant() switch
+        {
+            "fabric" => "fabric",
+            "neoforge" => NeoForgeIcon,
+            _ => null,
+        };
+
+    /// <summary>
+    /// NeoForge 用哪张图 —— 两版都随程序走，改这一个字符串即可切换：
+    ///
+    /// <list type="bullet">
+    /// <item><c>neoforge_negi</c>（默认）：从本项目 <c>app.png</c> 裁出来的橙狐狸。
+    /// 自定义加载器自己的狐狸是橙的、NeoForge 的也是狐狸，干脆用自家那只，风格跟停靠栏、
+    /// 桌宠是一套。</item>
+    /// <item><c>neoforge</c>：NeoForge 官方那只会点头的狐狸（<c>neoforged/.github</c>，Unlicense）。</item>
+    /// </list>
+    /// </summary>
+    private const string NeoForgeIcon = "neoforge_negi";
 
     /// <summary>
     /// 从版本 jar 里读<b>原版方块贴图</b>（<c>assets/minecraft/textures/block/*.png</c>）。
@@ -2342,7 +2425,8 @@ public partial class MainWindowViewModel : ViewModelBase
     /// 用的是他装的那份游戏，拿到的就是这个版本（甚至是他改过的资源包）的真贴图，
     /// 项目里一张美术资源都不必带。</para>
     ///
-    /// <para>按 jar 路径缓存，同一个版本只开一次 <c>ZipArchive</c>，五张图一起读。
+    /// <para>按 jar 路径缓存，同一个版本只开一次 <c>ZipArchive</c>，整张
+    /// <see cref="BlockTextureFiles"/> 一次读完（每张都是 16x16 的小 PNG，几十张加起来也就几十 KB）。
     /// 任何一步失败都返回空表，调用方回退到 <see cref="PixelArt"/> 里画的那套。</para>
     /// </summary>
     private Dictionary<string, (PixelBuffer Top, PixelBuffer Side)> VanillaBlockTextures(string versionId)

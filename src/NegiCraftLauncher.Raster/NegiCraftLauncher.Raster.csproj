@@ -15,6 +15,16 @@
          注意 Skin 工程里也各有一份，是给 GL 渲染栈用的，两边都不互相引用。 -->
     <EmbeddedResource Include="Assets\skin_alex.png" />
     <EmbeddedResource Include="Assets\skin_steve.png" />
+
+    <!-- 加载器标志。只有这两家拿得到「能再分发的方形标志」：
+         Fabric 的 MIT、NeoForge 的 Unlicense（公共领域）。
+         NeoForge 存了两版：icon_neoforge.png 是官方那只狐狸，
+         icon_neoforge_negi.png 是从本项目自己的 app.png 裁出来的橙狐狸（NegiPet）——
+         两家都是狐狸，用哪只由 MainWindowViewModel.NeoForgeIcon 决定。
+         来源与处理方式见 Assets/ICONS-NOTICE.md。 -->
+    <EmbeddedResource Include="Assets\icon_fabric.png" />
+    <EmbeddedResource Include="Assets\icon_neoforge.png" />
+    <EmbeddedResource Include="Assets\icon_neoforge_negi.png" />
   </ItemGroup>
 
   <ItemGroup>
