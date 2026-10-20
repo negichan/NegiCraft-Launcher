@@ -26,9 +26,9 @@ public sealed class RawImage
 /// 极简 PNG 解码器。共享层（<c>NegiCraftLauncher.Raster</c>）不能依赖 SkiaSharp，
 /// 否则 WPF 侧又会把 11MB 的 <c>libSkiaSharp.dll</c> 拖回来，那就白迁了。
 ///
-/// <para>覆盖范围：8/16 位、颜色类型 0(灰度)/2(RGB)/3(调色板)/4(灰度+alpha)/6(RGBA)、
-/// 非隔行。Adam7 隔行图直接抛 <see cref="NotSupportedException"/> —— MC 皮肤与实例图标
-/// 都不用它。</para>
+/// <para>覆盖范围：位深 1/2/4（仅灰度与调色板）/8/16、颜色类型 0(灰度)/2(RGB)/3(调色板)/
+/// 4(灰度+alpha)/6(RGBA)、非隔行。Adam7 隔行图直接抛 <see cref="NotSupportedException"/> ——
+/// MC 皮肤、实例图标、方块贴图都不用隔行。</para>
 /// </summary>
 public static class PngCodec
 {
@@ -99,9 +99,13 @@ public static class PngCodec
             throw new NotSupportedException("不支持 Adam7 隔行 PNG。");
         }
 
-        if (bitDepth is not (8 or 16))
+        // 子字节位深（1/2/4 位）按规范只对「灰度」与「索引色」合法。
+        // 这不是边角情况：1.20.4 的 assets/minecraft/textures/block 里 990 张贴图有 623 张是
+        // 4 位索引色（anvil_top、glowstone、大部分砖石类都这样），不认它就等于读不了方块贴图。
+        var packed = bitDepth is 1 or 2 or 4;
+        if (bitDepth is not (8 or 16) && !(packed && colorType is 0 or 3))
         {
-            throw new NotSupportedException($"不支持 {bitDepth} 位深的 PNG。");
+            throw new NotSupportedException($"不支持 {bitDepth} 位深 + 颜色类型 {colorType} 的 PNG。");
         }
 
         var channels = colorType switch
@@ -148,7 +152,10 @@ public static class PngCodec
         }
 
         var rgba = new byte[width * height * 4];
-        var sampleBytes = bitDepth / 8;
+
+        // 子字节位深下「一个像素不满一个字节」，没有"每采样几字节"这回事，按 1 走占位；
+        // 16 位取高位字节（ReadSample 里 *sampleBytes 正好落在 MSB 上）。
+        var sampleBytes = Math.Max(1, bitDepth / 8);
 
         for (var y = 0; y < height; y++)
         {
@@ -161,9 +168,14 @@ public static class PngCodec
                 {
                     case 0:
                     {
-                        var v = ReadSample(line, x * channels, sampleBytes);
+                        // 1/2/4 位的灰度必须放大到 0〜255：规范里 4 位灰的 15 就是"纯白"，
+                        // 直接当 0〜15 用会让整张图黑掉。tRNS 比较用<b>放大前</b>的原始采样。
+                        var sample = packed
+                            ? ReadPackedSample(line, x, bitDepth)
+                            : ReadSample(line, x * channels, sampleBytes);
+                        var v = packed ? (byte)(sample * 255 / ((1 << bitDepth) - 1)) : sample;
                         r = g = b = v;
-                        if (transparency is { Length: >= 2 } && v == transparency[1]) a = 0;
+                        if (transparency is { Length: >= 2 } && sample == transparency[1]) a = 0;
                         break;
                     }
                     case 2:
@@ -182,7 +194,8 @@ public static class PngCodec
                     }
                     case 3:
                     {
-                        var index = line[x];
+                        // 4 位索引色一字节装两个索引，高半字节是左边的像素。
+                        var index = packed ? ReadPackedSample(line, x, bitDepth) : line[x];
                         var p = index * 3;
                         if (palette is null || p + 2 >= palette.Length)
                         {
@@ -337,6 +350,17 @@ public static class PngCodec
     /// <summary>16 位样本取高字节（够用且不会溢出）。</summary>
     private static byte ReadSample(byte[] line, int sampleIndex, int sampleBytes) =>
         line[sampleIndex * sampleBytes];
+
+    /// <summary>
+    /// 取子字节位深（1/2/4 位）的一个采样值。规范规定按<b>高位在前</b>打包：
+    /// 4 位时一字节里 <c>x=0</c> 在 <c>0xF0</c>、<c>x=1</c> 在 <c>0x0F</c>。
+    /// </summary>
+    private static byte ReadPackedSample(byte[] line, int index, int bitDepth)
+    {
+        var bitOffset = index * bitDepth;
+        var shift = 8 - bitDepth - (bitOffset & 7);
+        return (byte)((line[bitOffset >> 3] >> shift) & ((1 << bitDepth) - 1));
+    }
 
     private static void Unfilter(byte filter, byte[] line, byte[] previous, int bpp)
     {
