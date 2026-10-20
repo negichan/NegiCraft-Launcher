@@ -16,17 +16,15 @@
     <EmbeddedResource Include="Assets\skin_alex.png" />
     <EmbeddedResource Include="Assets\skin_steve.png" />
 
-    <!-- 加载器标志。四家 + NeoForge 的自家备选：
-         Fabric / NeoForge 能再分发官方方形标志（MIT / Unlicense）；
-         Forge 用的是它自己打在 jar 里的 forge_icon.png（48x48，深蓝底白铁砧）；
-         Quilt 用 QuiltMC/art 的 mini icon。三家的授权都不如前两家干净，声明写在
-         Assets/ICONS-NOTICE.md 里。OptiFine 闭源、没有任何可用的官方方形标志，
-         仍回落到按 id 散列的方块。
+    <!-- 加载器标志。Fabric / NeoForge / Quilt 用官方方形标志
+         （Fabric 的 MIT、NeoForge 的 Unlicense、Quilt 的 art 仓库未附 LICENSE），
+         声明都写在 Assets/ICONS-NOTICE.md 里。
+         **Forge 不在这里** —— 它的实例改用游戏里的铁砧方块渲染（见 MainWindowViewModel.ForgeBlockType）。
+         OptiFine 闭源、没有任何可用的官方方形标志，也回落到方块。
          NeoForge 存了两版：icon_neoforge.png 是官方那只狐狸，
          icon_neoforge_negi.png 是从本项目自己的 app.png 裁出来的橙狐狸（NegiPet）——
          两家都是狐狸，用哪只由 MainWindowViewModel.NeoForgeIcon 决定。 -->
     <EmbeddedResource Include="Assets\icon_fabric.png" />
-    <EmbeddedResource Include="Assets\icon_forge.png" />
     <EmbeddedResource Include="Assets\icon_quilt.png" />
     <EmbeddedResource Include="Assets\icon_neoforge.png" />
     <EmbeddedResource Include="Assets\icon_neoforge_negi.png" />

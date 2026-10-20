@@ -1,30 +1,28 @@
 # 第三方图标声明 / Third-party icon notice
 
-`icon_fabric.png`、`icon_forge.png`、`icon_quilt.png`、`icon_neoforge.png` 这四张是
-**加载器官方标志**，不是本项目的作品；`icon_neoforge_negi.png` 是**本项目自己的美术**（见文末）。
+`icon_fabric.png`、`icon_quilt.png`、`icon_neoforge.png` 这三张是**加载器官方标志**，
+不是本项目的作品；`icon_neoforge_negi.png` 是**本项目自己的美术**（见文末）。
 
 | 文件 | 来源仓库 | 原始文件 | 许可 |
 | --- | --- | --- | --- |
 | `icon_fabric.png` | https://github.com/FabricMC/fabricmc.net | `assets/logo.png`（52×56） | MIT |
-| `icon_forge.png` | https://github.com/MinecraftForge/Installer（分支 `1.x`） | `big_logo.png` 里的铁砧；实际取的是 Forge 打进 `forge-*-universal.jar` 的 `forge_icon.png`（48×48） | LGPL-2.1 |
 | `icon_quilt.png` | https://github.com/QuiltMC/art | `brand/1024png/quilt_mini_icon_transparent.png`（1024×1024） | **未附 LICENSE**（GitHub 识别为 NOASSERTION） |
 | `icon_neoforge.png` | https://github.com/neoforged/.github | `art/neoforged_icon_16x16.png`（16×16） | Unlicense（公共领域） |
 | `icon_neoforge_negi.png` | 本项目 `src/NegiCraftLauncher.App/Assets/app.png` | 裁头部 | MIT（本项目） |
 
+**Forge 不在这里**：它的实例图标改成用**游戏里的铁砧方块**（`anvil`）现渲染，
+和原版实例那套方块图标同一个路子 —— 不打包任何图，也就没有任何授权问题。
+细节见下面「Forge 为什么用铁砧方块」。
+
 ## 处理方式（可复现）
 
-五张都被统一成 **80×80**（Forge 那张自带深蓝底板，其余透明底）。图标位显示尺寸最大 40 DIP，
+四张都被统一成 **80×80** 透明底。图标位显示尺寸最大 40 DIP，
 这里出 2 倍图：DIP 要乘系统缩放才是物理像素，40 DIP 在 125% 下要 60 个物理像素，
 出 40 的位图会被合成器非整数放大、棱线糊掉；80 在 200% 下正好 1:1，其余缩放档次都是缩小
 （缩小永远比放大好看）。
 
 - Fabric：52×56 → 按 80/56 等比盒式缩到 74×80（在预乘 alpha 空间做平均，不然透明边缘
   会糊出一圈黑边）→ 居中放进 80×80。
-- Forge：48×48 → 等比盒式放到 76×76 → 居中（留 2px 边）。48 和 80 不整除，
-  所以不追求整数倍：源图本身已经比 40 DIP 大，显示时是缩小。
-  **为什么不用那条 256×64 的横幅**：裁出来的铁砧是 74×38，塞进方形槽位只剩一半高度，
-  而且深色铁砧在深色 UI 上几乎看不见；`forge_icon.png` 是 Forge 自己给模组列表用的方形图标，
-  深蓝底 + 白铁砧，40 DIP 下一眼就认得出。
 - Quilt：1024×1024 里图形占 `(140,140)-(1020,1020)`（881×881），先裁掉这圈留白，
   再盒式缩到 70×70 居中（88%）。
 - NeoForge（官方）：16×16 → 整数 5 倍最近邻扩到 80×80。不用小数倍缩放：16→80 恰好
@@ -41,7 +39,7 @@
 对得上号）；自家的橙狐狸留在包里，改 `MainWindowViewModel.NeoForgeIcon` 一个常量就能切到
 `neoforge_negi`，让实例列表、停靠栏、桌宠是同一套形象。
 
-**商标**：前四行的标志商标权仍归 FabricMC / MinecraftForge / QuiltMC / NeoForged。
+**商标**：表格里的标志商标权仍归 FabricMC / QuiltMC / NeoForged。
 这里只是「哪家加载器的实例就显示哪家的标志」，属于指明来源的用法。
 
 **Quilt 那行的许可是硬伤**：`QuiltMC/art` 公开挂在 GitHub 上供社区取用，但整个仓库没写
@@ -49,33 +47,47 @@ LICENSE，严格说等于「保留所有权利」。这里按「指明来源」�
 「这个实例跑的是 Quilt Loader」，不修改、不声称归属。真要收紧的话，把这个文件从包里去掉、
 让 `LoaderIconName` 不再映射 `quilt` 即可，其余代码不用动。
 
+## Forge 为什么用铁砧方块
+
+曾经试过三条路，最后选了第三条：
+
+1. **从 256×64 词标横幅裁铁砧**（`MinecraftForge/Installer` 分支 `1.x` 的 `big_logo.png`）——
+   裁出来 74×38，塞进方形槽位只剩一半高度，深色铁砧在深色 UI 上几乎看不见。
+2. **用 Forge 打在 `forge-*-universal.jar` 里的 `forge_icon.png`**（48×48，深蓝底白铁砧）——
+   能看清，但那块深蓝底板跟界面不搭，而且它毕竟是第三方位图。
+3. **直接渲染游戏里的 `anvil` 方块**（当前方案）—— 和原版实例的方块图标同一套观感，
+   玩家认知里 Forge 就是「铁砧」。铁砧贴图从玩家自己的 jar 现读，项目里一张图不留。
+
+代价是铁砧偏深，所以它**不进按 id 散列的那个方块池**（`BlockIcons` 里排掉了），
+只会在「确定是 Forge」的时候出现。表在 `MainWindowViewModel.BlockTextureFiles`。
+
 ## 为什么只有 OptiFine 没有标志
 
-**四家加载器现在都有标志了**，只有 OptiFine 还是按 id 散列的方块 —— 它闭源，没有仓库、
+## 为什么只有 OptiFine 没有标志
+
+**四家加载器现在都认得出来**：Fabric / Quilt / NeoForge 挂自己的官方标志，
+Forge 挂游戏里的铁砧方块；只有 OptiFine 还是按 id 散列的方块 —— 它闭源，没有仓库、
 官网也没有可当方形标志用的图，唯一的官方视觉是「OptiFine」这几个字。拿不到就是拿不到，
-不拿方块硬凑（试过的都在下面这张表里）。
+不拿方块硬凑。
 
-Forge 和 Quilt 是后来补上的，当初卡住的两个点在下面留档：
+Quilt 是后来补上的，当初卡住的点在下面留档：
 
-- **Forge**：一开始只找到 `MinecraftForge/Installer` 的 `big_logo.png`（256×64 的
-  「铁砧 + FORGE」词标）。裁出来的铁砧是 74×38，塞进方形槽位只剩一半高度；
-  深色铁砧在深色 UI 上也看不清。**后来发现 Forge 自己往 `forge-*-universal.jar` 里塞了
-  `forge_icon.png`（48×48，深蓝底白铁砧）** —— 这才是它给模组列表用的图标，直接用它。
-  Installer 仓库是 LGPL-2.1，连带声明写在上面那张表里。
 - **Quilt**：`QuiltMC/art` 有全套品牌图，其中 `quilt_mini_icon_transparent.png` 就是为
   小尺寸准备的（三个色块 + 一个菱形）。但仓库**没写 LICENSE**，见上一节的说明。
+- **Forge** 的弯路（横幅 → jar 里的 `forge_icon.png` → 铁砧方块）记在上一节。
 
-也试过给它们各配一块有象征意义的方块（PCL2 就是这么干的：它的
-`Plain Craft Launcher 2/Images/Blocks/Anvil.png` 拿铁砧方块当 Forge 的图标）。实测在
-40×40 下都不成立，所以没走这条路：
+也试过给 Forge / OptiFine 各配一块有象征意义的方块。当年 40px 出图加最近邻缩放时
+这几块都不成立，所以搁置了：
 
 | 试过的 | 结果 |
 | --- | --- |
-| 铁砧 `anvil` | `anvil.png` 是深铁色，渲染出来是一块几乎纯黑的立方体 |
+| 铁砧 `anvil` | `anvil.png` 是深铁色，当年渲染出来是一块几乎纯黑的立方体 |
 | 熔炉 `furnace` | 顶面 + 侧面都是石头灰，只有正面有炉口，看不出是熔炉 |
 | 锻造台 `smithing_table` | 深色近黑，40px 下糊成一团 |
 
-结论：OptiFine 与**原版**走**按实例 id 散列挑方块**；有标志的四家一律挂自己的标志。
+（后来图标改成 80px 出图 + HighQuality 缩小，铁砧才重新可用 —— 也就是现在 Forge 的方案。）
+
+结论：OptiFine 与**原版**走**按实例 id 散列挑方块**；其余四家各认各的。
 
 ## 方块图标从哪来
 

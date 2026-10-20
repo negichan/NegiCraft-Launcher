@@ -70,13 +70,18 @@ public partial class MainWindowViewModel : ViewModelBase
         ("slime", "slime_block.png", "slime_block.png"),
         ("honeycomb", "honeycomb_block.png", "honeycomb_block.png"),
         ("sealantern", "sea_lantern.png", "sea_lantern.png"),
+
+        // 只给加载器专用的（不进散列池，见 ForgeBlockType）。
+        ("anvil", "anvil_top.png", "anvil.png"),
     };
 
     /// <summary>
-    /// 原版实例按 id 散列挑方块时的候选池 = 上面整张表。
+    /// 原版实例按 id 散列挑方块时的候选池 = 上面整张表，<b>减掉加载器专用的那几块</b> ——
+    /// 铁砧太深，随机散列到它会得到一块近乎黑的立方体。
     /// 直接引用它而不是另抄一份，省得两边走神（加一块方块要改两个地方是 bug 的温床）。
     /// </summary>
-    private static readonly string[] BlockIcons = BlockTextureFiles.Select(f => f.Type).ToArray();
+    private static readonly string[] BlockIcons =
+        BlockTextureFiles.Select(f => f.Type).Where(t => t != ForgeBlockType).ToArray();
 
     /// <summary>按 jar 路径缓存读出来的方块纹理 —— 同一个版本只开一次压缩包。</summary>
     private readonly Dictionary<string, Dictionary<string, (PixelBuffer Top, PixelBuffer Side)>> _blockTextures =
@@ -2372,17 +2377,29 @@ public partial class MainWindowViewModel : ViewModelBase
             return bitmap;
         }
 
+        // Forge 不用内置标志，用游戏里的铁砧方块 —— 详见 ForgeBlockType 的注释。
+        if (LoaderBlockType(instance.Loader) is { } loaderBlock)
+        {
+            return BlockIcon(instance, loaderBlock);
+        }
+
         // 原版（或标志读不到）：用游戏自己那套贴图，玩家装的是什么版本，图标就是那个版本的原版方块。
         // GetHashCode is randomised per process, so hash by hand to keep the icon stable.
         var hash = instance.Id.Aggregate(0, (acc, c) => acc * 31 + c);
-        var type = BlockIcons[Math.Abs(hash) % BlockIcons.Length];
+        return BlockIcon(instance, BlockIcons[Math.Abs(hash) % BlockIcons.Length]);
+    }
 
+    /// <summary>
+    /// 把某个方块渲染成图标：优先读实例所在版本的 jar（玩家装的是什么版本，方块就是那个版本的样子），
+    /// 读不到（实例没装、jar 被清、模组包残缺）就退回程序化画的那套，不让图标开天窗。
+    /// </summary>
+    private PixelBuffer BlockIcon(Instance instance, string type)
+    {
         if (VanillaBlockTextures(instance.VersionId).TryGetValue(type, out var tex))
         {
             return PixelArt.CreateBlockCube(tex.Top, tex.Side, IconSize);
         }
 
-        // 读不到（实例没装、jar 被清、模组包残缺）就退回程序化画的那套，不让图标开天窗。
         return PixelArt.CreateBlockCube(type, IconSize);
     }
 
@@ -2405,18 +2422,38 @@ public partial class MainWindowViewModel : ViewModelBase
     /// 映射到<b>内置标志</b>的文件名 —— 装了谁的加载器就挂谁的标志，和 PCL2 / HMCL 一个道理：
     /// 一眼能认出这个实例是 Forge 还是 Fabric，比给每个实例随机挑个方块有用得多。
     ///
-    /// <para>只有 OptiFine 没有条目：它闭源，官方没有任何能当方形标志用的图，
-    /// 所以那一路回落到按 id 散列的方块。</para>
+    /// <para>Forge 不在这张表里：它改走 <see cref="ForgeBlockType"/>（游戏里的铁砧方块）。
+    /// OptiFine 也没有 —— 它闭源，官方没有任何能当方形标志用的图。
+    /// 这两家之外读不到标志时，回落到按 id 散列的方块。</para>
     /// </summary>
     private static string? LoaderIconName(string loader) =>
         loader.Split(' ')[0].ToLowerInvariant() switch
         {
             "fabric" => "fabric",
-            "forge" => "forge",
             "quilt" => "quilt",
             "neoforge" => NeoForgeIcon,
             _ => null,
         };
+
+    /// <summary>
+    /// 有些加载器不用内置标志，而是指定一块<b>游戏里的方块</b>来当图标。
+    /// 目前只有 Forge —— 它的官方标志是打在自己 jar 里的深蓝底白铁砧，
+    /// 但那套深蓝跟界面不搭；玩家认知里 Forge 就是「铁砧」，直接用 <c>anvil</c> 方块渲染，
+    /// 和其他实例的方块图标是同一套观感，也仍然是「谁的加载器就认得出是谁」。
+    /// </summary>
+    private static string? LoaderBlockType(string loader) =>
+        loader.Split(' ')[0].ToLowerInvariant() switch
+        {
+            "forge" => ForgeBlockType,
+            _ => null,
+        };
+
+    /// <summary>
+    /// Forge 实例的图标方块。<b>故意不进 <see cref="BlockIcons"/> 那个散列池</b>：
+    /// 铁砧贴图整体偏深，被随机散列到会得到一块近乎黑的立方体；
+    /// 它只该出现在「确定是 Forge」的时候。
+    /// </summary>
+    private const string ForgeBlockType = "anvil";
 
     /// <summary>
     /// NeoForge 用哪张图 —— 两版都随程序走，改这一个字符串即可切换：
