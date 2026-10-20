@@ -28,6 +28,13 @@
     <EmbeddedResource Include="Assets\icon_quilt.png" />
     <EmbeddedResource Include="Assets\icon_neoforge.png" />
     <EmbeddedResource Include="Assets\icon_neoforge_negi.png" />
+
+    <!-- 等距方块图标（实例列表 / 资源列表共用）。来自 ccVaults（ccLeaf）的
+         1024x1024 预渲染图，盒式缩到 128x128 —— 40 DIP 的图标位在 250% 缩放下
+         要 100 物理像素，128 全程是缩小，不会出现放大糊边。
+         授权状况与处理参数见 Assets/ICONS-NOTICE.md。文件名即 MainWindowViewModel
+         里的方块 key，加一块就往这个目录丢一张 block_<key>.png。 -->
+    <EmbeddedResource Include="Assets\block_*.png" />
   </ItemGroup>
 
   <ItemGroup>
