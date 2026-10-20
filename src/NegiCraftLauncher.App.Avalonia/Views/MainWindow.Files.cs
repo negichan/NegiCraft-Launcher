@@ -102,6 +102,31 @@ public partial class MainWindow
         }
     }
 
+    /// <summary>
+    /// 实例图标：只收 PNG —— 落盘前会统一重编码成 80x80 的 PNG（共享层只认 PNG），
+    /// 所以这里也不假装支持 jpg / webp（选了也解不了）。
+    /// </summary>
+    private async void OnPickInstanceIconClick(object? sender, RoutedEventArgs e)
+    {
+        if (_vm is null) return;
+
+        var files = await StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
+        {
+            Title = "选择实例图标",
+            AllowMultiple = false,
+            FileTypeFilter = new[]
+            {
+                new FilePickerFileType("PNG 图片") { Patterns = new[] { "*.png" } },
+                new FilePickerFileType("所有文件") { Patterns = new[] { "*" } },
+            }
+        });
+
+        if (files.Count > 0)
+        {
+            _vm.SetInstanceIconCommand.Execute(files[0].Path.LocalPath);
+        }
+    }
+
     private void OnDialogBackdropPointerPressed(object? sender, PointerPressedEventArgs e)
     {
         // Clicking outside cancels rather than confirms, so a dialog can never be committed by accident.
