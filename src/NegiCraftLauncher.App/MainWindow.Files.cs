@@ -92,6 +92,22 @@ public partial class MainWindow
         if (dialog.ShowDialog(this) == true) _vm?.SetInstJavaPathCommand.Execute(dialog.FileName);
     }
 
+    /// <summary>
+    /// 实例配置「概览」页那颗「更换…」：挑一张 PNG，交给 VM 重编码成 80x80 写进实例目录。
+    /// 只收 PNG —— 共享层只有 <see cref="PngCodec"/>，别的格式读不出来（VM 那边也会兜住）。
+    /// </summary>
+    private void OnPickInstanceIconClick(object sender, RoutedEventArgs e)
+    {
+        var dialog = new Microsoft.Win32.OpenFileDialog
+        {
+            Title = "选择实例图标",
+            Filter = "PNG 图片|*.png|所有文件|*.*",
+            Multiselect = false,
+        };
+
+        if (dialog.ShowDialog(this) == true) _vm?.SetInstanceIconCommand.Execute(dialog.FileName);
+    }
+
     private void OnRequestAddModFile()
     {
         var vm = _vm;

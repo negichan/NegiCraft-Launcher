@@ -1105,6 +1105,27 @@
                                     <neg:NegiStackPanel Spacing="16" Margin="0,0,10,0">
                                         <Border Background="#18181b" BorderBrush="#26262b" BorderThickness="1" CornerRadius="12" Padding="16,0">
                                             <neg:NegiStackPanel>
+                                                <!-- 图标：默认跟着加载器走，也可以换成自己的一张 PNG -->
+                                                <Border Height="54" BorderBrush="#26262b" BorderThickness="0,0,0,1">
+                                                    <neg:NegiGrid Columns="* Auto">
+                                                        <neg:NegiStackPanel VerticalAlignment="Center" Spacing="2" Margin="0,0,16,0">
+                                                            <TextBlock Text="实例图标" FontWeight="Medium" Foreground="#fafafa" FontSize="13" />
+                                                            <TextBlock Text="{Binding InstanceIconHint}" FontSize="12" Foreground="#71717a"
+                                                                       TextTrimming="CharacterEllipsis" />
+                                                        </neg:NegiStackPanel>
+                                                        <neg:NegiStackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                                                            <Border Width="36" Height="36" CornerRadius="8" ClipToBounds="True" Background="#111114">
+                                                                <Image Source="{Binding EditingInstance.IconBitmap, Converter={StaticResource PixelsToBitmap}}"
+                                                                       Width="36" Height="36" RenderOptions.BitmapScalingMode="HighQuality" />
+                                                            </Border>
+                                                            <Button Style="{StaticResource BtnSmOutlineStyle}" Content="更换…"
+                                                                    Click="OnPickInstanceIconClick" />
+                                                            <Button Style="{StaticResource BtnSmOutlineStyle}" Content="恢复默认"
+                                                                    Command="{Binding ResetInstanceIconCommand}"
+                                                                    Visibility="{Binding HasCustomIcon, Converter={StaticResource BoolToVis}}" />
+                                                        </neg:NegiStackPanel>
+                                                    </neg:NegiGrid>
+                                                </Border>
                                                 <Border Height="54" BorderBrush="#26262b" BorderThickness="0,0,0,1">
                                                     <neg:NegiGrid Columns="* Auto">
                                                         <neg:NegiStackPanel VerticalAlignment="Center" Spacing="2" Margin="0,0,16,0">
