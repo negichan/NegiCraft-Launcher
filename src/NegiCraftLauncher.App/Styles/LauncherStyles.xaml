@@ -910,6 +910,9 @@
             <Button Style="{StaticResource SetNavBtnStyle}" Content="下载"
                     neg:Negi.On="{Binding CurrentSettingsTab, Converter={StaticResource Equals}, ConverterParameter=下载}"
                     Command="{Binding SelectSettingsTabCommand}" CommandParameter="下载" />
+            <Button Style="{StaticResource SetNavBtnStyle}" Content="地区"
+                    neg:Negi.On="{Binding CurrentSettingsTab, Converter={StaticResource Equals}, ConverterParameter=地区}"
+                    Command="{Binding SelectSettingsTabCommand}" CommandParameter="地区" />
             <Button Style="{StaticResource SetNavBtnStyle}" Content="外观"
                     neg:Negi.On="{Binding CurrentSettingsTab, Converter={StaticResource Equals}, ConverterParameter=外观}"
                     Command="{Binding SelectSettingsTabCommand}" CommandParameter="外观" />
@@ -1134,6 +1137,35 @@
                             <TextBlock Text="暂无下载任务" Visibility="{Binding HasDownloads, Converter={StaticResource BoolToVis}, ConverterParameter=invert}"
                                        FontSize="13" Foreground="#a0a0a8"
                                        HorizontalAlignment="Center" Margin="0,16,0,16" />
+                        </neg:NegiStackPanel>
+                    </Border>
+                </neg:NegiStackPanel>
+            </Border>
+
+            <!-- 地区 -->
+            <Border Background="#111114" BorderBrush="#26262b" BorderThickness="1" CornerRadius="8" Padding="18,0"
+                    Visibility="{Binding CurrentSettingsTab, Converter={StaticResource Equals}, ConverterParameter=地区}">
+                <neg:NegiStackPanel>
+                    <Border MinHeight="76" Padding="0,14" BorderBrush="#26262b" BorderThickness="0,0,0,1">
+                        <neg:NegiGrid Columns="* Auto">
+                            <neg:NegiStackPanel VerticalAlignment="Center" Spacing="2" Margin="0,0,16,0">
+                                <TextBlock Text="所在地区" FontWeight="Medium" Foreground="#fafafa" />
+                                <TextBlock Text="{Binding RegionHint}" FontSize="12" Foreground="#a0a0a8" TextWrapping="Wrap" />
+                            </neg:NegiStackPanel>
+                            <neg:NegiStackPanel Grid.Column="1" Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
+                                <TextBlock Text="{Binding RegionLabel}" FontSize="14" FontWeight="Medium"
+                                           Foreground="#fafafa" VerticalAlignment="Center" />
+                                <Button Style="{StaticResource BtnSmOutlineStyle}" Content="重新检测"
+                                        Command="{Binding RefreshRegionCommand}" />
+                            </neg:NegiStackPanel>
+                        </neg:NegiGrid>
+                    </Border>
+
+                    <Border MinHeight="76" Padding="0,14">
+                        <neg:NegiStackPanel VerticalAlignment="Center" Spacing="2">
+                            <TextBlock Text="为什么需要它" FontWeight="Medium" Foreground="#fafafa" />
+                            <TextBlock FontSize="12" Foreground="#a0a0a8" TextWrapping="Wrap"
+                                       Text="不同国家和地区对内容分发、镜像与在线服务的要求不一样，启动器按这一项决定某些内容给不给、从哪拿。判断只看出口 IP 的注册地：不读设备信息、不做定位，也不会上报给任何人。" />
                         </neg:NegiStackPanel>
                     </Border>
                 </neg:NegiStackPanel>

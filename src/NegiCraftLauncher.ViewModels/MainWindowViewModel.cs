@@ -14,6 +14,7 @@ using NegiCraftLauncher.Core.WallpaperEngine;
 using NegiCraftLauncher.Raster;
 using SourceKind = NegiCraftLauncher.Core.Settings.DownloadSource;
 using GameFolder = NegiCraftLauncher.Core.Settings.GameFolder;
+using DetectedRegion = NegiCraftLauncher.Core.Settings.DetectedRegion;
 
 namespace NegiCraftLauncher.ViewModels;
 
@@ -178,6 +179,7 @@ public partial class MainWindowViewModel : ViewModelBase
         RefreshJavaOptions();
 
         _ = LoadGameVersionsAsync();
+        StartRegionProbe();
     }
 
     public string LauncherVersion => _launcher.Version;
@@ -1817,6 +1819,158 @@ public partial class MainWindowViewModel : ViewModelBase
 
         InstanceIconHint = IconHintIdle;
         OnPropertyChanged(nameof(HasCustomIcon));
+    }
+
+    // ==========================================================
+    // 所在地区
+    // ==========================================================
+
+    /// <summary>
+    /// 调试通道强制出来的地区，<b>只在内存里</b>。真值永远是 <c>LauncherSettings.Region</c>；
+    /// 这一份只为「手上没有对应出口 IP 也要看到别的地区长什么样」而存在。
+    /// </summary>
+    private DetectedRegion? _regionOverride;
+
+    /// <summary>上一次探测整个失败了（不是"探到但认不出"）。界面要如实说，别拿旧结果冒充新的。</summary>
+    private bool _regionFailed;
+
+    private DetectedRegion? EffectiveRegion => _regionOverride ?? _launcher.Settings.Region;
+
+    [ObservableProperty]
+    private bool _isRegionChecking;
+
+    partial void OnIsRegionCheckingChanged(bool value)
+    {
+        OnPropertyChanged(nameof(RegionLabel));
+        OnPropertyChanged(nameof(RegionHint));
+    }
+
+    /// <summary>地区那行的大字：「中国大陆 · 天津」；没探到就是「未知」。</summary>
+    public string RegionLabel
+    {
+        get
+        {
+            if (EffectiveRegion is not { } region) return IsRegionChecking ? "正在检测…" : "未知";
+
+            var name = string.IsNullOrWhiteSpace(region.Name) ? region.Code : region.Name;
+            if (string.IsNullOrWhiteSpace(name)) name = "未知";
+
+            return string.IsNullOrWhiteSpace(region.City) ? name : $"{name} · {region.City}";
+        }
+    }
+
+    /// <summary>地区那行的小字：什么时候、由谁探的，以及"它到底依据什么判断"。</summary>
+    public string RegionHint
+    {
+        get
+        {
+            if (IsRegionChecking) return "正在探测出口 IP 的注册地…";
+
+            if (EffectiveRegion is not { } region)
+            {
+                return _regionFailed
+                    ? "这次没探到（接口都不通），先按「未知」处理。"
+                    : "还没探测过。依据是出口 IP 的注册地 —— 不读设备信息，也不做定位。";
+            }
+
+            var via = region.Source switch
+            {
+                "ipip" => "ipip",
+                "cloudflare" => "Cloudflare",
+                "ipwho.is" => "ipwho.is",
+                "debug" => "调试通道（不写盘）",
+                _ => region.Source,
+            };
+
+            var when = region.CheckedAt.ToString("yyyy-MM-dd HH:mm");
+            var hint = $"{when} 由 {via} 探测，依据是出口 IP 的注册地，换网络会跟着变。";
+
+            return _regionFailed ? $"这次没探到，下面是上次的结果。{hint}" : hint;
+        }
+    }
+
+    /// <summary>
+    /// 出口 IP 在中国大陆。**这是后续"按地区给不给某些内容"的唯一判断依据** ——
+    /// 港澳台按国内口径单独成区（HK / MO / TW），不算大陆。
+    /// </summary>
+    public bool IsMainlandChina => EffectiveRegion?.Code == "CN";
+
+    /// <summary>重新探一次。探失败不清空上一次的结果，只在提示里说明。</summary>
+    [RelayCommand]
+    private async Task RefreshRegionAsync()
+    {
+        if (IsRegionChecking) return;
+
+        IsRegionChecking = true;
+        try
+        {
+            var detected = await RegionProbe.DetectAsync();
+
+            if (detected is null)
+            {
+                _regionFailed = true;
+                return;
+            }
+
+            _regionFailed = false;
+            _regionOverride = null;
+            _launcher.Settings.Region = new DetectedRegion
+            {
+                Code = detected.Code,
+                Name = detected.Name,
+                City = detected.City,
+                CheckedAt = DateTime.Now,
+                Source = detected.Source,
+            };
+            _launcher.Settings.Save();
+        }
+        finally
+        {
+            IsRegionChecking = false;
+            OnPropertyChanged(nameof(RegionLabel));
+            OnPropertyChanged(nameof(RegionHint));
+            OnPropertyChanged(nameof(IsMainlandChina));
+        }
+    }
+
+    /// <summary>
+    /// 启动时探一次：没存过、或者存的那次已经超过一周才动。地区只影响"按地区提供哪些内容"，
+    /// 探不到也不影响启动，所以不 await、不挡路。
+    /// </summary>
+    private void StartRegionProbe()
+    {
+        var saved = _launcher.Settings.Region;
+        if (saved is null || DateTime.Now - saved.CheckedAt > TimeSpan.FromDays(7)) _ = RefreshRegionAsync();
+    }
+
+    /// <summary>
+    /// 调试通道用：把地区强制成某个值（传空串恢复成真实探测结果）。<b>不写 settings.json</b> ——
+    /// 它只是让手上这台机器也能看到「日本 / 美国 / 未知」这些分支，不改用户的真实记录。
+    /// </summary>
+    public string ForceRegionForDebug(string? code)
+    {
+        if (string.IsNullOrWhiteSpace(code))
+        {
+            _regionOverride = null;
+        }
+        else
+        {
+            var upper = code.Trim().ToUpperInvariant();
+            _regionOverride = new DetectedRegion
+            {
+                Code = upper,
+                Name = RegionProbe.NameOf(upper),
+                City = null,
+                CheckedAt = DateTime.Now,
+                Source = "debug",
+            };
+        }
+
+        _regionFailed = false;
+        OnPropertyChanged(nameof(RegionLabel));
+        OnPropertyChanged(nameof(RegionHint));
+        OnPropertyChanged(nameof(IsMainlandChina));
+        return RegionLabel;
     }
 
     partial void OnEditingInstanceChanged(InstanceModel? value)
