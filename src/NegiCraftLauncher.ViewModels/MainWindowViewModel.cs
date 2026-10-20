@@ -2588,30 +2588,47 @@ public partial class MainWindowViewModel : ViewModelBase
     }
 
     /// <summary>
-    /// 取某个方块的图标：内嵌的 128x128 等距渲染图缩到 <see cref="IconSize"/>。
-    /// 取不到（资源没打进去 / 解码失败）就退回程序化画的立方体，不让图标开天窗。
+    /// 取某个方块的图标：<b>直接用内嵌的 128x128 源图，不预缩</b>。
+    ///
+    /// <para>曾经在这里先盒式缩到 <see cref="IconSize"/>（80）再上屏，实测发糊，已改掉。
+    /// 病根是两次重采样叠在一起：</para>
+    /// <list type="number">
+    /// <item>源图是 64x64 的渲染最近邻放大 16 倍得来的（实测 1024 源图上 RGB/alpha
+    /// 都是严格的 16 像素块）。128 正好是它的 2 倍 —— 每个贴图像素占 2x2，和源网格严格对齐，
+    /// 盒式缩下去等于原样取样。缩到 80 之后贴图像素变成 1.25 个，盒式网格和贴图网格错位，
+    /// 每个输出像素都要跨相邻两个贴图平均，棱线和贴图细节就是这一步被抹平的。</item>
+    /// <item>WPF 还要再缩一次：36 DIP 的图标位在 200% 缩放下要 72 物理像素，80→72 又是一次。
+    /// 两次连吃，比一次缩到位明显软。</item>
+    /// </list>
+    ///
+    /// <para>直接给 128 让 WPF 一次缩到设备像素，实测棱线更实（32/36/40 DIP、100%/200%
+    /// 两档 DPI 都比原方案锐）。128 也覆盖得住：最大图标位 40 DIP 在 300% 缩放下才 120
+    /// 物理像素，128 全程是缩小，不会出现放大糊边。</para>
+    ///
+    /// <para>取不到（资源没打进去 / 解码失败）就退回程序化画的立方体，不让图标开天窗。</para>
     /// </summary>
     private PixelBuffer BlockIcon(string type)
     {
-        if (BlockAssets.Load(type, IconSize) is { } bitmap) return bitmap;
+        if (BlockAssets.Load(type) is { } bitmap) return bitmap;
 
-        return PixelArt.CreateBlockCube(type, IconSize);
+        return PixelArt.CreateBlockCube(type, BlockIconSize);
     }
 
     /// <summary>
-    /// 图标按 <b>显示尺寸的 2 倍</b>出图：图标位最大 40 DIP（首页当前实例与实例卡片），
-    /// 于是这里出 80。
+    /// 用户自选图标（实例目录下的 <c>icon.png</c>）落盘时的边长。
+    /// <b>只管写入，不管方块图标</b> —— 方块图标走 <see cref="BlockIcon"/>，用的是 128 源图原样。
     ///
-    /// <para>不出 40 的原因：DIP 要乘系统缩放才是物理像素。125% 缩放下一个 40 DIP 的槽位要
-    /// 60 个物理像素，40 的位图被合成器非整数放大，方块棱线就糊成一团、贴图细节全丢 ——
-    /// 这是「分辨率太低」的真正来源。80 的位图在 200% 缩放时正好 1:1，125%~150% 是缩小，
-    /// 缩小永远比放大好看。</para>
+    /// <para>为什么自选图要缩：列表每次刷新都要解码，玩家选的可能是 2000x2000 的立绘，
+    /// 缩一次比每次刷新都解大图划算；顺带把来源格式统一成 PNG（共享层只认 PNG，
+    /// 塞个 webp 进去以后读不出来）。</para>
     ///
-    /// <para><b>和源图 128 的关系</b>：方块图源是 128x128（见 <see cref="BlockAssets"/>），
-    /// 缩到 80 是 0.625 倍盒式缩小，棱线会被平均得略软。源图留 128 是为了 250% 以上缩放
-    /// 仍有余量；想更锐利可以把源图也出成 80，代价是高分屏上就要放大了。</para>
+    /// <para>80 = 最大图标位（40 DIP）的 2 倍：200% 缩放下正好 1:1，125%~150% 是缩小。
+    /// DIP 乘系统缩放才是物理像素，按 2 倍出图才不会被合成器非整数放大糊掉。</para>
     /// </summary>
     private const int IconSize = 80;
+
+    /// <summary>兜底程序化立方体的边长，和方块资产对齐成 128（见 <see cref="BlockIcon"/>）。</summary>
+    private const int BlockIconSize = 128;
 
     /// <summary>
     /// <see cref="Instance.Loader"/> 的第一段（<c>Fabric 0.16.10</c> → <c>Fabric</c>）
