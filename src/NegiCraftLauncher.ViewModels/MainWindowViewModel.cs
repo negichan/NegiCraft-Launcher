@@ -2417,14 +2417,14 @@ public partial class MainWindowViewModel : ViewModelBase
     /// NeoForge 用哪张图 —— 两版都随程序走，改这一个字符串即可切换：
     ///
     /// <list type="bullet">
-    /// <item><c>neoforge_negi</c>（默认）：从本项目 <c>app.png</c> 裁出来的橙狐狸。
-    /// NeoForge 自己也是狐狸，想统一成自家风格（跟停靠栏、桌宠一套）时用这个。</item>
-    /// <item><c>neoforge</c>：NeoForge 官方那只会点头的狐狸
-    /// （<c>neoforged/.github</c> 的 <c>neoforged_icon_16x16.png</c>，Unlicense），
-    /// 跟 HMCL 等启动器 用的是同一张图。</item>
+    /// <item><c>neoforge</c>（默认）：NeoForge 官方那只会点头的狐狸
+    /// （<c>neoforged/.github</c> 的 <c>neoforged_icon_16x16.png</c>，Unlicense）。
+    /// 跟 HMCL 等启动器 用的是同一张图，玩家一眼对得上号。</item>
+    /// <item><c>neoforge_negi</c>：从本项目 <c>app.png</c> 裁出来的橙狐狸。
+    /// NeoForge 自己也是狐狸，想统一成自家风格（跟停靠栏、桌宠一套）时换成这个。</item>
     /// </list>
     /// </summary>
-    private const string NeoForgeIcon = "neoforge_negi";
+    private const string NeoForgeIcon = "neoforge";
 
     /// <summary>
     /// 从版本 jar 里读<b>原版方块贴图</b>（<c>assets/minecraft/textures/block/*.png</c>）。
