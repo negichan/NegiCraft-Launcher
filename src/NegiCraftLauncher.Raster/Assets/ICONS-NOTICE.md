@@ -27,8 +27,9 @@ DIP 要乘系统缩放才是物理像素，40 DIP 在 125% 下要 60 个物理�
 「一个纹素占整数个像素」，80 = 16 × 5。
 
 **NeoForge 为什么有两张**：NeoForge 的标志是只狐狸，本项目的 launcher 图标
-（`app.png`／`NegiPet`）也是只狐狸。默认用自家的那只（`MainWindowViewModel.NeoForgeIcon`
-里一个常量就能换回官方版），这样实例列表、停靠栏、桌宠是同一套形象。
+（`app.png`／`NegiPet`）也是只狐狸。默认用**官方那张**（跟 PCL2 / HMCL 一致，玩家一眼
+对得上号）；自家的橙狐狸留在包里，改 `MainWindowViewModel.NeoForgeIcon` 一个常量就能切到
+`neoforge_negi`，让实例列表、停靠栏、桌宠是同一套形象。
 
 **商标**：前两行的标志商标权仍归 FabricMC 与 NeoForged。这里只是「哪家加载器的实例就显示
 哪家的标志」，属于指明来源的用法。
