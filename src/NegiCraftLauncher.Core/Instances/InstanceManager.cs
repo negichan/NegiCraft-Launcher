@@ -48,7 +48,14 @@ public sealed class InstanceManager
         foreach (var id in ScanFolders())
         {
             var existing = saved.FirstOrDefault(i => string.Equals(i.Id, id, StringComparison.OrdinalIgnoreCase));
-            _instances.Add(existing ?? Describe(id));
+            var instance = existing ?? Describe(id);
+
+            // 图标路径是「盘上有没有 icon.png」推出来的，不进 instances.json —— 所以已经存过的
+            // 实例每次启动都得重算一遍。只在 Describe 里设的话，图标会永远停在实例第一次入库时
+            // 的样子：后来换的图标不显示，删掉的图标也还挂着。
+            AttachIconPath(instance);
+
+            _instances.Add(instance);
         }
 
         _instances.Sort((a, b) => string.Compare(a.DisplayName, b.DisplayName, StringComparison.CurrentCulture));
@@ -220,6 +227,52 @@ public sealed class InstanceManager
     public string GameDirectoryFor(Instance instance) =>
         instance.Isolated ? _repository.DirectoryOf(instance.Id) : _gameRoot;
 
+    /// <summary>
+    /// 实例自定义图标的位置 —— 实例自己目录下的 <c>icon.png</c>（不是游戏数据目录：
+    /// 没开隔离时后者是整个根目录，把图标放那儿就成了所有实例共用一张）。
+    ///
+    /// <para>这个文件存在就优先用它，不存在才回落到加载器标志 / 方块，所以「恢复默认」
+    /// 就是把它删掉，不需要任何额外的状态位。</para>
+    /// </summary>
+    public string IconPathFor(Instance instance) =>
+        Path.Combine(_repository.DirectoryOf(instance.Id), "icon.png");
+
+    /// <summary>
+    /// 把一张已经处理好的 PNG 字节写成实例图标，同时把 <see cref="Instance.IconPath"/> 指过去。
+    /// 写盘失败（目录被占用、磁盘满）返回 <c>false</c>，界面那边给提示。
+    /// </summary>
+    public bool WriteIcon(Instance instance, byte[] png)
+    {
+        try
+        {
+            var path = IconPathFor(instance);
+            Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+            File.WriteAllBytes(path, png);
+            instance.IconPath = path;
+            return true;
+        }
+        catch (Exception)
+        {
+            return false;
+        }
+    }
+
+    /// <summary>删掉实例图标，回落到加载器标志 / 方块。本来就没有也算成功。</summary>
+    public bool ClearIcon(Instance instance)
+    {
+        try
+        {
+            var path = IconPathFor(instance);
+            if (File.Exists(path)) File.Delete(path);
+            instance.IconPath = null;
+            return true;
+        }
+        catch (Exception)
+        {
+            return false;
+        }
+    }
+
     public static bool IsValidId(string? id) =>
         !string.IsNullOrWhiteSpace(id) && SanitizeId(id!) == id;
 
@@ -264,6 +317,16 @@ public sealed class InstanceManager
         if (File.Exists(icon)) instance.IconPath = icon;
 
         return instance;
+    }
+
+    /// <summary>
+    ///     把 <see cref="IconPathFor"/> 那个位置上的文件挂成实例图标；没有就清空，让界面回落到
+    ///     加载器标志 / 方块。文件是唯一状态，所以这里每次都按盘上的情况重算，不做缓存。
+    /// </summary>
+    private void AttachIconPath(Instance instance)
+    {
+        var icon = IconPathFor(instance);
+        instance.IconPath = File.Exists(icon) ? icon : null;
     }
 
     /// <summary>

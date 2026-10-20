@@ -1742,6 +1742,83 @@ public partial class MainWindowViewModel : ViewModelBase
     [RelayCommand]
     private void AddResourcePackFile() => RequestAddResourcePackFile?.Invoke();
 
+    // ==========================================================
+    // 实例图标
+    // ==========================================================
+
+    /// <summary>图标那行在空闲时显示的说明（出错时会被换成具体的错误话）。</summary>
+    private const string IconHintIdle = "默认跟随加载器，也可以换成自己的 PNG";
+
+    /// <summary>这个实例有没有自定义图标 —— 决定「恢复默认」那颗按钮显不显示。</summary>
+    public bool HasCustomIcon =>
+        EditingInstance is { } model &&
+        !string.IsNullOrEmpty(model.Source.IconPath) &&
+        File.Exists(model.Source.IconPath);
+
+    /// <summary>图标那行的小字：平时是说明，选错文件/写不进盘时换成错误原因。</summary>
+    [ObservableProperty]
+    private string _instanceIconHint = IconHintIdle;
+
+    /// <summary>
+    /// 把用户选的图片设成这个实例的图标。
+    ///
+    /// <para><b>统一重编码成 80x80 的 PNG 再落盘</b>，不是原样拷贝：一来列表每次刷新都要解码图标，
+    /// 用户选的可能是 2000x2000 的立绘，缩一次比每次刷新都解大图划算；二来把来源格式统一掉，
+    /// 共享层只认 PNG（<see cref="PngCodec"/>），塞个 webp 进去以后读不出来。</para>
+    /// </summary>
+    [RelayCommand]
+    private void SetInstanceIcon(string path)
+    {
+        if (EditingInstance is not { } model || string.IsNullOrWhiteSpace(path)) return;
+
+        byte[] png;
+        try
+        {
+            var source = PngCodec.Decode(File.ReadAllBytes(path)).ToPixelBuffer();
+            if (Math.Max(source.Width, source.Height) > IconSize) source = PixelBuffer.Downsample(source, IconSize);
+            png = PngCodec.Encode(source);
+        }
+        catch (Exception)
+        {
+            InstanceIconHint = "这张图读不了，换一张 PNG 试试。";
+            return;
+        }
+
+        if (!_launcher.Instances.WriteIcon(model.Source, png))
+        {
+            InstanceIconHint = "写不进实例目录，检查一下磁盘权限。";
+            return;
+        }
+
+        // 路径没变（还是那个 icon.png），所以必须把缓存里旧的清掉，否则界面还显示上一张。
+        _iconCache.Remove(_launcher.Instances.IconPathFor(model.Source));
+        model.IconBitmap = IconFor(model.Source);
+        if (CurrentInstance is { } current && !ReferenceEquals(current, model)) current.IconBitmap = IconFor(current.Source);
+
+        InstanceIconHint = IconHintIdle;
+        OnPropertyChanged(nameof(HasCustomIcon));
+    }
+
+    /// <summary>删掉实例目录下的 icon.png，图标自动回落到加载器标志 / 方块。</summary>
+    [RelayCommand]
+    private void ResetInstanceIcon()
+    {
+        if (EditingInstance is not { } model) return;
+
+        if (!_launcher.Instances.ClearIcon(model.Source))
+        {
+            InstanceIconHint = "删不掉旧的图标文件，检查一下磁盘权限。";
+            return;
+        }
+
+        _iconCache.Remove(_launcher.Instances.IconPathFor(model.Source));
+        model.IconBitmap = IconFor(model.Source);
+        if (CurrentInstance is { } current && !ReferenceEquals(current, model)) current.IconBitmap = IconFor(current.Source);
+
+        InstanceIconHint = IconHintIdle;
+        OnPropertyChanged(nameof(HasCustomIcon));
+    }
+
     partial void OnEditingInstanceChanged(InstanceModel? value)
     {
         OnPropertyChanged(nameof(IsEditingCurrentInstance));
@@ -1750,6 +1827,8 @@ public partial class MainWindowViewModel : ViewModelBase
         OnPropertyChanged(nameof(EditingModsDirectory));
         OnPropertyChanged(nameof(EditingResourcePacksDirectory));
         OnPropertyChanged(nameof(EditingVersionSummary));
+        OnPropertyChanged(nameof(HasCustomIcon));
+        InstanceIconHint = IconHintIdle;
     }
 
     /// <summary>返回实例列表页并保存可能改过的基本设置。</summary>
