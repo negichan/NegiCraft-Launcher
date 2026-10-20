@@ -21,73 +21,38 @@ namespace NegiCraftLauncher.ViewModels;
 public partial class MainWindowViewModel : ViewModelBase
 {
     /// <summary>
-    /// 方块图标要用的两张纹理文件名（顶 / 侧）。这些都在游戏 jar 的
-    /// <c>assets/minecraft/textures/block/</c> 下，读出来就是原版贴图本身 —— 项目里一张图都不带。
+    /// 方块图标的 key 清单 —— 每个 key 对应 <c>Raster/Assets/block_&lt;key&gt;.png</c>
+    /// 一张内嵌的 128x128 等距渲染图（见 <see cref="BlockAssets"/>）。
     ///
-    /// <para>整张表既是「原版实例按 id 散列挑一块」的候选池，也是玩家那台机器上真正读得到的贴图清单。
-    /// 挑的都是 1.16.5 与 1.20.x 都还在的老贴图，
-    /// 免得玩家换个版本就有一半图标退化成程序化画的兜底。</para>
+    /// <para>整张表就是「原版实例按 id 散列挑一块」的候选池。<b>挑的都是 40px 下还认得出、
+    /// 且彼此颜色/造型差得开</b>的：土石木做底色，带图案的那几块最认得出，矿物块饱和度高、
+    /// 适合拉开实例之间的差异。宁可少几块，也别让实例列表出现一排分不清的灰方块。</para>
     ///
-    /// <para><b>为什么没有 anvil / obsidian 这些</b>：40px 下它们就是一块黑，
-    /// 认不出是什么；宁可少几块也别让实例列表出现一排黑方块。</para>
+    /// <para><b>加一块方块</b>：往 <c>Raster/Assets/</c> 丢一张 <c>block_&lt;key&gt;.png</c>，
+    /// 再把 key 加进这张表（csproj 用的是 <c>Assets\block_*.png</c> 通配，不用改工程文件）。
+    /// </para>
     /// </summary>
-    private static readonly (string Type, string Top, string Side)[] BlockTextureFiles =
+    private static readonly string[] BlockIconKeys =
     {
         // 土石木：颜色最收敛的一组，做底色。
-        ("grass", "grass_block_top.png", "grass_block_side.png"),
-        ("dirt", "dirt.png", "dirt.png"),
-        ("stone", "stone.png", "stone.png"),
-        ("cobble", "cobblestone.png", "cobblestone.png"),
-        ("mossy", "mossy_cobblestone.png", "mossy_cobblestone.png"),
-        ("planks", "oak_planks.png", "oak_planks.png"),
-        ("log", "oak_log_top.png", "oak_log.png"),
-        ("sand", "sand.png", "sand.png"),
-        ("gravel", "gravel.png", "gravel.png"),
-        ("brick", "bricks.png", "bricks.png"),
+        "grass", "dirt", "stone", "cobble", "planks", "log", "sand", "brick",
 
         // 带「图案」的几块：40px 下最认得出的就是它们。
-        ("bookshelf", "oak_planks.png", "bookshelf.png"),
-        ("crafting", "crafting_table_top.png", "crafting_table_side.png"),
-        ("furnace", "furnace_top.png", "furnace_side.png"),
-        ("pumpkin", "pumpkin_top.png", "pumpkin_side.png"),
-        ("melon", "melon_top.png", "melon_side.png"),
-        ("hay", "hay_block_top.png", "hay_block_side.png"),
-        ("tnt", "tnt_top.png", "tnt_side.png"),
+        "bookshelf", "crafting", "furnace", "tnt",
 
         // 矿物块：饱和度高，一眼能区分开，适合拉开实例之间的差异。
-        ("gold", "gold_block.png", "gold_block.png"),
-        ("iron", "iron_block.png", "iron_block.png"),
-        ("diamond", "diamond_block.png", "diamond_block.png"),
-        ("emerald", "emerald_block.png", "emerald_block.png"),
-        ("redstone", "redstone_block.png", "redstone_block.png"),
-        ("lapis", "lapis_block.png", "lapis_block.png"),
-        ("quartz", "quartz_block_top.png", "quartz_block_side.png"),
-
-        // 异界 / 深海 / 末地：给「这个实例不是主世界那套」的观感。
-        ("netherrack", "netherrack.png", "netherrack.png"),
-        ("glowstone", "glowstone.png", "glowstone.png"),
-        ("prismarine", "prismarine.png", "prismarine.png"),
-        ("purpur", "purpur_block.png", "purpur_block.png"),
-        ("slime", "slime_block.png", "slime_block.png"),
-        ("honeycomb", "honeycomb_block.png", "honeycomb_block.png"),
-        ("sealantern", "sea_lantern.png", "sea_lantern.png"),
+        "gold", "diamond", "emerald", "redstone", "glowstone",
 
         // 只给加载器专用的（不进散列池，见 ForgeBlockType）。
-        ("anvil", "anvil_top.png", "anvil.png"),
+        "anvil",
     };
 
     /// <summary>
-    /// 原版实例按 id 散列挑方块时的候选池 = 上面整张表，<b>减掉加载器专用的那几块</b> ——
-    /// 铁砧太深，随机散列到它会得到一块近乎黑的立方体。
+    /// 原版实例按 id 散列挑方块时的候选池 = 上面整张表，<b>减掉加载器专用的那几块</b>。
     /// 直接引用它而不是另抄一份，省得两边走神（加一块方块要改两个地方是 bug 的温床）。
     /// </summary>
     private static readonly string[] BlockIcons =
-        BlockTextureFiles.Select(f => f.Type).Where(t => t != ForgeBlockType).ToArray();
-
-    /// <summary>按 jar 路径缓存读出来的方块纹理 —— 同一个版本只开一次压缩包。</summary>
-    private readonly Dictionary<string, Dictionary<string, (PixelBuffer Top, PixelBuffer Side)>> _blockTextures =
-        new(StringComparer.OrdinalIgnoreCase);
-
+        BlockIconKeys.Where(t => t != ForgeBlockType).ToArray();
     private readonly Launcher _launcher;
     private readonly ModrinthClient _modrinth = new();
     private ModrinthInstaller _modrinthInstaller = new();
@@ -2613,29 +2578,22 @@ public partial class MainWindowViewModel : ViewModelBase
         // Forge 不用内置标志，用游戏里的铁砧方块 —— 详见 ForgeBlockType 的注释。
         if (LoaderBlockType(instance.Loader) is { } loaderBlock)
         {
-            return BlockIcon(instance, loaderBlock);
+            return BlockIcon(loaderBlock);
         }
 
-        // 原版（或标志读不到）：用游戏自己那套贴图，玩家装的是什么版本，图标就是那个版本的原版方块。
+        // 原版（或标志读不到）：按 id 散列挑一个方块图标。
         // GetHashCode is randomised per process, so hash by hand to keep the icon stable.
         var hash = instance.Id.Aggregate(0, (acc, c) => acc * 31 + c);
-        return BlockIcon(instance, BlockIcons[Math.Abs(hash) % BlockIcons.Length]);
+        return BlockIcon(BlockIcons[Math.Abs(hash) % BlockIcons.Length]);
     }
 
     /// <summary>
-    /// 把某个方块渲染成图标：优先读实例所在版本的 jar（玩家装的是什么版本，方块就是那个版本的样子），
-    /// 读不到（实例没装、jar 被清、模组包残缺）就退回程序化画的那套，不让图标开天窗。
+    /// 取某个方块的图标：内嵌的 128x128 等距渲染图缩到 <see cref="IconSize"/>。
+    /// 取不到（资源没打进去 / 解码失败）就退回程序化画的立方体，不让图标开天窗。
     /// </summary>
-    private PixelBuffer BlockIcon(Instance instance, string type)
+    private PixelBuffer BlockIcon(string type)
     {
-        if (VanillaBlockTextures(instance.VersionId).TryGetValue(type, out var tex))
-        {
-            // 铁砧不是完整方块：得按它自己的模型几何画，塞进立方体模板会得到一块
-            // 「塌了口的盒子」（顶面砧盘中空 + 侧面正视图被斜切）。
-            return type == ForgeBlockType
-                ? PixelArt.CreateAnvil(tex.Top, tex.Side, IconSize)
-                : PixelArt.CreateBlockCube(tex.Top, tex.Side, IconSize);
-        }
+        if (BlockAssets.Load(type, IconSize) is { } bitmap) return bitmap;
 
         return PixelArt.CreateBlockCube(type, IconSize);
     }
@@ -2649,8 +2607,9 @@ public partial class MainWindowViewModel : ViewModelBase
     /// 这是「分辨率太低」的真正来源。80 的位图在 200% 缩放时正好 1:1，125%~150% 是缩小，
     /// 缩小永远比放大好看。</para>
     ///
-    /// <para>80 还有个数论上的好处：方块立方体是 16×16 贴图铺出来的，尺寸取 16 的整数倍
-    /// 才是「一个纹素占整数个像素」，80 = 16 × 5。别随手改成 96 或 100。</para>
+    /// <para><b>和源图 128 的关系</b>：方块图源是 128x128（见 <see cref="BlockAssets"/>），
+    /// 缩到 80 是 0.625 倍盒式缩小，棱线会被平均得略软。源图留 128 是为了 250% 以上缩放
+    /// 仍有余量；想更锐利可以把源图也出成 80，代价是高分屏上就要放大了。</para>
     /// </summary>
     private const int IconSize = 80;
 
@@ -2687,13 +2646,12 @@ public partial class MainWindowViewModel : ViewModelBase
 
     /// <summary>
     /// Forge 实例的图标方块。<b>故意不进 <see cref="BlockIcons"/> 那个散列池</b>：
-    /// 铁砧贴图整体偏深，被随机散列到会得到一块近乎黑的立方体；
-    /// 它只该出现在「确定是 Forge」的时候。
+    /// 铁砧整体偏深，被随机散列到会得到一块近乎黑的图标；它只该出现在「确定是 Forge」的时候。
     ///
-    /// <para>铁砧**不是完整方块**，所以不走 <see cref="PixelArt.CreateBlockCube"/> 那条路 ——
-    /// 塞进立方体模板会得到一块「塌了口的盒子」（顶面砧盘中空 + 侧面正视图被斜切）。
-    /// 走 <see cref="PixelArt.CreateAnvil"/>，按 jar 里 <c>template_anvil.json</c> 的四段几何画。
-    /// 分派在 <see cref="BlockIcon"/>。</para>
+    /// <para>铁砧<b>不是完整方块</b>（基座 + 收腰 + 砧颈 + 砧面四段，腿间镂空），所以
+    /// <c>block_anvil.png</c> 是单独一张按它自己造型画的等距图，不是拿立方体模板套出来的。
+    /// 早先按 jar 里 <c>template_anvil.json</c> 的四段坐标现拼过，投影偏移差一点就整体畸形，
+    /// 于是换成内嵌预渲染图。</para>
     /// </summary>
     private const string ForgeBlockType = "anvil";
 
@@ -2709,65 +2667,6 @@ public partial class MainWindowViewModel : ViewModelBase
     /// </list>
     /// </summary>
     private const string NeoForgeIcon = "neoforge";
-
-    /// <summary>
-    /// 从版本 jar 里读<b>原版方块贴图</b>（<c>assets/minecraft/textures/block/*.png</c>）。
-    ///
-    /// <para><b>为什么读 jar 而不是打包图片</b>：这些文件本来就在用户自己电脑上 ——
-    /// 用的是他装的那份游戏，拿到的就是这个版本（甚至是他改过的资源包）的真贴图，
-    /// 项目里一张美术资源都不必带。</para>
-    ///
-    /// <para>按 jar 路径缓存，同一个版本只开一次 <c>ZipArchive</c>，整张
-    /// <see cref="BlockTextureFiles"/> 一次读完（每张都是 16x16 的小 PNG，几十张加起来也就几十 KB）。
-    /// 任何一步失败都返回空表，调用方回退到 <see cref="PixelArt"/> 里画的那套。</para>
-    /// </summary>
-    private Dictionary<string, (PixelBuffer Top, PixelBuffer Side)> VanillaBlockTextures(string versionId)
-    {
-        if (string.IsNullOrWhiteSpace(versionId)) return [];
-
-        var jar = Path.Combine(_launcher.Instances.GameRoot, "versions", versionId, versionId + ".jar");
-        if (!File.Exists(jar)) return [];
-        if (_blockTextures.TryGetValue(jar, out var cached)) return cached;
-
-        var map = new Dictionary<string, (PixelBuffer Top, PixelBuffer Side)>(StringComparer.OrdinalIgnoreCase);
-        try
-        {
-            using var zip = System.IO.Compression.ZipFile.OpenRead(jar);
-            foreach (var (type, topName, sideName) in BlockTextureFiles)
-            {
-                var top = ReadBlockPng(zip, topName);
-                if (top is null) continue;
-                var side = topName == sideName ? top : ReadBlockPng(zip, sideName);
-                if (side is null) continue;
-                map[type] = (top, side);
-            }
-        }
-        catch
-        {
-            // 压缩包坏了 / 正被游戏占着：当没有，回退程序化图标。
-        }
-
-        _blockTextures[jar] = map;
-        return map;
-    }
-
-    private static PixelBuffer? ReadBlockPng(System.IO.Compression.ZipArchive zip, string fileName)
-    {
-        var entry = zip.GetEntry("assets/minecraft/textures/block/" + fileName);
-        if (entry is null) return null;
-
-        try
-        {
-            using var stream = entry.Open();
-            using var buffer = new MemoryStream();
-            stream.CopyTo(buffer);
-            return PngCodec.Decode(buffer.ToArray()).ToPixelBuffer();
-        }
-        catch
-        {
-            return null;
-        }
-    }
 
     private void OpenFolder(string path)
     {
@@ -3075,7 +2974,7 @@ public partial class MainWindowViewModel : ViewModelBase
             var installed = new HashSet<string>(
                 _launcher.Instances.Instances.Select(i => i.VersionId), StringComparer.OrdinalIgnoreCase);
 
-            var icon = PixelArt.CreateBlockCube("grass");
+            var icon = BlockAssets.Load("grass") ?? PixelArt.CreateBlockCube("grass");
 
             _gameResources.Clear();
             foreach (var version in manifest.Versions.Where(v => v.IsRelease).Take(200))
@@ -3138,12 +3037,15 @@ public partial class MainWindowViewModel : ViewModelBase
 
             if (ct.IsCancellationRequested || CurrentResCategory != category) return;
 
-            var icon = PixelArt.CreateBlockCube(category switch
+            var categoryIcon = category switch
             {
                 "mod" => "dirt",
                 "shader" => "log",
                 _ => "stone",
-            });
+            };
+
+            // 资源和实例列表共用一套方块图标，别在这儿另起炉灶。
+            var icon = BlockAssets.Load(categoryIcon) ?? PixelArt.CreateBlockCube(categoryIcon);
 
             FilteredResources.Clear();
             foreach (var hit in hits)

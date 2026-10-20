@@ -1,24 +1,89 @@
 # 第三方图标声明 / Third-party icon notice
 
-`icon_fabric.png`、`icon_quilt.png`、`icon_neoforge.png` 这三张是**加载器官方标志**，
-不是本项目的作品；`icon_neoforge_negi.png` 是**本项目自己的美术**（见文末）。
+本目录下的图分三类：
 
-| 文件 | 来源仓库 | 原始文件 | 许可 |
+| 类别 | 文件 | 来源 | 许可 |
 | --- | --- | --- | --- |
-| `icon_fabric.png` | https://github.com/FabricMC/fabricmc.net | `assets/logo.png`（52×56） | MIT |
-| `icon_quilt.png` | https://github.com/QuiltMC/art | `brand/1024png/quilt_mini_icon_transparent.png`（1024×1024） | **未附 LICENSE**（GitHub 识别为 NOASSERTION） |
-| `icon_neoforge.png` | https://github.com/neoforged/.github | `art/neoforged_icon_16x16.png`（16×16） | Unlicense（公共领域） |
-| `icon_neoforge_negi.png` | 本项目 `src/NegiCraftLauncher.App/Assets/app.png` | 裁头部 | MIT（本项目） |
+| 加载器官方标志 | `icon_fabric.png` | https://github.com/FabricMC/fabricmc.net | MIT |
+| 加载器官方标志 | `icon_quilt.png` | https://github.com/QuiltMC/art | **未附 LICENSE**（GitHub 识别为 NOASSERTION） |
+| 加载器官方标志 | `icon_neoforge.png` | https://github.com/neoforged/.github | Unlicense（公共领域） |
+| 加载器官方标志 | `icon_neoforge_negi.png` | 本项目 `src/NegiCraftLauncher.App/Assets/app.png` | MIT（本项目） |
+| **等距方块图标** | `block_*.png`（18 张） | **https://ccvaults.com/**（ccLeaf） | **© 2025-2026 ccLeaf，All Rights Reserved —— 非自由许可，见下文专节** |
 
-**Forge 不在这里**：它的实例图标改成用**游戏里的铁砧方块**（`anvil`）现渲染，
-和原版实例那套方块图标同一个路子 —— 不打包任何图，也就没有任何授权问题。
-细节见下面「Forge 为什么用铁砧方块」。
+---
 
-## 处理方式（可复现）
+## 等距方块图标（`block_*.png`）—— 来源与授权
 
-四张都被统一成 **80×80** 透明底。图标位显示尺寸最大 40 DIP，
-这里出 2 倍图：DIP 要乘系统缩放才是物理像素，40 DIP 在 125% 下要 60 个物理像素，
-出 40 的位图会被合成器非整数放大、棱线糊掉；80 在 200% 下正好 1:1，其余缩放档次都是缩小
+**来源**：ccVaults（ccLeaf 旗下的 Minecraft 素材库，https://ccvaults.com/）的
+**Blocks** 分类（`20. Blocks` 下的 `02. Planks` / `07. Logs` / `08. Material` /
+`12. Bricks` / `18. Decoration` / `22. Redstone` / `23. Sand` / `33. Workplaces` /
+`37. Nether`）。原图是 **1024×1024** 的预渲染等距方块图。
+
+**⚠️ 授权状况（重要，不是自由许可）**：
+
+- ccVaults 页脚为 `© 2025-2026 ccLeaf — All Rights Reserved`，没有任何 per-asset 许可声明。
+- ccLeaf《Terms of Use》第 9 条明令禁止 *"Scrape, automate, or abuse the Service"*，
+  第 8 条禁止再分发 / 提取资产；第 4.3 条把下载额度与订阅计划绑定。
+- 全尺寸原图需要登录（HTTP 302），公开可取的只有缩略图。
+- 也就是说：**这些图不能自由再分发**。放进一个会分发给别人的启动器里，
+  严格看是踩在对方禁止项上的。
+
+**花子 2026-10-20 明确拍板使用**（「没有关系，我们用 ccVaults 的就好，到时候再 README
+提及一下用了他的资源」），并要求 README 注明来源。README 的「第三方资源」一节即为此设。
+
+真要换掉的话，删掉 `Assets/block_*.png`、把 `MainWindowViewModel.BlockIconKeys` 清空即可 ——
+`BlockIcon` 会退到程序化画的立方体兜底，其余代码不用动。
+
+**处理方式（可复现）**：1024×1024 → **128×128**。
+
+- **预乘 alpha 的盒式（面积平均）重采样**。直线 alpha 空间里做平均会在透明边缘攒出
+  深色晕圈（半透明像素和「旁边是透明黑」平均）；预乘再除回来才对。
+- 盒式而非双线性：这些是等距渲染图，要的是平均掉高频，不是重新采样出平滑渐变。
+- **不裁内容外框**。17 张立方体的取景完全一致（`x64..959` / `y16..1007`，即
+  896×992，占画布 87.5% × 96.9%）；铁砧天然小一圈（`x144..879` / `y48..959`，
+  736×912）—— 这正是它该有的样子，裁齐反而失真。
+
+**为什么是 128 而不是 80**：图标位 40 DIP，系统缩放 250% 时要 100 个物理像素，
+80 就得被放大、方块棱线发糊；128 在任何常见缩放下都是缩小。18 张合计约 **146 KiB**。
+`MainWindowViewModel.IconSize`（80）负责把它缩到显示尺寸。
+
+**18 张的清单**（key = `block_<key>.png`）：
+
+| key | ccVaults 文件 | 子分类 |
+| --- | --- | --- |
+| `grass` | `Grass_Block.png` | 18. Decoration |
+| `dirt` | `Dirt.png` | 18. Decoration |
+| `stone` | `Stone.png` | 18. Decoration |
+| `cobble` | `Cobblestone.png` | 18. Decoration |
+| `planks` | `Oak_Planks.png` | 02. Planks |
+| `log` | `Oak_Log.png` | 07. Logs |
+| `sand` | `Sand.png` | 23. Sand |
+| `brick` | `Bricks.png` | 12. Bricks |
+| `bookshelf` | `Bookshelf.png` | 18. Decoration |
+| `crafting` | `Crafting_Table.png` | 33. Workplaces |
+| `furnace` | `Furnace.png` | 33. Workplaces |
+| `tnt` | `Tnt.png` | 22. Redstone |
+| `gold` | `Gold_Block.png` | 08. Material |
+| `diamond` | `Diamond_Block.png` | 08. Material |
+| `emerald` | `Emerald_Block.png` | 08. Material |
+| `redstone` | `Redstone_Block.png` | 22. Redstone |
+| `glowstone` | `Glowstone.png` | 37. Nether |
+| `anvil` | `Anvil.png` | 33. Workplaces |
+
+候选池 = `MainWindowViewModel.BlockIconKeys` 整张表。**加一块方块**：往这个目录丢一张
+`block_<key>.png`，再把 key 加进那张表（csproj 用的是 `Assets\block_*.png` 通配，
+不用改工程文件）。
+
+**商标**：方块造型与贴图的著作权归 Mojang / Microsoft。这里只是「哪家游戏文件的实例
+就显示哪块方块的等距渲染」，属于指明来源的用法。
+
+---
+
+## 加载器标志（`icon_*.png`）
+
+四张都被统一成 **80×80** 透明底。图标位显示尺寸最大 40 DIP，这里出 2 倍图：
+DIP 要乘系统缩放才是物理像素，40 DIP 在 125% 下要 60 个物理像素，出 40 的位图会被
+合成器非整数放大、棱线糊掉；80 在 200% 下正好 1:1，其余缩放档次都是缩小
 （缩小永远比放大好看）。
 
 - Fabric：52×56 → 按 80/56 等比盒式缩到 74×80（在预乘 alpha 空间做平均，不然透明边缘
@@ -30,9 +95,6 @@
 - NeoForge（自家）：`app.png`（512×512，橙狐狸叼葱）裁 `(157,56)-(505,312)` ——
   逐行游程实测后定的框：整颗头（耳朵 y≈62 起、脸的左右沿 x=157~413）加整根葱（伸到 x≈501），
   再盒式缩到 69×51、居中。**缩到 86% 而不是铺满**，否则头会顶到槽位圆角、看着像被切掉。
-
-方块立方体同样出 **80×80**：立方体是 16×16 贴图铺出来的，尺寸取 16 的整数倍才是
-「一个纹素占整数个像素」，80 = 16 × 5。
 
 **NeoForge 为什么有两张**：NeoForge 的标志是只狐狸，本项目的 launcher 图标
 （`app.png`／`NegiPet`）也是只狐狸。默认用**官方那张**（跟 HMCL 等启动器 一致，玩家一眼
@@ -47,42 +109,45 @@ LICENSE，严格说等于「保留所有权利」。这里按「指明来源」�
 「这个实例跑的是 Quilt Loader」，不修改、不声称归属。真要收紧的话，把这个文件从包里去掉、
 让 `LoaderIconName` 不再映射 `quilt` 即可，其余代码不用动。
 
+---
+
 ## Forge 为什么用铁砧方块
 
-曾经试过三条路，最后选了第三条：
+曾经试过三条路，最后落在「内嵌一张按铁砧真实造型画的等距图」：
 
 1. **从 256×64 词标横幅裁铁砧**（`MinecraftForge/Installer` 分支 `1.x` 的 `big_logo.png`）——
    裁出来 74×38，塞进方形槽位只剩一半高度，深色铁砧在深色 UI 上几乎看不见。
 2. **用 Forge 打在 `forge-*-universal.jar` 里的 `forge_icon.png`**（48×48，深蓝底白铁砧）——
    能看清，但那块深蓝底板跟界面不搭，而且它毕竟是第三方位图。
-3. **直接渲染游戏里的铁砧**（当前方案）—— 和原版实例的方块图标同一套观感，
-   玩家认知里 Forge 就是「铁砧」。贴图从玩家自己的 jar 现读，项目里一张图不留。
+3. **铁砧方块**（当前方案）—— 和原版实例那套方块图标同一套观感，
+   玩家认知里 Forge 就是「铁砧」。
 
-代价是铁砧偏深，所以它**不进按 id 散列的那个方块池**（`BlockIcons` 里排掉了），
-只会在「确定是 Forge」的时候出现。表在 `MainWindowViewModel.BlockTextureFiles`。
+代价是铁砧整体偏深，所以它**不进按 id 散列的那个方块池**（`BlockIcons` 里排掉了），
+只会在「确定是 Forge」的时候出现。表在 `MainWindowViewModel.BlockIconKeys`。
 
-### 铁砧不能按完整方块画
+### 铁砧不能按完整方块画（历史记录）
 
 铁砧在游戏里**就不是一个完整方块**。jar 里 `models/block/template_anvil.json` 把它
 拆成四段（坐标单位 1/16 格）：底座 `(2,0,2)-(14,4,14)`、收腰 `(4,4,3)-(12,5,13)`、
-砧颈 `(6,5,4)-(10,10,12)`、砧面 `(3,10,0)-(13,16,16)`。硬塞进 `CreateBlockCube`
-那种整块立方体会得到一块「塌了口的盒子」：顶面砧盘中间是空的，侧面正视图又被斜切，
-铁砧的造型全丢。所以另有一条 `PixelArt.CreateAnvil`，按上面四段几何画，
-投影参数与立方体完全一致（同一个视角、同一套 1.0 / 0.78 / 0.62 明暗），
-最后按内容外框放大到满画布 —— 铁砧比方块窄，不放大在列表里会小一圈。
+砧颈 `(6,5,4)-(10,10,12)`、砧面 `(3,10,0)-(13,16,16)`。硬塞进立方体模板会得到一块
+「塌了口的盒子」：顶面砧盘中间是空的，侧面正视图又被斜切，铁砧的造型全丢。
+
+早先因此另写了一条 `PixelArt.CreateAnvil`，按上面四段几何现拼（真等距投影，
+明暗 1.0 / 0.78 / 0.62，与立方体同一套）。**这条路已经废弃**，原因是投影公式对偏移量
+极其敏感：少加一个 `sideH`，整个铁砧就上移半个画布、顶部被裁，`FillFrame` 只能按被切过的
+内容裁齐，于是形状崩坏；80px 下因数值巧合看着还行，160px 一放大就露馅。
+现在改用 ccVaults 的预渲染 `block_anvil.png`，几何由对方保证。
 
 **旁证**：其他启动器 与 HMCL 也都用铁砧当 Forge 图标，而且都是这个形状 ——
 `其他启动器/Images/Blocks/Anvil.png`（64×64）与
 `HMCL/HMCL/src/main/resources/assets/img/forge.png`（32×32）。
-两家的图分别是 LGPL-3.0 与 GPL-3.0，**不能拿来用**，所以这里只参照形状，自己按几何画。
-其他启动器 那边 `Grass.png` / `RedstoneBlock.png` 也是等距方块，`Fabric.png` 是 48×48 logo ——
-它的策略就是「标准方块用立方体，非标准方块用真实造型」。
+两家的图分别是 LGPL-3.0 与 GPL-3.0，**不能拿来用**。
+
+---
 
 ## 为什么只有 OptiFine 没有标志
 
-## 为什么只有 OptiFine 没有标志
-
-**四家加载器现在都认得出来**：Fabric / Quilt / NeoForge 挂自己的官方标志，
+**五家加载器里四家认得出来**：Fabric / Quilt / NeoForge 挂自己的官方标志，
 Forge 挂游戏里的铁砧方块；只有 OptiFine 还是按 id 散列的方块 —— 它闭源，没有仓库、
 官网也没有可当方形标志用的图，唯一的官方视觉是「OptiFine」这几个字。拿不到就是拿不到，
 不拿方块硬凑。
@@ -106,38 +171,13 @@ Quilt 是后来补上的，当初卡住的点在下面留档：
 
 结论：OptiFine 与**原版**走**按实例 id 散列挑方块**；其余四家各认各的。
 
-## 方块图标从哪来
+---
 
-**从玩家自己电脑上的游戏 jar 里现读现画**，项目里不存任何方块图片。
+## 兜底与替换
 
-```
-<GameRoot>/versions/<版本>/<版本>.jar → assets/minecraft/textures/block/*.png
-```
+`BlockAssets.Load` 读不到资源时返回 `null`，`MainWindowViewModel.BlockIcon` 会退到
+`PixelArt.CreateBlockCube` 程序化画一个立方体，不让图标位开天窗。
+`PixelArt.CreateBlockCube(string, int)` 现在**只服务这条兜底路径**，正常显示走 `block_*.png`。
 
-16×16 的原生贴图 + **真等距投影**（顶面菱形 + 左右两个侧面，分别乘 1.0 / 0.78 / 0.62 的
-明暗）当场渲染成 80×80 的立方体。好处是拿到了玩家那个版本（乃至他自己改过的资源包）的真
-贴图，而且一张美术资源都不用打包、没有任何授权问题。
-
-**几何用 √3:1，不是像素画那套 2:1**：真等距投影三个轴在屏幕上夹角 120°，顶面菱形
-宽:高 = √3 : 1，总宽只有总高的 √3/2 ≈ **0.866 倍**。总高吃满 80 之后菱形高与侧面高
-都是 40，只有水平方向收窄，于是 bbox 是 70×80 而不是 80×80 —— 那 15% 就是「方不方」的差别。
-2:1 的好处是斜边能落在像素网格上，代价是总宽 = 总高、整块看着像压扁的盒子；这里选了体积感。
-
-HMCL 等启动器 的 64×64 方块图走的是另一条路 —— 顶面菱形宽 32、侧面各 32 高，正好 64×64，
-即「16×16 贴图 → 4 倍 2:1 等距立方体」，比真等距宽 15%。它们把成品打进包里，
-是为了在游戏还没下载时也能显示。
-
-候选方块共 30 块（土石木、带图案的、矿物块、异界/深海/末地四组），同一个实例永远同一块，
-不同实例尽量不一样。表在 `MainWindowViewModel.BlockTextureFiles`，加方块只改那一处。
-
-挑选时踩过的两个坑，留着当记录：
-
-- **`anvil` / `obsidian` 这类深色贴图在 40px 下就是黑块**，已经剔掉。
-- **原版方块贴图有 623/990 张是 4 位索引色**（`anvil_top`、`glowstone` 都是），
-  `PngCodec` 原来只认 8/16 位，读它们会抛异常、静默退化成程序化画的假方块 ——
-  4 位支持是这一轮补上的。
-
-## 想换成自己的图
-
-把 `Assets/icon_*.png` 换成 80×80（或 2 的整数倍）的 PNG、同名即可，代码不用动 ——
-`BuiltinIcons` 只按文件名找资源；找不到就回退到方块立方体，不会开天窗。
+**想换成自己的图**：把 `Assets/block_*.png` 或 `Assets/icon_*.png` 同名替换即可，
+代码不用动 —— 加载器只按文件名找资源。
