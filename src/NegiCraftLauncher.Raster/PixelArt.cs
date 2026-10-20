@@ -91,10 +91,15 @@ public static class PixelArt
     /// <summary>
     /// 等距立方体图标 —— HMCL 等启动器 那种「一块方块摆在眼前」的样子，而不是一张平铺贴图。
     ///
-    /// <para><b>几何</b>：2:1 等距投影，立方体正好吃满 size×size。四个关键点
-    /// <c>T(size/2,0) R(size,size/4) B(size/2,size/2) L(0,size/4)</c>，
-    /// 顶面是 T-R-B-L 那个菱形，左面从 L 往右下铺、右面从 B 往右上铺，各占一半高度。
-    /// 每个屏幕像素反解 (u,v) 再采纹理，比正向画三个平行四边形少一层边界接缝。</para>
+    /// <para><b>几何</b>：<b>真等距投影</b>（三个轴在屏幕上夹角 120°），于是顶面菱形
+    /// 宽:高 = √3 : 1 ≈ 1.732，总宽 = √3/2 · 总高 ≈ <b>0.866 倍</b>。
+    /// 总高取满 <paramref name="size"/> 之后，菱形高与侧面高都正好是 size/2，
+    /// 水平方向比画布窄一截、左右各留约 6.7% 的空。</para>
+    ///
+    /// <para><b>为什么不是 2:1</b>：像素画传统（HMCL 等启动器 的 64×64 方块图）把菱形画成
+    /// 宽:高 = 2:1 且宽度吃满，好处是斜边能落在像素网格上，代价是总宽 = 总高 ——
+    /// 比真等距宽了 15.5%，整块看着像压扁的盒子。这里宁可损失像素对齐，
+    /// 也要那个「立得住」的体积感。</para>
     ///
     /// <para><b>明暗</b>：光源在左上，顶 1.0 / 左 0.78 / 右 0.62 —— 和 MC 的物品图标
     /// 同一个方向感。这一层是「看着像方块」而不是「看着像贴纸」的关键，别去掉。</para>
@@ -117,8 +122,15 @@ public static class PixelArt
         var ptr = bmp.Pixels;
 
         double s = size;
-        var half = s / 2;
-        var quarter = s / 4;
+
+        // 三个关键尺寸（总高 = s）：
+        //   topH  顶面菱形的高（同时也是半宽 / √3 的母数），真等距下 = s/2
+        //   halfW 菱形半宽 = √3/2 · topH（这就是 0.866 的来源，2:1 那套这里是 topH）
+        //   sideH 侧面高 = s − topH，真等距下也是 s/2
+        var topH = s / 2;
+        var halfW = topH * Math.Sqrt(3) / 2;
+        var sideH = s - topH;
+        var cx = s / 2;
 
         for (var y = 0; y < size; y++)
         {
@@ -129,30 +141,32 @@ public static class PixelArt
                 double u, v, shade;
                 PixelBuffer tex;
 
-                // 顶面：u 沿「右下」，v 沿「左下」。
-                var topU = ((px - half) / half + py / quarter) / 2;
-                var topV = (py / quarter - (px - half) / half) / 2;
-                if (topU is >= 0 and <= 1 && topV is >= 0 and <= 1)
+                // 顶面：a 是水平归一（-1..1），b 是「从顶点往下」归一（顶点 0、菱形底 2），
+                // 落在 |a| + |b-1| <= 1 这个菱形里就是顶面。
+                var a = (px - cx) / halfW;
+                var b = py / (topH / 2);
+
+                if (Math.Abs(a) + Math.Abs(b - 1) <= 1.0)
                 {
-                    u = topU;
-                    v = topV;
+                    u = (a + b) / 2;
+                    v = (b - a) / 2;
                     shade = 1.0;
                     tex = topTex;
                 }
-                else if (px < half)
+                else if (px < cx)
                 {
-                    // 左面：u 沿 +x 往下走，v 是纯垂直方向。
-                    u = px / half;
-                    v = (py - quarter - quarter * u) / half;
+                    // 左面：u 从左沿(0)走到中脊(1)，顶边从 L 斜下到 B。
+                    u = (px - (cx - halfW)) / halfW;
+                    v = (py - topH / 2 - topH / 2 * u) / sideH;
                     shade = 0.78;
                     if (u is < 0 or > 1 || v is < 0 or > 1) continue;
                     tex = sideTex;
                 }
                 else
                 {
-                    // 右面：和左面镜像，u 从立方体的中脊往右走。
-                    u = (px - half) / half;
-                    v = (py - half + quarter * u) / half;
+                    // 右面：u 从中脊(0)走到右沿(1)，顶边从 B 斜上到 R。
+                    u = (px - cx) / halfW;
+                    v = (py - topH + topH / 2 * u) / sideH;
                     shade = 0.62;
                     if (u is < 0 or > 1 || v is < 0 or > 1) continue;
                     tex = sideTex;
