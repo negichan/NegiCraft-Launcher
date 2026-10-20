@@ -2387,11 +2387,18 @@ public partial class MainWindowViewModel : ViewModelBase
     }
 
     /// <summary>
-    /// 图标位最大 40（首页当前实例与实例卡片），按这个尺寸出图：
-    /// 位图与显示尺寸 1:1 时 <c>NearestNeighbor</c> 才不抖，放大一档就会把像素边啃得毛毛糙糙。
-    /// 列表模式 / 停靠栏那两个 36 / 32 的槽位让视图缩下去，代价比重画一套小图低。
+    /// 图标按 <b>显示尺寸的 2 倍</b>出图：图标位最大 40 DIP（首页当前实例与实例卡片），
+    /// 于是这里出 80。
+    ///
+    /// <para>不出 40 的原因：DIP 要乘系统缩放才是物理像素。125% 缩放下一个 40 DIP 的槽位要
+    /// 60 个物理像素，40 的位图被合成器非整数放大，方块棱线就糊成一团、贴图细节全丢 ——
+    /// 这是「分辨率太低」的真正来源。80 的位图在 200% 缩放时正好 1:1，125%~150% 是缩小，
+    /// 缩小永远比放大好看。</para>
+    ///
+    /// <para>80 还有个数论上的好处：方块立方体是 16×16 贴图铺出来的，尺寸取 16 的整数倍
+    /// 才是「一个纹素占整数个像素」，80 = 16 × 5。别随手改成 96 或 100。</para>
     /// </summary>
-    private const int IconSize = 40;
+    private const int IconSize = 80;
 
     /// <summary>
     /// <see cref="Instance.Loader"/> 的第一段（<c>Fabric 0.16.10</c> → <c>Fabric</c>）
@@ -2411,9 +2418,10 @@ public partial class MainWindowViewModel : ViewModelBase
     ///
     /// <list type="bullet">
     /// <item><c>neoforge_negi</c>（默认）：从本项目 <c>app.png</c> 裁出来的橙狐狸。
-    /// 自定义加载器自己的狐狸是橙的、NeoForge 的也是狐狸，干脆用自家那只，风格跟停靠栏、
-    /// 桌宠是一套。</item>
-    /// <item><c>neoforge</c>：NeoForge 官方那只会点头的狐狸（<c>neoforged/.github</c>，Unlicense）。</item>
+    /// NeoForge 自己也是狐狸，想统一成自家风格（跟停靠栏、桌宠一套）时用这个。</item>
+    /// <item><c>neoforge</c>：NeoForge 官方那只会点头的狐狸
+    /// （<c>neoforged/.github</c> 的 <c>neoforged_icon_16x16.png</c>，Unlicense），
+    /// 跟 PCL2 / HMCL 用的是同一张图。</item>
     /// </list>
     /// </summary>
     private const string NeoForgeIcon = "neoforge_negi";

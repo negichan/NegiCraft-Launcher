@@ -358,7 +358,7 @@
                                             <Border Grid.Column="0" Width="40" Height="40" CornerRadius="9" ClipToBounds="True" Margin="0,0,10,0">
                                                 <Image Source="{Binding CurrentInstance.IconBitmap, Converter={StaticResource PixelsToBitmap}}"
                                                        Width="40" Height="40"
-                                                       RenderOptions.BitmapInterpolationMode="None"/>
+                                                       RenderOptions.BitmapInterpolationMode="HighQuality"/>
                                             </Border>
                                             <!-- Instance Meta: Name & Ver/Loader -->
                                             <StackPanel Grid.Column="1" VerticalAlignment="Center">
@@ -600,7 +600,7 @@
                                                             <Border Grid.Column="0" Width="40" Height="40" CornerRadius="9" ClipToBounds="True" VerticalAlignment="Top">
                                                                 <Image Source="{Binding IconBitmap, Converter={StaticResource PixelsToBitmap}}"
                                                                        Width="40" Height="40"
-                                                                       RenderOptions.BitmapInterpolationMode="None"/>
+                                                                       RenderOptions.BitmapInterpolationMode="HighQuality"/>
                                                             </Border>
                                                             <StackPanel Grid.Column="1" VerticalAlignment="Top" Spacing="7" Margin="12,0,4,0">
                                                                 <!-- 名字自己截断；「当前」不再挂胶囊，整张卡的底色就是那个意思。
@@ -691,7 +691,7 @@
                                                     <Grid ColumnDefinitions="Auto Auto Auto * Auto" Height="52">
                                                         <Border Grid.Column="0" Width="36" Height="36" CornerRadius="8" ClipToBounds="True" VerticalAlignment="Center">
                                                             <Image Source="{Binding IconBitmap, Converter={StaticResource PixelsToBitmap}}"
-                                                                   Width="36" Height="36" RenderOptions.BitmapInterpolationMode="None"/>
+                                                                   Width="36" Height="36" RenderOptions.BitmapInterpolationMode="HighQuality"/>
                                                         </Border>
 
                                                         <!-- 名字列对齐稿子 .main-info：14 的左边距＝ .inst-row 的 flex gap，300 是列宽本身
@@ -810,7 +810,7 @@
                             <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
                                 <Border Width="36" Height="36" CornerRadius="8" ClipToBounds="True" VerticalAlignment="Center">
                                     <Image Source="{Binding EditingInstance.IconBitmap, Converter={StaticResource PixelsToBitmap}}"
-                                           Width="36" Height="36" RenderOptions.BitmapInterpolationMode="None"/>
+                                           Width="36" Height="36" RenderOptions.BitmapInterpolationMode="HighQuality"/>
                                 </Border>
                                 <StackPanel Spacing="2" VerticalAlignment="Center">
                                     <TextBlock Text="{Binding EditingInstance.Name, FallbackValue='实例管理'}"
@@ -1462,7 +1462,7 @@
                                                     <Border Grid.Column="0" Width="36" Height="36" CornerRadius="8" ClipToBounds="True" Margin="0,0,14,0">
                                                         <Image Source="{Binding IconBitmap, Converter={StaticResource PixelsToBitmap}}"
                                                                Width="36" Height="36"
-                                                               RenderOptions.BitmapInterpolationMode="None"/>
+                                                               RenderOptions.BitmapInterpolationMode="HighQuality"/>
                                                     </Border>
 
                                                     <!-- .grow: b + desc -->
@@ -1950,7 +1950,7 @@
                                         <Grid ColumnDefinitions="Auto * Auto">
                                             <!-- 32x32 Block icon with 7px radius (matching Image 2) -->
                                             <Border Grid.Column="0" Width="32" Height="32" CornerRadius="7" ClipToBounds="True" Margin="0,0,10,0">
-                                                <Image Source="{Binding IconBitmap, Converter={StaticResource PixelsToBitmap}}" Width="32" Height="32" RenderOptions.BitmapInterpolationMode="None"/>
+                                                <Image Source="{Binding IconBitmap, Converter={StaticResource PixelsToBitmap}}" Width="32" Height="32" RenderOptions.BitmapInterpolationMode="HighQuality"/>
                                             </Border>
                                             <StackPanel Grid.Column="1" VerticalAlignment="Center">
                                                 <TextBlock Text="{Binding Name}" FontWeight="Bold" FontSize="13" Foreground="#fafafa"/>

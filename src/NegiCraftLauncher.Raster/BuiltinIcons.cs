@@ -2,7 +2,7 @@ namespace NegiCraftLauncher.Raster;
 
 /// <summary>
 /// 随 <c>NegiCraftLauncher.Raster</c> 一起编译进来的<b>加载器标志</b>（目前只有 Fabric 与 NeoForge）。
-/// 成品已经预先处理成 40x40 透明底 —— 图标位最大就是 40，交给视图缩放只会把像素边啃毛。
+/// 三张图都是 <b>80x80</b> 透明底 —— 图标位 40 DIP，按 2 倍出图，125%~200% 系统缩放下都不糊。
 ///
 /// <para><b>为什么只有这两家</b>：只有它们拿得到「能再分发的方形标志」
 /// （Fabric 的 MIT、NeoForge 的 Unlicense）。Forge 的官方铁砧只活在词标横幅里、Quilt 的

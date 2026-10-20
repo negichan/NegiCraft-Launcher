@@ -530,7 +530,7 @@
                                             <Border Grid.Column="0" Width="40" Height="40" CornerRadius="9" ClipToBounds="True" Margin="0,0,10,0">
                                                 <Image Source="{Binding CurrentInstance.IconBitmap, Converter={StaticResource PixelsToBitmap}}"
                                                        Width="40" Height="40"
-                                                       RenderOptions.BitmapScalingMode="NearestNeighbor" />
+                                                       RenderOptions.BitmapScalingMode="HighQuality" />
                                             </Border>
                                             <!-- 实例信息：名字与版本/加载器 -->
                                             <neg:NegiStackPanel Grid.Column="1" VerticalAlignment="Center">
@@ -775,7 +775,7 @@
                                                         <Border Grid.Column="0" Width="40" Height="40" CornerRadius="9" ClipToBounds="True" VerticalAlignment="Top">
                                                             <Image Source="{Binding IconBitmap, Converter={StaticResource PixelsToBitmap}}"
                                                                    Width="40" Height="40"
-                                                                   RenderOptions.BitmapScalingMode="NearestNeighbor" />
+                                                                   RenderOptions.BitmapScalingMode="HighQuality" />
                                                         </Border>
                                                         <neg:NegiStackPanel Grid.Column="1" VerticalAlignment="Top" Spacing="7" Margin="12,0,4,0">
                                                             <!-- 名字自己截断；「当前」不再挂胶囊，整张卡的底色就是那个意思。 -->
@@ -865,7 +865,7 @@
                                                     <neg:NegiGrid Columns="Auto Auto Auto * Auto" Height="52">
                                                         <Border Grid.Column="0" Width="36" Height="36" CornerRadius="8" ClipToBounds="True" VerticalAlignment="Center">
                                                             <Image Source="{Binding IconBitmap, Converter={StaticResource PixelsToBitmap}}"
-                                                                   Width="36" Height="36" RenderOptions.BitmapScalingMode="NearestNeighbor" />
+                                                                   Width="36" Height="36" RenderOptions.BitmapScalingMode="HighQuality" />
                                                         </Border>
 
                                                         <!-- 名字列对齐稿子 .main-info：14 的左边距＝ .inst-row 的 flex gap，300 是列宽本身
@@ -983,7 +983,7 @@
                                 <neg:NegiStackPanel Grid.Column="1" Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
                                     <Border Width="36" Height="36" CornerRadius="8" ClipToBounds="True" VerticalAlignment="Center">
                                         <Image Source="{Binding EditingInstance.IconBitmap, Converter={StaticResource PixelsToBitmap}}"
-                                               Width="36" Height="36" RenderOptions.BitmapScalingMode="NearestNeighbor" />
+                                               Width="36" Height="36" RenderOptions.BitmapScalingMode="HighQuality" />
                                     </Border>
                                     <neg:NegiStackPanel Spacing="2" VerticalAlignment="Center">
                                         <TextBlock Text="{Binding EditingInstance.Name, FallbackValue='实例管理'}"
@@ -1659,7 +1659,7 @@
                                                     <Border Grid.Column="0" Width="36" Height="36" CornerRadius="8" ClipToBounds="True" Margin="0,0,14,0">
                                                         <Image Source="{Binding IconBitmap, Converter={StaticResource PixelsToBitmap}}"
                                                                Width="36" Height="36"
-                                                               RenderOptions.BitmapScalingMode="NearestNeighbor" />
+                                                               RenderOptions.BitmapScalingMode="HighQuality" />
                                                     </Border>
 
                                                     <!-- .grow：名字 + 说明 -->
@@ -1943,7 +1943,7 @@
                                         <neg:NegiGrid Columns="Auto * Auto">
                                             <!-- 32x32 方块图标，圆角 7 -->
                                             <Border Grid.Column="0" Width="32" Height="32" CornerRadius="7" ClipToBounds="True" Margin="0,0,10,0">
-                                                <Image Source="{Binding IconBitmap, Converter={StaticResource PixelsToBitmap}}" Width="32" Height="32" RenderOptions.BitmapScalingMode="NearestNeighbor" />
+                                                <Image Source="{Binding IconBitmap, Converter={StaticResource PixelsToBitmap}}" Width="32" Height="32" RenderOptions.BitmapScalingMode="HighQuality" />
                                             </Border>
                                             <neg:NegiStackPanel Grid.Column="1" VerticalAlignment="Center">
                                                 <TextBlock Text="{Binding Name}" FontWeight="Bold" FontSize="13" Foreground="#fafafa" />
