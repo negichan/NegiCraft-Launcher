@@ -303,7 +303,7 @@ public partial class MainWindow
     private Views.BackgroundTuningWindow? _bgTuning;
 
     /// <summary>壳外那圈投影留白的宽度 —— 摆调节窗时要按可见的壳边对齐，不是按窗口矩形。</summary>
-    private const double ShellInset = 60;
+    private double ShellInset => _performanceMode ? 0 : 60;
 
     /// <summary>
     /// 让调节窗的可见状态严格跟着 <c>IsBgTuningOpen</c>：只有这一处 Show / Hide。

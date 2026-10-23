@@ -1,4 +1,5 @@
 using System.ComponentModel;
+using System.Diagnostics;
 using System.Globalization;
 using System.IO;
 using System.Linq;
@@ -113,6 +114,64 @@ public partial class MainWindow
 
         Close();
         Application.Current?.Shutdown();
+    }
+
+    /// <summary>
+    /// 设置里点了「立即重启」：先拉起一份新进程，成功了才退出当前这份。
+    /// 新进程起不来就留在原地报个信，不能把用户唯一还开着的窗口关掉。
+    /// </summary>
+    public void RestartApplication()
+    {
+        if (_isExplicitExit) return;
+
+        if (!TryStartNewInstance())
+        {
+            _vm?.ShowBanner("没能启动新的启动器进程，请手动重启。");
+            return;
+        }
+
+        ExitApplication();
+    }
+
+    private static bool TryStartNewInstance()
+    {
+        var host = Environment.ProcessPath;
+        if (string.IsNullOrEmpty(host)) return false;
+
+        try
+        {
+            var start = new ProcessStartInfo(host)
+            {
+                UseShellExecute = false,
+                WorkingDirectory = AppContext.BaseDirectory,
+            };
+
+            // 从 `dotnet app.dll` 起的时候宿主是 dotnet.exe，入口 dll 得自己补回去。
+            var hostedByDotnet = string.Equals(Path.GetFileNameWithoutExtension(host), "dotnet",
+                StringComparison.OrdinalIgnoreCase);
+            if (hostedByDotnet)
+            {
+                var entry = typeof(App).Assembly.Location;
+                if (string.IsNullOrEmpty(entry)) return false;
+                start.ArgumentList.Add(entry);
+            }
+
+            foreach (var arg in Environment.GetCommandLineArgs().Skip(1))
+            {
+                // --performance 是调试用的强制开关，会把用户刚改掉的设置又压回去。
+                if (arg.Equals("--performance", StringComparison.OrdinalIgnoreCase)) continue;
+                // dotnet 托管时命令行里可能还夹着入口 dll，上面已经补过就不重复。
+                if (hostedByDotnet && arg.EndsWith(".dll", StringComparison.OrdinalIgnoreCase)) continue;
+                start.ArgumentList.Add(arg);
+            }
+
+            Process.Start(start);
+            return true;
+        }
+        catch
+        {
+            return false;
+        }
     }
 
     protected override void OnClosing(CancelEventArgs e)

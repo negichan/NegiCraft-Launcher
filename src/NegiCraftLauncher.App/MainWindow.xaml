@@ -2330,7 +2330,7 @@
                                  KeyDown="OnDialogInputKeyDown" />
 
                         <neg:NegiStackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right">
-                            <Button Style="{StaticResource BtnSmOutlineStyle}" Content="取消" Command="{Binding CancelDialogCommand}" />
+                            <Button Style="{StaticResource BtnSmOutlineStyle}" Content="{Binding DialogCancelText}" Command="{Binding CancelDialogCommand}" />
                             <Button Style="{StaticResource BtnSmPrimaryStyle}" Content="{Binding DialogConfirmText}"
                                     Command="{Binding ConfirmDialogCommand}" />
                         </neg:NegiStackPanel>

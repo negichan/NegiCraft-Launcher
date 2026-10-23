@@ -64,6 +64,7 @@ public partial class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent();
+        ApplyPerformanceModeIfNeeded();
         InitializeSettingsViews();
         SetupTrayIcon();
         DataContextChanged += OnDataContextChangedHandler;
@@ -302,6 +303,7 @@ public partial class MainWindow : Window
             _vm.HideWindowRequested -= Hide;
             _vm.ShowWindowRequested -= Restore;
             _vm.ExitApplicationRequested -= ExitApplication;
+            _vm.RestartApplicationRequested -= RestartApplication;
             _vm.OpenPetRequested -= OnOpenPetRequested;
             _vm.RecallPetRequested -= ClosePetWindow;
             _vm.PropertyChanged -= OnViewModelPropertyChanged;
@@ -319,6 +321,7 @@ public partial class MainWindow : Window
             _vm.HideWindowRequested += Hide;
             _vm.ShowWindowRequested += Restore;
             _vm.ExitApplicationRequested += ExitApplication;
+            _vm.RestartApplicationRequested += RestartApplication;
             _vm.OpenPetRequested += OnOpenPetRequested;
             _vm.RecallPetRequested += ClosePetWindow;
             _vm.PropertyChanged += OnViewModelPropertyChanged;
