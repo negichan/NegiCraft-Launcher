@@ -2,11 +2,10 @@
                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
                     xmlns:neg="clr-namespace:NegiCraftLauncher.Theme">
     <!--
-        NegiCraftLauncher in-house control styles —— WPF 侧。
+        NegiCraftLauncher in-house control styles —— WPF 侧，也是 Avalonia 主题的唯一源。
 
-        与 Avalonia 的 NegiCraftLauncher.Theme.Avalonia/Controls.axaml 是**两份独立的 view 层资产**：
-        WPF 与 Avalonia 的 XAML 没有共同编译器（根 xmlns 都不一样），做不到一套源码两边编。
-        这里保证的是**视觉结果一致**，不是文本一致。
+        Avalonia 的 Generated/Controls.g.axaml 由 tools/NegiThemes 从这里生成，不要手改；
+        两边结构差异（必需部件、控件类型）在生成器适配器里处理。这里保证的是**视觉结果一致**。
 
         Avalonia → WPF 的对应关系：
           ControlTheme TargetType="X" x:Key="{x:Type X}"  →  Style TargetType="{x:Type X}"（无 Key 即隐式）

@@ -451,7 +451,7 @@
                         <!-- 第二层工具条：统一 32 高。它已经在窗口操作区下面，所以能一直铺到内容列右边缘。
                              搜索框不再吃满整行 —— 右边那排（导入 / 添加目录 / 目录切换 / 视图切换）要地方。 -->
                         <Grid Grid.Row="1" ColumnDefinitions="Auto Auto Auto Auto * Auto Auto Auto Auto Auto" Height="32" Margin="0,0,0,16">
-                            <!-- 搜索框：统一定义在 Theme.Avalonia/Controls.axaml 中的 Classes="SearchBox"，
+                            <!-- 搜索框：统一定义在 Theme.Avalonia/Generated/Controls.g.axaml 中的 Classes="SearchBox"，
                                  内含 32 高度、8 圆角、左侧放大镜（防击穿）、右侧动态清空按钮。 -->
                             <TextBox Grid.Column="0" x:Name="SearchBox" Classes="SearchBox"
                                      Width="220" Margin="0,0,8,0"

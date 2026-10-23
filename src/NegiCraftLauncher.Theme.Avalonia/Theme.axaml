@@ -3,12 +3,15 @@
     <!--
         NegiCraftLauncher application theme: design tokens + in-house control themes.
         Replaces the vendored ShadUI ShadTheme as the runtime theme.
+
+        Generated/Controls.g.axaml is generated from src/NegiCraftLauncher.Theme/Controls.xaml
+        by tools/NegiThemes; do not edit the generated file by hand.
     -->
     <Styles.Resources>
         <ResourceDictionary>
             <ResourceDictionary.MergedDictionaries>
                 <ResourceInclude Source="avares://NegiCraftLauncher.Theme.Avalonia/Tokens.axaml" />
-                <ResourceInclude Source="avares://NegiCraftLauncher.Theme.Avalonia/Controls.axaml" />
+                <ResourceInclude Source="avares://NegiCraftLauncher.Theme.Avalonia/Generated/Controls.g.axaml" />
             </ResourceDictionary.MergedDictionaries>
         </ResourceDictionary>
     </Styles.Resources>
