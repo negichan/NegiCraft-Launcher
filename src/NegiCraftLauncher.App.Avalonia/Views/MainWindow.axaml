@@ -549,7 +549,7 @@
                                  它平摊给一两张卡 —— 卡片会被撑成半屏高。 -->
                             <Panel Classes="PageAnim" IsVisible="{Binding IsGridView}">
                                 <ScrollViewer Focusable="False" IsVisible="{Binding HasInstances}">
-                                    <ItemsControl Focusable="False" VerticalAlignment="Top" ItemsSource="{Binding VisibleInstances}">
+                                    <ItemsControl Focusable="False" VerticalAlignment="Top" Margin="0,0,0,56" ItemsSource="{Binding VisibleInstances}">
                                         <ItemsControl.ItemsPanel>
                                             <ItemsPanelTemplate>
                                                 <UniformGrid Columns="{Binding InstanceColumns}" Margin="0,0,-12,0"/>
@@ -651,7 +651,7 @@
                                  窗口再窄也不会把 tag 挤没（它比名字更容易一眼比对）。 -->
                             <Panel Classes="PageAnim" IsVisible="{Binding IsListView}">
                                 <ScrollViewer Focusable="False" IsVisible="{Binding HasInstances}">
-                                    <ItemsControl Focusable="False" VerticalAlignment="Top" ItemsSource="{Binding VisibleInstances}">
+                                    <ItemsControl Focusable="False" VerticalAlignment="Top" Margin="0,0,0,56" ItemsSource="{Binding VisibleInstances}">
                                         <ItemsControl.ItemTemplate>
                                             <DataTemplate x:DataType="models:InstanceModel">
                                                 <Button Classes="InstRow"
