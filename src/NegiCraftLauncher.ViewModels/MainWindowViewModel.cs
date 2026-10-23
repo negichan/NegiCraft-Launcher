@@ -3468,6 +3468,16 @@ public partial class MainWindowViewModel : ViewModelBase
     private bool _isDark = true;
 
     /// <summary>
+    /// 性能模式：不透明窗 + GPU 合成，代价是外框圆角/投影改为近似。主窗口只在启动时读它，
+    /// 所以改了要重启；这里只负责落盘和询问。
+    /// </summary>
+    [ObservableProperty]
+    private bool _performanceMode;
+
+    /// <summary>本轮启动时实际读到的值。改回它就不必再问重启。</summary>
+    private bool _performanceModeInEffect;
+
+    /// <summary>
     /// 界面动画的开法。见 <see cref="MotionPreference"/>。
     ///
     /// <para>存的是枚举，落到 settings.json 时转成字符串（见
@@ -3513,6 +3523,30 @@ public partial class MainWindowViewModel : ViewModelBase
 
     partial void OnHideOnLaunchChanged(bool value) => PersistSettings();
 
+    partial void OnPerformanceModeChanged(bool value)
+    {
+        if (_applyingSettings)
+        {
+            _performanceModeInEffect = value;
+            return;
+        }
+
+        PersistSettings();
+        if (value == _performanceModeInEffect) return;
+
+        _ = AskPerformanceModeRestartAsync();
+    }
+
+    private async Task AskPerformanceModeRestartAsync()
+    {
+        var answer = await ShowDialogAsync("性能模式",
+            "性能模式要在重启启动器后生效。现在重启吗？",
+            null, null, "立即重启", "稍后");
+
+        if (answer is null) return;
+        RestartApplicationRequested?.Invoke();
+    }
+
     partial void OnCloseWindowBehaviorChanged(string value) => PersistSettings();
 
     /// <summary>
@@ -3520,6 +3554,11 @@ public partial class MainWindowViewModel : ViewModelBase
     /// prompt's "直接退出". Hiding is <see cref="HideWindowRequested"/>; this one is the real shutdown.
     /// </summary>
     public event Action? ExitApplicationRequested;
+
+    /// <summary>
+    /// 用户点了「立即重启」：视图负责拉起新进程，再走正常退出流程。
+    /// </summary>
+    public event Action? RestartApplicationRequested;
 
     [ObservableProperty]
     private bool _isClosePromptOpen;
@@ -3741,6 +3780,7 @@ public partial class MainWindowViewModel : ViewModelBase
                 _ => "自动",
             };
             IsDark = settings.IsDark;
+            PerformanceMode = settings.PerformanceMode;
             MotionPreference = MotionPreferenceExtensions.Parse(settings.MotionPreference);
 
             if (!string.IsNullOrEmpty(settings.CustomBackgroundPath) &&
@@ -3806,6 +3846,7 @@ public partial class MainWindowViewModel : ViewModelBase
         settings.InstanceViewMode = InstanceViewMode;
         settings.DownloadThreads = DownloadThreads;
         settings.IsDark = IsDark;
+        settings.PerformanceMode = PerformanceMode;
         settings.MotionPreference = MotionPreference.ToStorage();
         settings.CustomBackgroundPath = CustomBackgroundPath;
         settings.VideoBackgroundPath = VideoBackgroundPath;
@@ -3872,6 +3913,9 @@ public partial class MainWindowViewModel : ViewModelBase
     private string _dialogConfirmText = "确定";
 
     [ObservableProperty]
+    private string _dialogCancelText = "取消";
+
+    [ObservableProperty]
     private bool _dialogHasInput;
 
     public bool HasDialogMessage => DialogMessage.Length > 0;
@@ -3883,7 +3927,7 @@ public partial class MainWindowViewModel : ViewModelBase
     /// null when the user cancelled.
     /// </summary>
     private Task<string?> ShowDialogAsync(string title, string message, string? placeholder,
-        string? initial, string confirmText)
+        string? initial, string confirmText, string cancelText = "取消")
     {
         _dialogTcs?.TrySetResult(null);
 
@@ -3896,6 +3940,7 @@ public partial class MainWindowViewModel : ViewModelBase
         DialogPlaceholder = placeholder ?? "";
         DialogInput = initial ?? "";
         DialogConfirmText = confirmText;
+        DialogCancelText = cancelText;
         IsDialogOpen = true;
 
         return tcs.Task;

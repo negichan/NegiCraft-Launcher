@@ -94,6 +94,12 @@ public sealed class LauncherSettings
     public bool IsDark { get; set; } = true;
 
     /// <summary>
+    ///     性能模式：关掉窗口级透明，让 WPF 走 GPU 合成。外框圆角会从逐像素 alpha 变成硬裁剪，
+    ///     外投影也保不住原样 —— 这是换取动画顺滑的代价。下次启动生效。
+    /// </summary>
+    public bool PerformanceMode { get; set; }
+
+    /// <summary>
     ///     界面动画的开法：<c>"system"</c>（跟随系统，默认）/ <c>"alwaysOn"</c> / <c>"alwaysOff"</c>。
     ///
     ///     <para>存成字符串而不是枚举，是为了让认不出的值能安全退回"跟随系统"

@@ -10,8 +10,10 @@ using System.Windows.Input;
 using System.Windows.Interop;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
+using System.Windows.Shell;
 using System.Windows.Threading;
 using NegiCraftLauncher.App.Controls;
+using NegiCraftLauncher.Core.Settings;
 using NegiCraftLauncher.Pet;
 using NegiCraftLauncher.Raster;
 using NegiCraftLauncher.ViewModels;
@@ -340,6 +342,86 @@ public partial class MainWindow
     // 窗口行为
     // ==========================================================
 
+    private bool _performanceMode;
+
+    /// <summary>
+    /// 性能模式：去掉窗口级透明，WPF 才会回到 GPU 合成。默认外观（逐像素圆角 + 外投影）
+    /// 和 GPU 在 Win10 上二选一，所以这是显式开关，不是默认值。
+    ///
+    /// <para>做法不是只改一个属性：窗口原本四周留了 60 DIP 给手绘投影，不透明窗里这圈留白
+    /// 会变成实心黑边；所以同时把壳贴到窗口边、收掉阴影层，窗口尺寸减掉两圈留白，
+    /// 保持可见壳尺寸不变。圆角用 <see cref="SetWindowRgn"/> 硬裁剪（Win10 没有原生圆角），
+    /// <see cref="WindowChrome"/> 保留系统缩放边框，并让 DWM 接手投影（会比原来那圈手绘阴影弱）。</para>
+    /// </summary>
+    private void ApplyPerformanceModeIfNeeded()
+    {
+        var forced = Environment.GetCommandLineArgs()
+            .Contains("--performance", StringComparer.OrdinalIgnoreCase);
+        if (!forced && !LauncherSettings.Load().PerformanceMode) return;
+
+        _performanceMode = true;
+
+        const double shadowInset = 60;
+
+        AllowsTransparency = false;
+        Background = new SolidColorBrush(Color.FromRgb(0x09, 0x09, 0x0B));
+        ShellShadowLayer.Visibility = Visibility.Collapsed;
+        Shell.Margin = new Thickness(0);
+
+        MinWidth = Math.Max(0, MinWidth - shadowInset * 2);
+        MinHeight = Math.Max(0, MinHeight - shadowInset * 2);
+        Width = Math.Max(MinWidth, Width - shadowInset * 2);
+        Height = Math.Max(MinHeight, Height - shadowInset * 2);
+
+        WindowChrome.SetWindowChrome(this, new WindowChrome
+        {
+            CaptionHeight = 0,
+            ResizeBorderThickness = new Thickness(6),
+            GlassFrameThickness = new Thickness(0),
+            CornerRadius = new CornerRadius(22),
+            UseAeroCaptionButtons = false,
+        });
+
+        SourceInitialized += (_, _) => ApplyRoundedWindowRegion();
+        Loaded += (_, _) => ApplyRoundedWindowRegion();
+        SizeChanged += (_, _) => ApplyRoundedWindowRegion();
+        StateChanged += (_, _) => ApplyRoundedWindowRegion();
+    }
+
+    /// <summary>不透明窗的圆角只能靠窗口区域硬裁；坐标是物理像素，DPI 变一次就要重建。</summary>
+    private void ApplyRoundedWindowRegion()
+    {
+        if (!_performanceMode) return;
+
+        var handle = new WindowInteropHelper(this).Handle;
+        if (handle == IntPtr.Zero) return;
+
+        if (WindowState == WindowState.Maximized)
+        {
+            SetWindowRgn(handle, IntPtr.Zero, true);
+            return;
+        }
+
+        var dpi = VisualTreeHelper.GetDpi(this);
+        var width = (int)Math.Ceiling(ActualWidth * dpi.DpiScaleX);
+        var height = (int)Math.Ceiling(ActualHeight * dpi.DpiScaleY);
+        if (width <= 0 || height <= 0) return;
+
+        var radius = (int)Math.Round(22 * dpi.DpiScaleX);
+        var region = CreateRoundRectRgn(0, 0, width + 1, height + 1, radius * 2, radius * 2);
+        if (region == IntPtr.Zero) return;
+
+        // SetWindowRgn 成功后区域归系统所有，不能再 DeleteObject。
+        SetWindowRgn(handle, region, true);
+    }
+
+    [DllImport("user32.dll")]
+    private static extern int SetWindowRgn(IntPtr hWnd, IntPtr hRgn, bool bRedraw);
+
+    [DllImport("gdi32.dll")]
+    private static extern IntPtr CreateRoundRectRgn(
+        int left, int top, int right, int bottom, int widthEllipse, int heightEllipse);
+
     private void Restore()
     {
         Show();
@@ -383,8 +465,10 @@ public partial class MainWindow
             return new Point(-1e9, -1e9);
         }
 
+        // 用客户区原点而不是 Left/Top：WindowChrome 下窗口原点和客户区原点可能差一圈边框。
+        var origin = target.TransformFromDevice.Transform(PointToScreen(new Point(0, 0)));
         var dip = target.TransformFromDevice.Transform(screen);
-        return new Point(dip.X - Left, dip.Y - Top);
+        return new Point(dip.X - origin.X, dip.Y - origin.Y);
     }
 
     /// <summary>这个窗口内坐标落在壳子的哪条改大小把手上；0 = 不在把手上（交回系统照常处理）。</summary>

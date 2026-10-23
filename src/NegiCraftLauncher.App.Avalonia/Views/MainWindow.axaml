@@ -2426,7 +2426,7 @@
                                  KeyDown="OnDialogInputKeyDown"/>
 
                         <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right">
-                            <Button Classes="BtnSm BtnOutline" Content="取消" Command="{Binding CancelDialogCommand}"/>
+                            <Button Classes="BtnSm BtnOutline" Content="{Binding DialogCancelText}" Command="{Binding CancelDialogCommand}"/>
                             <Button Classes="BtnSm BtnPrimary" Content="{Binding DialogConfirmText}"
                                     Command="{Binding ConfirmDialogCommand}"/>
                         </StackPanel>
