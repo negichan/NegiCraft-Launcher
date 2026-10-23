@@ -683,11 +683,13 @@
     </Style>
 
     <!-- ============ Separator ============ -->
+    <!-- 比 BorderLineBrush 亮一档：1px 的分隔线用边框色压在菜单底上几乎看不见，
+         看着就像空行。 -->
     <Style TargetType="{x:Type Separator}">
         <Setter Property="Focusable" Value="False" />
         <Setter Property="Height" Value="1" />
         <Setter Property="Margin" Value="4,4" />
-        <Setter Property="Background" Value="{DynamicResource BorderLineBrush}" />
+        <Setter Property="Background" Value="{DynamicResource SeparatorBrush}" />
         <Setter Property="Template" Value="{StaticResource NegiSeparatorTemplate}" />
     </Style>
 
@@ -696,7 +698,7 @@
         <Setter Property="Focusable" Value="False" />
         <Setter Property="Height" Value="1" />
         <Setter Property="Margin" Value="4,4" />
-        <Setter Property="Background" Value="{DynamicResource BorderLineBrush}" />
+        <Setter Property="Background" Value="{DynamicResource SeparatorBrush}" />
         <Setter Property="Template" Value="{StaticResource NegiSeparatorTemplate}" />
     </Style>
 
