@@ -941,7 +941,10 @@
             <Button Style="{StaticResource SetNavBtnStyle}" Content="下载"
                     neg:Negi.On="{Binding CurrentSettingsTab, Converter={StaticResource Equals}, ConverterParameter=下载}"
                     Command="{Binding SelectSettingsTabCommand}" CommandParameter="下载" />
+            <!-- 「地区」暂时只在 Debug 构建里出现（见 ViewModels/RegionFeature.cs）：
+                 Release 下 IsRegionVisible 恒 false，这一项连同右侧卡片都到不了。 -->
             <Button Style="{StaticResource SetNavBtnStyle}" Content="地区"
+                    Visibility="{Binding IsRegionVisible, Converter={StaticResource BoolToVis}}"
                     neg:Negi.On="{Binding CurrentSettingsTab, Converter={StaticResource Equals}, ConverterParameter=地区}"
                     Command="{Binding SelectSettingsTabCommand}" CommandParameter="地区" />
             <Button Style="{StaticResource SetNavBtnStyle}" Content="外观"

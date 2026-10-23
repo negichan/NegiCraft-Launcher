@@ -1861,6 +1861,15 @@ public partial class MainWindowViewModel : ViewModelBase
     // 所在地区
     // ==========================================================
 
+    /// <summary>设置页里这一项的名字。挡切页要用到，别在各处重新拼字符串。</summary>
+    private const string RegionTab = "地区";
+
+    /// <summary>
+    /// 设置里「地区」那一页显不显示 —— 跟 <see cref="RegionFeature"/> 走，
+    /// <b>Release 构建里恒为 false</b>。
+    /// </summary>
+    public bool IsRegionVisible => RegionFeature.Enabled;
+
     /// <summary>
     /// 调试通道强制出来的地区，<b>只在内存里</b>。真值永远是 <c>LauncherSettings.Region</c>；
     /// 这一份只为「手上没有对应出口 IP 也要看到别的地区长什么样」而存在。
@@ -1935,6 +1944,7 @@ public partial class MainWindowViewModel : ViewModelBase
     [RelayCommand]
     private async Task RefreshRegionAsync()
     {
+#if DEBUG
         if (IsRegionChecking) return;
 
         IsRegionChecking = true;
@@ -1967,16 +1977,28 @@ public partial class MainWindowViewModel : ViewModelBase
             OnPropertyChanged(nameof(RegionHint));
             OnPropertyChanged(nameof(IsMainlandChina));
         }
+#else
+        // Release 里这块功能整个关着（见 RegionFeature）。命令本身留着，免得 XAML 里的
+        // 绑定报"找不到命令"；但一个字都不往网络上发。
+        await Task.CompletedTask;
+#endif
     }
 
     /// <summary>
     /// 启动时探一次：没存过、或者存的那次已经超过一周才动。地区只影响"按地区提供哪些内容"，
     /// 探不到也不影响启动，所以不 await、不挡路。
+    ///
+    /// <para><b>Release 里这个方法体是空的</b>：这块功能整个关着（<see cref="RegionFeature"/>），
+    /// 发版不该因为一个还没开放的设置项偷偷请求第三方 IP 接口。用 <c>#if</c> 而不是
+    /// <c>if (!RegionFeature.Enabled) return;</c>，是因为 const 折叠之后那句 return 在 Debug 里
+    /// 永远到不了，编译器会报 CS0162「无法访问的代码」。</para>
     /// </summary>
     private void StartRegionProbe()
     {
+#if DEBUG
         var saved = _launcher.Settings.Region;
         if (saved is null || DateTime.Now - saved.CheckedAt > TimeSpan.FromDays(7)) _ = RefreshRegionAsync();
+#endif
     }
 
     /// <summary>
@@ -3353,6 +3375,15 @@ public partial class MainWindowViewModel : ViewModelBase
 
     partial void OnCurrentSettingsTabChanged(string value)
     {
+        // Release 里没有「地区」这一页（见 RegionFeature）。旧状态或调试通道把标签设成它时
+        // 回退到「游戏」，否则右侧会是一张永远空着的卡片。设回去只会再进一次本方法，
+        // 那次 value 是「游戏」，条件不成立就停了。
+        if (value == RegionTab && !RegionFeature.Enabled)
+        {
+            CurrentSettingsTab = "游戏";
+            return;
+        }
+
         if (value == "Java") RefreshJavaOptions();
     }
 

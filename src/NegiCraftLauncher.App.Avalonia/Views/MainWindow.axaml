@@ -1571,7 +1571,10 @@
                                 <Button Classes="SetNavBtn" Content="下载"
                                         Classes.On="{Binding CurrentSettingsTab, Converter={x:Static ObjectConverters.Equal}, ConverterParameter='下载'}"
                                         Command="{Binding SelectSettingsTabCommand}" CommandParameter="下载"/>
+                                <!-- 「地区」暂时只在 Debug 构建里出现（见 ViewModels/RegionFeature.cs）：
+                                     Release 下 IsRegionVisible 恒 false，这一项连同右侧卡片都到不了。 -->
                                 <Button Classes="SetNavBtn" Content="地区"
+                                        IsVisible="{Binding IsRegionVisible}"
                                         Classes.On="{Binding CurrentSettingsTab, Converter={x:Static ObjectConverters.Equal}, ConverterParameter='地区'}"
                                         Command="{Binding SelectSettingsTabCommand}" CommandParameter="地区"/>
                                 <Button Classes="SetNavBtn" Content="外观"
