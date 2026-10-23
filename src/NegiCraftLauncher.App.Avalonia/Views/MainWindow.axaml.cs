@@ -228,6 +228,9 @@ public partial class MainWindow : Window
             _vm.ExitApplicationRequested -= ExitApplication;
             _vm.OpenPetRequested -= OnOpenPetRequested;
             _vm.RecallPetRequested -= ClosePetWindow;
+            _vm.RequestAddModFile -= OnRequestAddModFile;
+            _vm.RequestAddResourcePackFile -= OnRequestAddResourcePackFile;
+            _vm.RequestExportInstance -= OnRequestExportInstance;
             _vm.PropertyChanged -= OnViewModelPropertyChanged;
             _vm.BackgroundFramingChanged -= ApplyBackgroundFraming;
         }
@@ -242,6 +245,7 @@ public partial class MainWindow : Window
             _vm.RecallPetRequested += ClosePetWindow;
             _vm.RequestAddModFile += OnRequestAddModFile;
             _vm.RequestAddResourcePackFile += OnRequestAddResourcePackFile;
+            _vm.RequestExportInstance += OnRequestExportInstance;
             _vm.PropertyChanged += OnViewModelPropertyChanged;
 
             // 取景只改变换、不碰像素，所以单独一条事件：拖动平移时一次调色都不该发生。

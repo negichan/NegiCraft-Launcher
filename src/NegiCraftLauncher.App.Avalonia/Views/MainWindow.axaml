@@ -585,6 +585,9 @@
                                                             <MenuItem Header="打开存档文件夹"
                                                                       Command="{Binding $parent[Window].((vm:MainWindowViewModel)DataContext).OpenInstanceSavesCommand}"
                                                                       CommandParameter="{Binding .}"/>
+                                                            <MenuItem Header="导出整合包"
+                                                                      Command="{Binding $parent[Window].((vm:MainWindowViewModel)DataContext).ExportInstanceCommand}"
+                                                                      CommandParameter="{Binding .}"/>
                                                             <Separator/>
                                                             <MenuItem Header="删除" Foreground="#f87171"
                                                                       Command="{Binding $parent[Window].((vm:MainWindowViewModel)DataContext).DeleteInstanceCommand}"
@@ -676,6 +679,9 @@
                                                                       CommandParameter="{Binding .}"/>
                                                             <MenuItem Header="打开存档文件夹"
                                                                       Command="{Binding $parent[Window].((vm:MainWindowViewModel)DataContext).OpenInstanceSavesCommand}"
+                                                                      CommandParameter="{Binding .}"/>
+                                                            <MenuItem Header="导出整合包"
+                                                                      Command="{Binding $parent[Window].((vm:MainWindowViewModel)DataContext).ExportInstanceCommand}"
                                                                       CommandParameter="{Binding .}"/>
                                                             <Separator/>
                                                             <MenuItem Header="删除" Foreground="#f87171"
@@ -1429,17 +1435,22 @@
                                                     <Grid ColumnDefinitions="* Auto">
                                                         <StackPanel VerticalAlignment="Center" Spacing="2" Margin="0,0,16,0">
                                                             <TextBlock Text="导出整合包" FontWeight="Medium" Foreground="#fafafa" FontSize="13"/>
-                                                            <TextBlock Text="打包成 .mrpack 或标准 .zip，暂未开放" FontSize="12" Foreground="#71717a"/>
+                                                            <TextBlock Text="打包模组与配置，不含存档；可分享或重新导入" FontSize="12" Foreground="#71717a"/>
                                                         </StackPanel>
-                                                        <Button Grid.Column="1" Classes="BtnSm BtnOutline" Content="导出文件"
-                                                                IsEnabled="False" ToolTip.Tip="导出整合包功能开发中。"/>
+                                                        <Button Grid.Column="1" Classes="BtnSm BtnOutline"
+                                                                Command="{Binding ExportInstanceCommand}" CommandParameter="{Binding EditingInstance}">
+                                                            <StackPanel Orientation="Horizontal" Spacing="6">
+                                                                <materialIcons:MaterialIcon Kind="PackageVariantClosed" Width="14" Height="14"/>
+                                                                <TextBlock Text="导出" VerticalAlignment="Center"/>
+                                                            </StackPanel>
+                                                        </Button>
                                                     </Grid>
                                                 </Border>
                                                 <Border Height="54">
                                                     <Grid ColumnDefinitions="* Auto">
                                                         <StackPanel VerticalAlignment="Center" Spacing="2" Margin="0,0,16,0">
                                                             <TextBlock Text="删除实例" FontWeight="Medium" Foreground="#fafafa" FontSize="13"/>
-                                                            <TextBlock Text="版本文件夹会一并删除，包含内部所有存档" FontSize="12" Foreground="#f87171"/>
+                                                            <TextBlock Text="版本文件夹会一并删除，无法恢复" FontSize="12" Foreground="#f87171"/>
                                                         </StackPanel>
                                                         <Button Grid.Column="1" Classes="BtnSm Danger" Content="删除"
                                                                 Command="{Binding DeleteEditingInstanceCommand}"/>

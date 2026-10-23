@@ -310,6 +310,7 @@ public partial class MainWindow : Window
             _vm.BackgroundFramingChanged -= ApplyBackgroundFraming;
             _vm.RequestAddModFile -= OnRequestAddModFile;
             _vm.RequestAddResourcePackFile -= OnRequestAddResourcePackFile;
+            _vm.RequestExportInstance -= OnRequestExportInstance;
         }
 
         _vm = DataContext as MainWindowViewModel;
@@ -328,6 +329,7 @@ public partial class MainWindow : Window
             _vm.BackgroundFramingChanged += ApplyBackgroundFraming;
             _vm.RequestAddModFile += OnRequestAddModFile;
             _vm.RequestAddResourcePackFile += OnRequestAddResourcePackFile;
+            _vm.RequestExportInstance += OnRequestExportInstance;
 
             // 动画档位要在第一帧之前就定下来：DataContext 换完才定的话，
             // 首页那一下入场动画会按旧的（可能是"关"）跑。

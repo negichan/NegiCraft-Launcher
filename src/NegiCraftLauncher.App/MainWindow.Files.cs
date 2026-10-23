@@ -179,6 +179,25 @@ public partial class MainWindow
         if (dialog.ShowDialog(this) == true) _vm?.OfferPackFile(dialog.FileName);
     }
 
+    /// <summary>导出实例：先选保存位置，再交给 VM 跑长活；任务列表里能看到进度与取消。</summary>
+    private void OnRequestExportInstance(InstanceModel instance)
+    {
+        var dialog = new Microsoft.Win32.SaveFileDialog
+        {
+            Title = "导出整合包",
+            Filter = "Modrinth 整合包 (*.mrpack)|*.mrpack",
+            DefaultExt = ".mrpack",
+            AddExtension = true,
+            OverwritePrompt = true,
+            FileName = instance.ExportFileName,
+        };
+
+        var desktop = Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory);
+        if (desktop.Length > 0) dialog.InitialDirectory = desktop;
+
+        if (dialog.ShowDialog(this) == true && _vm is { } vm) _ = vm.ExportInstanceAsync(instance, dialog.FileName);
+    }
+
     /// <summary>.NET 8 起 WPF 自己有目录选择框，不必再拼 SHBrowseForFolder。</summary>
     private void OnPickGameFolderClick(object sender, RoutedEventArgs e)
     {

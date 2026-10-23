@@ -140,6 +140,26 @@ public partial class MainWindow
         if (files.Count > 0) _vm.OfferPackFile(files[0].Path.LocalPath);
     }
 
+    /// <summary>导出实例：先选保存位置，再交给 VM 跑长活；任务列表里能看到进度与取消。</summary>
+    private async void OnRequestExportInstance(InstanceModel instance)
+    {
+        if (_vm is null) return;
+
+        var file = await StorageProvider.SaveFilePickerAsync(new FilePickerSaveOptions
+        {
+            Title = "导出整合包",
+            SuggestedFileName = instance.ExportFileName,
+            DefaultExtension = "mrpack",
+            ShowOverwritePrompt = true,
+            FileTypeChoices = new[]
+            {
+                new FilePickerFileType("Modrinth 整合包") { Patterns = new[] { "*.mrpack" } },
+            },
+        });
+
+        if (file?.TryGetLocalPath() is { Length: > 0 } target) await _vm.ExportInstanceAsync(instance, target);
+    }
+
     /// <summary>
     /// 选一个已经存在的游戏目录。WPF 侧用的是 <c>Microsoft.Win32.OpenFolderDialog</c>，
     /// Avalonia 这边只有存储层那套：<c>OpenFolderPickerAsync</c> 回的是 <c>IStorageFolder</c>，
