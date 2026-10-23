@@ -1,5 +1,6 @@
 using System.Reflection;
 using System.Diagnostics;
+using System.IO;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
@@ -7,6 +8,8 @@ using System.Windows.Media;
 using System.Windows.Threading;
 using MinecraftSkinRender;
 using NegiCraftLauncher.App.Controls;
+using NegiCraftLauncher.Core.Instances;
+using NegiCraftLauncher.Core.Modpacks;
 using NegiCraftLauncher.Pet;
 using NegiCraftLauncher.Raster;
 using NegiCraftLauncher.Raster.Rendering;
@@ -192,6 +195,8 @@ internal static class Program
             await CheckUiMotion();
             await CheckPageDirection();
             await CheckMotionPreference();
+            await CheckMenuSeparator();
+            await CheckInstanceExport();
             await CheckFoxSqueeze();
 
             pet = new PetWindow("", null) { Left = 500, Top = 300 };
@@ -503,6 +508,143 @@ internal static class Program
             MotionPreferenceExtensions.Parse(MotionPreference.System.ToStorage()) == MotionPreference.System);
 
         await Task.CompletedTask;
+    }
+
+    /// <summary>
+    /// 实例右键菜单里的 <c>Separator</c>：真实弹出时必须命中主题的菜单分隔线样式。
+    /// 画廊里那个是放在 StackPanel 里的假菜单，<c>MenuItem.SeparatorStyleKey</c> 这条键只有
+    /// 真 ContextMenu 才会走，两个资源键漏一个就退化成空白行。
+    /// </summary>
+    private static async Task CheckMenuSeparator()
+    {
+        var menu = new ContextMenu();
+        menu.Items.Add(new MenuItem { Header = "第一项" });
+        menu.Items.Add(new Separator());
+        menu.Items.Add(new MenuItem { Header = "第二项" });
+
+        var host = new Window
+        {
+            Width = 200, Height = 200, Left = -32000, Top = -32000,
+            ShowActivated = false, ShowInTaskbar = false,
+        };
+
+        try
+        {
+            host.Show();
+            menu.PlacementTarget = host;
+            menu.IsOpen = true;
+            await Task.Delay(180);
+
+            var separator = menu.Items.OfType<Separator>().Single();
+            var color = (separator.Background as SolidColorBrush)?.Color;
+            Check($"context-menu separator is a line, not a blank row (height={separator.Height}, bg={color})",
+                separator.Height == 1 &&
+                separator.Margin == new Thickness(4) &&
+                color == Color.FromRgb(0x3F, 0x3F, 0x46));
+        }
+        finally
+        {
+            menu.IsOpen = false;
+            host.Close();
+        }
+    }
+
+    /// <summary>
+    /// 导出整合包：Forge 1.16 的 profile 没有继承链，MC 版本只能从 clientVersion / 加载器坐标里认；
+    /// 导出的包要能被现有导入解析器原样读回来，且版本本体、日志、存档与启动器元数据都不能进去。
+    /// </summary>
+    private static async Task CheckInstanceExport()
+    {
+        var sandbox = Path.Combine(Path.GetTempPath(), "NCL", "export-check", Guid.NewGuid().ToString("N"));
+        var game = Path.Combine(sandbox, "game");
+        var version = Path.Combine(game, "versions", "TestPack");
+
+        try
+        {
+            Directory.CreateDirectory(Path.Combine(version, "mods"));
+            Directory.CreateDirectory(Path.Combine(version, "config"));
+            Directory.CreateDirectory(Path.Combine(version, "logs"));
+            Directory.CreateDirectory(Path.Combine(version, "crash-reports"));
+            Directory.CreateDirectory(Path.Combine(version, "saves", "world"));
+            Directory.CreateDirectory(Path.Combine(version, "screenshots"));
+            Directory.CreateDirectory(Path.Combine(version, "natives"));
+
+            File.WriteAllText(Path.Combine(version, "TestPack.json"), """
+                {
+                  "id": "TestPack",
+                  "clientVersion": "1.16.5",
+                  "type": "release",
+                  "mainClass": "net.minecraft.client.main.Main",
+                  "libraries": [ { "name": "net.minecraftforge:forge:1.16.5-36.2.20" } ]
+                }
+                """);
+            File.WriteAllText(Path.Combine(version, "TestPack.jar"), "version body");
+            File.WriteAllText(Path.Combine(version, "icon.png"), "icon");
+            File.WriteAllText(Path.Combine(version, "mods", "foo.jar"), "mod");
+            File.WriteAllText(Path.Combine(version, "config", "test.toml"), "config");
+            File.WriteAllText(Path.Combine(version, "logs", "latest.log"), "log");
+            File.WriteAllText(Path.Combine(version, "saves", "world", "level.dat"), "save");
+
+            var manager = new InstanceManager(game, Path.Combine(sandbox, "instances.json"));
+            manager.Load();
+            var instance = manager.Instances.Single();
+            instance.Isolated = true;
+
+            var isolatedTarget = Path.Combine(sandbox, "isolated.mrpack");
+            var result = await InstanceExporter.ExportAsync(manager, instance, isolatedTarget);
+            Check("export writes an .mrpack and cleans up the .part file",
+                File.Exists(isolatedTarget) && !File.Exists(isolatedTarget + ".part") && result.FileCount == 2);
+
+            using (var archive = ModpackArchive.Open(isolatedTarget))
+            {
+                var manifest = ModpackParser.Parse(archive, "TestPack");
+                Check("export produces a pack the importer recognizes",
+                    manifest.Format == ModpackFormat.Modrinth && manifest.Name == "TestPack");
+                Check("export recovers MC 1.16.5 without an inheritance chain", manifest.MinecraftVersion == "1.16.5");
+                Check("export records the Forge version without the MC prefix",
+                    manifest.Loader is { Kind: "forge", Version: "36.2.20" });
+                Check("export keeps mods and config",
+                    archive.Exists("overrides/mods/foo.jar") && archive.Exists("overrides/config/test.toml"));
+                Check("export puts every file in overrides, not the download list", manifest.Files.Count == 0);
+                Check("export drops the version body, icon, logs, saves and screenshots",
+                    !archive.Exists("overrides/TestPack.json") && !archive.Exists("overrides/TestPack.jar") &&
+                    !archive.Exists("overrides/icon.png") && !archive.HasFolder("overrides/logs") &&
+                    !archive.HasFolder("overrides/crash-reports") && !archive.HasFolder("overrides/saves") &&
+                    !archive.HasFolder("overrides/screenshots") && !archive.HasFolder("overrides/natives"));
+            }
+
+            // 共用目录：整个 .minecraft 都是实例的数据目录，版本/库/资源与账号文件必须排除。
+            instance.Isolated = false;
+            Directory.CreateDirectory(Path.Combine(game, "libraries"));
+            Directory.CreateDirectory(Path.Combine(game, "assets"));
+            Directory.CreateDirectory(Path.Combine(game, "saves"));
+            File.WriteAllText(Path.Combine(game, "libraries", "lib.jar"), "lib");
+            File.WriteAllText(Path.Combine(game, "saves", "level.dat"), "save");
+            File.WriteAllText(Path.Combine(game, "launcher_accounts.json"), "{}");
+            File.WriteAllText(Path.Combine(game, "options.txt"), "fov:70");
+
+            var sharedTarget = Path.Combine(sandbox, "shared.mrpack");
+            await InstanceExporter.ExportAsync(manager, instance, sharedTarget);
+
+            using var shared = ModpackArchive.Open(sharedTarget);
+            Check("shared-root export excludes versions, libraries, saves and launcher accounts",
+                !shared.HasFolder("overrides/versions") && !shared.HasFolder("overrides/libraries") &&
+                !shared.HasFolder("overrides/assets") && !shared.HasFolder("overrides/saves") &&
+                !shared.Exists("overrides/launcher_accounts.json"));
+            Check("shared-root export includes game settings",
+                shared.Exists("overrides/options.txt"));
+        }
+        finally
+        {
+            try
+            {
+                if (Directory.Exists(sandbox)) Directory.Delete(sandbox, recursive: true);
+            }
+            catch (Exception)
+            {
+                // 临时目录删不掉不影响检查结果。
+            }
+        }
     }
 
     private static async Task CheckFoxSqueeze()
