@@ -741,7 +741,7 @@
                                                      ContextMenu 在另一棵可视树里，所以走 PlacementTarget.Tag 取窗口 VM。 -->
                                                 <Button.ContextMenu>
                                                     <ContextMenu>
-                                                        <MenuItem Header="设为当前"
+                                                        <MenuItem Header="设为当前" Visibility="{Binding IsCurrent, Converter={StaticResource BoolToVis}, ConverterParameter=invert}"
                                                                   Command="{Binding PlacementTarget.Tag.MakeCurrentInstanceCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
                                                                   CommandParameter="{Binding .}" />
                                                         <MenuItem Header="立即启动"
@@ -750,8 +750,6 @@
                                                         <MenuItem Header="实例配置"
                                                                   Command="{Binding PlacementTarget.Tag.OpenInstanceConfigCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
                                                                   CommandParameter="{Binding .}" />
-                                                        <MenuItem Header="导出整合包" IsEnabled="False"
-                                                                  ToolTip="导出 .mrpack 还没做，先等着。" />
                                                         <Separator />
                                                         <MenuItem Header="重命名"
                                                                   Command="{Binding PlacementTarget.Tag.RenameInstanceCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
@@ -834,7 +832,7 @@
                                                         CommandParameter="{Binding .}">
                                                     <Button.ContextMenu>
                                                         <ContextMenu>
-                                                            <MenuItem Header="设为当前"
+                                                            <MenuItem Header="设为当前" Visibility="{Binding IsCurrent, Converter={StaticResource BoolToVis}, ConverterParameter=invert}"
                                                                       Command="{Binding PlacementTarget.Tag.MakeCurrentInstanceCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
                                                                       CommandParameter="{Binding .}" />
                                                             <MenuItem Header="立即启动"
@@ -843,8 +841,6 @@
                                                             <MenuItem Header="实例配置"
                                                                       Command="{Binding PlacementTarget.Tag.OpenInstanceConfigCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
                                                                       CommandParameter="{Binding .}" />
-                                                            <MenuItem Header="导出整合包" IsEnabled="False"
-                                                                      ToolTip="导出 .mrpack 还没做，先等着。" />
                                                             <Separator />
                                                             <MenuItem Header="重命名"
                                                                       Command="{Binding PlacementTarget.Tag.RenameInstanceCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
