@@ -70,6 +70,7 @@ internal static class UiPerformance
                 }
             }));
             var pageSwitchTimes = new List<(string Page, double Ms)>();
+            var tweensBeforePages = MotionEngine.StartedCount;
             results.Add(await Measure("pages", window, async () =>
             {
                 foreach (var page in new[] { "instances", "download", "settings", "home", "instances", "home" })
@@ -80,6 +81,8 @@ internal static class UiPerformance
                     await Task.Delay(350);
                 }
             }));
+            var tweensDuringPages = MotionEngine.StartedCount - tweensBeforePages;
+
             // 页面切换的位移到底有没有发生：从渲染变换里读实际偏移。
             // 这是"确定性"的那一半 —— fps 看不出来，位移读数看得见。
             var pageOffsets = new List<(string Page, double Start, double Peak)>();
@@ -180,6 +183,7 @@ internal static class UiPerformance
                 Note = "Render callbacks measure UI frame pacing, not independently measured displayed FPS.",
                 Scenarios = results,
                 PageSwitchMs = pageSwitchTimes.Select(s => new { s.Page, Ms = Math.Round(s.Ms, 1) }).ToArray(),
+                TweensStartedDuringPages = tweensDuringPages,
                 PageTransitionOffsets = pageOffsets.Select(o => new
                 {
                     o.Page,
