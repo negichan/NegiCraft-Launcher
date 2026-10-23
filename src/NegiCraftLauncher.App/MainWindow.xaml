@@ -717,15 +717,27 @@
                                  还要等高（底行那句最近游玩是贴底摆的，卡片不齐高就贴不出效果）。
                                  列数由视图按页宽算（见 MainWindow.xaml.cs 的 UpdateInstanceColumns）。 -->
                             <Grid Visibility="{Binding IsGridView, Converter={StaticResource BoolToVis}}" Style="{StaticResource PageAnimStyle}">
-                            <ScrollViewer Focusable="False" Visibility="{Binding HasInstances, Converter={StaticResource BoolToVis}}">
+                            <!-- 外扩 4 + 内容内缩 4：给 hover 的 1.012 放大留生长空间。
+                                 ScrollViewer 的视口本身就是裁剪边界，只给 ItemsControl 加 Margin 会把卡片
+                                 连同裁剪线一起往里挪；把 ScrollViewer 自己外扩同样的 4px，卡片的落点、
+                                 宽度和行距都保持原样，只有裁剪框向外松了一圈。
+                                 （卡片最宽约 361，单边只放大 2.2px；4 是余量。列表模式同理。） -->
+                            <ScrollViewer Focusable="False" Margin="-4,-4,-4,0"
+                                          Visibility="{Binding HasInstances, Converter={StaticResource BoolToVis}}">
                                 <!-- VerticalAlignment=Top 是必需的，不是装饰：ScrollContentPresenter 给
                                      拉申的孩子排的是「至少一屏高」的矩形，UniformGrid 于是把整屏高度
                                      平摊给那一两行 —— 卡片会被撑成 520 高，两行时中间还会裂开一条大沟。
                                      顶对齐后 UniformGrid 只拿内容高，格子高度=该行最高的那张卡。 -->
-                                <ItemsControl Focusable="False" VerticalAlignment="Top" ItemsSource="{Binding VisibleInstances}">
+                                <ItemsControl Focusable="False" VerticalAlignment="Top" Margin="4,4,4,56"
+                                              ItemsSource="{Binding VisibleInstances}">
                                     <ItemsControl.ItemsPanel>
                                         <ItemsPanelTemplate>
-                                            <UniformGrid Columns="{Binding InstanceColumns}" Margin="0,0,-12,0" />
+                                            <!-- 面板换成 HoverRoomUniformGrid：UniformGrid 因为小数格宽总会触发一层
+                                                 layout clip，裁剪框的左/上边正好压在卡片边上，hover 放大时左上角
+                                                 会被削掉；那个面板只把裁剪框向外扩，布局不动（见控件的说明）。
+                                                 12 的右负边距仍是让最后一列贴到内容右沿。 -->
+                                            <controls:HoverRoomUniformGrid Columns="{Binding InstanceColumns}"
+                                                                           Margin="0,0,-12,0" />
                                         </ItemsPanelTemplate>
                                     </ItemsControl.ItemsPanel>
                                     <ItemsControl.ItemTemplate>
@@ -823,8 +835,10 @@
                                  名字那格按稿子给固定 300，剩下的高度留给"最近游玩"那一段自己靠右，
                                  窗口再窄也不会把 tag 挤没（它比名字更容易一眼比对）。 -->
                             <Grid Visibility="{Binding IsListView, Converter={StaticResource BoolToVis}}" Style="{StaticResource PageAnimStyle}">
-                                <ScrollViewer Focusable="False" Visibility="{Binding HasInstances, Converter={StaticResource BoolToVis}}">
-                                    <ItemsControl Focusable="False" VerticalAlignment="Top" ItemsSource="{Binding VisibleInstances}">
+                                <ScrollViewer Focusable="False" Margin="-4,-4,-4,0"
+                                              Visibility="{Binding HasInstances, Converter={StaticResource BoolToVis}}">
+                                    <ItemsControl Focusable="False" VerticalAlignment="Top" Margin="4,4,4,56"
+                                                  ItemsSource="{Binding VisibleInstances}">
                                         <ItemsControl.ItemTemplate>
                                             <DataTemplate>
                                                 <Button Style="{StaticResource InstRowStyle}"
