@@ -1127,17 +1127,8 @@ public partial class MainWindowViewModel : ViewModelBase
     /// <summary>有实例，但被搜索/筛选筛到一条不剩 —— 空状态要换一套话术。</summary>
     public bool HasNoInstanceMatches => HasInstances && VisibleInstances.Count == 0;
 
-    /// <summary>筛空了那句提示，把当前生效的条件原样念回去，省得用户以为实例被删了。</summary>
-    public string InstanceEmptyHint
-    {
-        get
-        {
-            var bits = new List<string>();
-            if (InstanceSearch.Trim().Length > 0) bits.Add($"「{InstanceSearch.Trim()}」");
-            if (InstanceLoader != LoaderOptionModel.AllName) bits.Add(InstanceLoader);
-            return bits.Count > 0 ? $"换个关键词，或把筛选清掉（当前：{string.Join(" · ", bits)}）" : "换个关键词试试";
-        }
-    }
+    /// <summary>筛空了的一句话提示：只说下一步，不复述当前筛选条件。</summary>
+    public string InstanceEmptyHint => "换个关键词，或清除筛选";
 
     /// <summary>加载器筛选的下拉。选项来自 <see cref="LoaderChoices" />，所以列表比"所有存在的加载器"短得多。</summary>
     [ObservableProperty]
@@ -1374,14 +1365,14 @@ public partial class MainWindowViewModel : ViewModelBase
         get
         {
             var path = NclPaths.NormaliseGameRoot(NewFolderPath);
-            if (path.Length == 0) return "先填一个文件夹路径。";
-            if (!Directory.Exists(path)) return "这个路径不存在，或者不是一个文件夹。";
-            if (_launcher.Settings.FindFolder(path) is { } taken) return $"已经添加过了：「{taken.Name}」。";
+            if (path.Length == 0) return "请填写文件夹路径。";
+            if (!Directory.Exists(path)) return "路径不存在或不是文件夹。";
+            if (_launcher.Settings.FindFolder(path) is { } taken) return $"已添加为「{taken.Name}」。";
 
             var count = _launcher.CountInstancesIn(path);
             return count > 0
-                ? $"校验通过：versions 里有 {count} 个实例。"
-                : "没有 versions 目录或里面是空的 —— 添加进来也可以，之后在里面装的实例会显示在这。";
+                ? $"找到 {count} 个实例。"
+                : "目录里还没有实例，添加后安装的版本会显示在这里。";
         }
     }
 
@@ -1521,7 +1512,7 @@ public partial class MainWindowViewModel : ViewModelBase
         var extension = Path.GetExtension(path).ToLowerInvariant();
         if (extension is not (".zip" or ".mrpack"))
         {
-            ShowBanner($"「{extension}」解不了 —— 整合包请用 .mrpack 或 .zip。");
+            ShowBanner($"不支持 {extension}，请使用 .mrpack 或 .zip。");
             return;
         }
 
@@ -2342,7 +2333,7 @@ public partial class MainWindowViewModel : ViewModelBase
     [RelayCommand]
     private async Task DeleteWorldAsync(WorldItemModel item)
     {
-        var ok = await ShowDialogAsync("删除世界存档", $"确定要删除世界「{item.Name}」吗？存档删除后无法恢复！", null, null, "删除");
+        var ok = await ShowDialogAsync("删除世界存档", $"确定要删除世界「{item.Name}」吗？删除后无法恢复。", null, null, "删除");
         if (ok is null) return;
 
         try
@@ -2590,7 +2581,7 @@ public partial class MainWindowViewModel : ViewModelBase
     {
         CurrentResCategory = "game";
         CurrentPage = "download";
-        ShowBanner("选择一个版本开始安装，装好后会自动成为当前实例。");
+        ShowBanner("选择版本安装，装好后会自动设为当前实例。");
     }
 
     [RelayCommand]
@@ -2945,7 +2936,7 @@ public partial class MainWindowViewModel : ViewModelBase
 
         if (CurrentInstance is not { } instance)
         {
-            ShowBanner("还没有实例。先到「资源 → 游戏」安装一个版本。");
+            ShowBanner("还没有实例，先安装一个版本。");
             return;
         }
 
