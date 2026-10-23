@@ -28,9 +28,13 @@ public sealed class Instance
     public string? IconPath { get; set; }
 
     /// <summary>
-    ///     用户从预设里挑的那块方块（<c>grass</c> / <c>stone</c> / <c>tnt</c> …，对应
-    ///     <c>Raster/Assets/block_*.png</c> 的文件名）。<c>null</c> 表示没挑过，图标回落到
-    ///     加载器标志 / 按 id 散列的方块。
+    ///     用户从预设里挑的那个图标，两种写法：
+    ///     <list type="bullet">
+    ///       <item>方块 —— <c>grass</c> / <c>stone</c> / <c>tnt</c> …，对应 <c>Raster/Assets/block_*.png</c> 的文件名；</item>
+    ///       <item>加载器标志 —— <c>loader:fabric</c> / <c>loader:quilt</c> / <c>loader:neoforge</c>，
+    ///             对应 <c>icon_*.png</c>。加前缀是因为标志名将来会被方块 key 占用（key 就是文件名）。</item>
+    ///     </list>
+    ///     <c>null</c> 表示没挑过，图标回落到加载器标志 / 按 id 散列的方块。
     ///
     ///     <para>存的是<b>键而不是图片</b>：图标本体在程序集里，写一份 <c>icon.png</c> 到实例目录
     ///     只是把同一张图复制一份（还多一次解码），换资源版本后还会留下孤儿旧图。</para>

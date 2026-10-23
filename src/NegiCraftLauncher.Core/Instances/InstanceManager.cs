@@ -241,8 +241,8 @@ public sealed class InstanceManager
     /// 把预设方块设成实例图标，顺手清掉旧的 <c>icon.png</c> —— 两种来源只留一个，
     /// 免得「选过预设之后老的自选图还压在下面」。
     ///
-    /// <para>写的是<b>键</b>（<c>grass</c> / <c>anvil</c> …）不是图片：图标本体在程序集里，
-    /// 复制一份到实例目录只是多占一份空间、多一次解码。</para>
+    /// <para>写的是<b>键</b>（方块 <c>grass</c> / <c>anvil</c> …，或加载器标志 <c>loader:fabric</c>）不是图片：
+    /// 图标本体在程序集里，复制一份到实例目录只是多占一份空间、多一次解码。</para>
     ///
     /// <para><paramref name="key"/> 传 <c>null</c> / 空白等于「恢复默认」。</para>
     /// </summary>

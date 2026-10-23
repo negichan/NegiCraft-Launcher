@@ -2,9 +2,11 @@ using System.Diagnostics;
 using System.IO;
 using System.Text;
 using System.Windows;
+using System.Windows.Controls.Primitives;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Threading;
+using NegiCraftLauncher.Theme;
 using NegiCraftLauncher.ViewModels;
 
 namespace NegiCraftLauncher.App.Probe;
@@ -153,6 +155,95 @@ internal static class UiShot
             await Task.Delay(450);
             await Capture(window, $"ncl-wpf-{page}.png", log);
             AuditPages(window, page, log);
+        }
+
+        // 实例图标的预设浮层。⚠️ 它是 Popup（独立 HWND），**不在窗口内容根的渲染树里** ——
+        // 截窗口拍不到它，只能单独渲染它的 Child，再拿坐标核对它有没有挂对位置。
+        if (vm.VisibleInstances.FirstOrDefault() is { } probeInstance)
+        {
+            vm.OpenInstanceConfigCommand.Execute(probeInstance);
+            await Task.Delay(400);
+
+            // ⚠️ Popup 是独立 HWND，WPF 不允许它停在屏幕外；而探针平时把窗口摆在一万米之外，
+            // 那样量出来的「位置差」全是被拉回工作区的距离，量不出对齐关系。所以这一段临时把
+            // 窗口挪进屏幕，量完立刻挪回去（窗口 ShowActivated=false，不会抢焦点）。
+            var restoreLeft = window.Left;
+            var restoreTop = window.Top;
+            window.Left = 120;
+            window.Top = 120;
+            await Task.Delay(250);
+
+            vm.OpenIconPickerCommand.Execute(null);
+            await Task.Delay(400);
+
+            // 出场动画必须由 MotionEngine 决定（WPF 的 PopupAnimation 绕开调度，已经删掉了）。
+            // 本机系统「显示动画」是关着的，所以两档各强制过一遍：该动的时候开屏还在 0.94，
+            // 「总是关」的时候直接满尺寸 —— 只截静态图看不出这件事，只能读属性。
+            if (window.FindName("IconPickerPopup") is Popup { Child: FrameworkElement animationTarget } popupForMotion)
+            {
+                MotionEngine.Override = true;
+                vm.IsIconPickerOpen = false;
+                await Task.Delay(120);
+                vm.OpenIconPickerCommand.Execute(null);
+                var starting = animationTarget.RenderTransform is ScaleTransform { ScaleX: < 0.99 };
+                log.AppendLine($"  {(starting ? "OK" : "!!")} icon popup 动画: 开屏瞬间 transform=" +
+                               $"{animationTarget.RenderTransform?.GetType().Name ?? "null"}、透明度 {animationTarget.Opacity:0.00}");
+
+                await Task.Delay(450);
+                var settled = animationTarget.RenderTransform is null && animationTarget.Opacity > 0.99;
+                log.AppendLine($"  {(settled ? "OK" : "!!")} icon popup 动画: 落地后 transform=" +
+                               $"{animationTarget.RenderTransform?.GetType().Name ?? "null"}、透明度 {animationTarget.Opacity:0.00}");
+
+                MotionEngine.Override = false;
+                vm.IsIconPickerOpen = false;
+                await Task.Delay(120);
+                vm.OpenIconPickerCommand.Execute(null);
+                var instant = animationTarget.RenderTransform is null && animationTarget.Opacity > 0.99;
+                log.AppendLine($"  {(instant ? "OK" : "!!")} icon popup 动画: 「总是关」时直接满尺寸");
+                MotionEngine.Override = null;
+                await Task.Delay(150);
+            }
+
+            // 混排：前 3 项是加载器标志（loader: 前缀），后面全是方块 —— 顺序错了这里的断言就挂。
+            var presets = vm.IconPresets.ToList();
+            var logos = presets.Take(3).ToList();
+            var blocks = presets.Skip(3).ToList();
+            var logosOk = logos.Count == 3 && logos.All(p => p.Key.StartsWith("loader:", StringComparison.Ordinal));
+            var blocksOk = blocks.Count > 0 && blocks.All(p => !p.Key.StartsWith("loader:", StringComparison.Ordinal));
+            log.AppendLine($"  {(logosOk && blocksOk ? "OK" : "!!")} icon presets: 共 {presets.Count} 项" +
+                           $"（标志 {logos.Count} + 方块 {blocks.Count}，标志在前）");
+
+            if (window.FindName("IconPickerPopup") is Popup { Child: FrameworkElement popupChild } popup)
+            {
+                log.AppendLine($"  {(popup.IsOpen ? "OK" : "!!")} icon popup: IsOpen={popup.IsOpen}，内容 {popupChild.ActualWidth:F0}x{popupChild.ActualHeight:F0}");
+
+                // 位置：右边缘对齐铅笔按钮（横向负偏移就是为这个），纵向落在按钮下面。
+                if (window.FindName("IconPickerAnchor") is FrameworkElement anchor)
+                {
+                    var anchorRight = anchor.PointToScreen(new Point(anchor.ActualWidth, 0)).X;
+                    var anchorBottom = anchor.PointToScreen(new Point(0, anchor.ActualHeight)).Y;
+                    var popupLeft = popupChild.PointToScreen(new Point(0, 0));
+                    var popupRight = popupChild.PointToScreen(new Point(popupChild.ActualWidth, 0)).X;
+                    var aligned = Math.Abs(popupRight - anchorRight) <= 3;
+                    var below = popupLeft.Y >= anchorBottom - 1;
+                    log.AppendLine($"  {(aligned && below ? "OK" : "!!")} icon popup 位置: 右沿差 {popupRight - anchorRight:F1}px、" +
+                                   $"上沿-按钮下沿 {popupLeft.Y - anchorBottom:F1}px（屏幕像素）");
+                }
+
+                await CaptureVisual(popupChild, "ncl-wpf-inst-icon-popup.png", log);
+            }
+            else
+            {
+                log.AppendLine("  !! icon popup: 找不到 IconPickerPopup 或它的内容");
+            }
+
+            // 这张图现在的意义是反的：浮层不该再占卡片的高度，下面这些行应该紧贴图标行。
+            await Capture(window, "ncl-wpf-inst-icon-picker.png", log);
+            vm.IsIconPickerOpen = false;
+            window.Left = restoreLeft;
+            window.Top = restoreTop;
+            vm.GoCommand.Execute("instances");
+            await Task.Delay(250);
         }
 
         // 首页右上角有一块不明亮斑，查一下那底下到底是什么元素。
@@ -500,6 +591,41 @@ internal static class UiShot
             {
                 bitmap.Render(visual);
             }
+
+            var encoder = new PngBitmapEncoder();
+            encoder.Frames.Add(BitmapFrame.Create(bitmap));
+            using var stream = File.Create(path);
+            encoder.Save(stream);
+
+            log.AppendLine($"{fileName}  {width}x{height}");
+        }
+        catch (Exception ex)
+        {
+            log.AppendLine($"{fileName}: 截图失败 {ex.Message}");
+        }
+    }
+
+    /// <summary>
+    /// 单独渲染一个元素。<see cref="Capture"/> 只认窗口内容根，而 <b>Popup 的内容挂在独立 HWND 上、
+    /// 不在那棵渲染树里</b> —— 截窗口时浮层那块是空的，只能把它的 Child 拿出来单独拍。
+    /// </summary>
+    private static async Task CaptureVisual(FrameworkElement visual, string fileName, StringBuilder log)
+    {
+        await Dispatcher.Yield(DispatcherPriority.Render);
+
+        var width = (int)Math.Ceiling(visual.ActualWidth);
+        var height = (int)Math.Ceiling(visual.ActualHeight);
+        if (width <= 0 || height <= 0)
+        {
+            log.AppendLine($"{fileName}: 尺寸 {width}x{height}，跳过");
+            return;
+        }
+
+        var path = Path.Combine(Path.GetTempPath(), fileName);
+        try
+        {
+            var bitmap = new RenderTargetBitmap(width, height, 96, 96, PixelFormats.Pbgra32);
+            bitmap.Render(visual);
 
             var encoder = new PngBitmapEncoder();
             encoder.Frames.Add(BitmapFrame.Create(bitmap));
