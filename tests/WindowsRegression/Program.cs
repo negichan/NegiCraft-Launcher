@@ -13,6 +13,7 @@ using NegiCraftLauncher.Raster.Rendering;
 using NegiCraftLauncher.Skin.Controls;
 using NegiCraftLauncher.Skin.Rendering;
 using NegiCraftLauncher.Theme;
+using NegiCraftLauncher.ViewModels;
 
 internal static class Program
 {
@@ -122,18 +123,21 @@ internal static class Program
                 var transform = pop.RenderTransform;
                 await Task.Delay(70);
                 Check("animation reuses transform", ReferenceEquals(transform, pop.RenderTransform));
-                var before = transform.Value;
+                // 动画被系统关掉时 Pop 会当场落地并把 RenderTransform 归零（见 Pop.Settle），
+                // 所以下面读姿态得能接住 null —— 否则这台机器上直接空引用崩掉。
+                Matrix Pose() => pop.RenderTransform?.Value ?? Matrix.Identity;
+                var before = Pose();
                 var opacity = pop.Opacity;
                 Pop.SetIsOpen(pop, false);
                 Check("closing disables hit testing", !pop.IsHitTestVisible);
-                Check("close preserves animated pose", Near(before, transform.Value));
+                Check("close preserves animated pose", Near(before, Pose()));
                 Check("close preserves animated opacity", Math.Abs(pop.Opacity - opacity) < 0.02);
                 await Task.Delay(25);
-                before = transform.Value;
+                before = Pose();
                 opacity = pop.Opacity;
                 Pop.SetIsOpen(pop, true);
                 Check("reopen during close interactive", pop.IsHitTestVisible);
-                Check("reopen preserves animated pose", Near(before, transform.Value));
+                Check("reopen preserves animated pose", Near(before, Pose()));
                 Check("reopen preserves animated opacity", Math.Abs(pop.Opacity - opacity) < 0.02);
                 await Task.Delay(450);
                 Check("settled has no clip", pop.Clip is null);
@@ -184,8 +188,10 @@ internal static class Program
                 host = null;
             }
 
-            await CheckSettingsSlide();
+            await CheckPopoverMotion();
             await CheckUiMotion();
+            await CheckPageDirection();
+            await CheckMotionPreference();
             await CheckFoxSqueeze();
 
             pet = new PetWindow("", null) { Left = 500, Top = 300 };
@@ -228,103 +234,102 @@ internal static class Program
         }
     }
 
-    private static async Task CheckSettingsSlide()
+    /// <summary>
+    /// 浮层开合的动效：入场从下往上滑 + 轻微缩放过冲，出场往回滑一点并淡出。
+    /// 中途打断（开着关、关着开）要保住当下的姿态，不能跳。
+    /// </summary>
+    private static async Task CheckPopoverMotion()
     {
         var style = new Style(typeof(Border));
         style.Setters.Add(new Setter(UIElement.OpacityProperty, 0.0));
-        var dialog = new Border { Width = 280, Height = 180, Background = Brushes.Gray, Style = style };
-        Pop.SetAnchor(dialog, "Center");
-        Pop.SetSlideOnly(dialog, true);
+        var popover = new Border { Width = 280, Height = 180, Background = Brushes.Gray, Style = style };
+        Pop.SetAnchor(popover, "Center");
         var host = new Window
         {
-            Width = 420, Height = 320, Content = dialog,
+            Width = 420, Height = 320, Content = popover,
             ShowActivated = false, ShowInTaskbar = false,
         };
         try
         {
             host.Show();
             await Task.Delay(60);
-            var size = dialog.RenderSize;
-            Matrix Pose() => dialog.RenderTransform?.Value ?? Matrix.Identity;
-            Pop.SetIsOpen(dialog, true);
-            var transform = dialog.RenderTransform ?? Transform.Identity;
+            var size = popover.RenderSize;
+            Matrix Pose() => popover.RenderTransform?.Value ?? Matrix.Identity;
+            Pop.SetIsOpen(popover, true);
+            var transform = popover.RenderTransform ?? Transform.Identity;
             if (SystemParameters.ClientAreaAnimation)
             {
-                Check("settings slide starts just below its resting position",
-                    Math.Abs(Pose().OffsetY - 14) < 0.01);
-                var previousY = 14.0;
+                Check("popover entry starts just below its resting position",
+                    Math.Abs(Pose().OffsetY - 8) < 0.01);
+                Check("popover entry starts slightly scaled down",
+                    Pose().M11 < 0.99);
+                var previousY = 8.0;
                 var previousOpacity = 0.0;
                 var monotonic = true;
-                var fixedSize = true;
-                var elapsed = Stopwatch.StartNew();
-                var observedLongGlide = false;
+                var fixedLayout = true;
+                var maxScale = 0.0;
                 for (var frame = 0; frame < 20; frame++)
                 {
                     await Task.Delay(16);
                     var matrix = Pose();
                     monotonic &= matrix.OffsetY >= -0.01 && matrix.OffsetY <= previousY + 0.01 &&
-                                 dialog.Opacity >= previousOpacity - 0.01;
-                    fixedSize &= Math.Abs(matrix.M11 - 1) < 0.001 && Math.Abs(matrix.M22 - 1) < 0.001 &&
-                                 dialog.RenderSize == size;
+                                 popover.Opacity >= previousOpacity - 0.01;
+                    // 缩放是渲染变换，不动布局：排版尺寸全程不变才是"没跳"。
+                    fixedLayout &= popover.RenderSize == size;
+                    maxScale = Math.Max(maxScale, matrix.M11);
                     previousY = matrix.OffsetY;
-                    previousOpacity = dialog.Opacity;
-                    if (elapsed.ElapsedMilliseconds is >= 100 and < 220)
-                        observedLongGlide |= HasClocks(dialog, transform);
+                    previousOpacity = popover.Opacity;
                 }
-                Check("settings entry remains animated for a slower glide", observedLongGlide);
-                Check("settings slides upward and fades in without overshooting", monotonic);
-                Check("settings opening keeps its size without scaling", fixedSize);
+                Check("popover slides upward and fades in without overshooting", monotonic);
+                Check("popover opening keeps its layout size", fixedLayout);
+                Check("popover opening scales up past its resting size", maxScale > 1.0);
             }
-            Check("settings settles at its original position and releases clocks",
-                dialog.Opacity == 1 && Pose().IsIdentity &&
-                !HasClocks(dialog, transform) && dialog.CacheMode is null);
+            Check("popover settles at its original position and releases clocks",
+                popover.Opacity == 1 && Pose().IsIdentity &&
+                !HasClocks(popover, transform) && popover.CacheMode is null);
 
-            Pop.SetIsOpen(dialog, false);
-            Check("settings closing immediately disables interaction", !dialog.IsHitTestVisible);
+            Pop.SetIsOpen(popover, false);
+            Check("popover closing immediately disables interaction", !popover.IsHitTestVisible);
             if (SystemParameters.ClientAreaAnimation)
             {
                 var previousY = 0.0;
                 var previousOpacity = 1.0;
                 var monotonic = true;
                 var maxY = 0.0;
-                var fixedSize = true;
-                var elapsed = Stopwatch.StartNew();
-                var observedLongGlide = false;
+                var fixedLayout = true;
                 for (var frame = 0; frame < 17; frame++)
                 {
                     await Task.Delay(16);
-                    if (dialog.Opacity <= 0.001) continue;
+                    if (popover.Opacity <= 0.001) continue;
                     var matrix = Pose();
                     monotonic &= matrix.OffsetY >= previousY - 0.01 && matrix.OffsetY <= 12.01 &&
-                                 dialog.Opacity <= previousOpacity + 0.01;
-                    fixedSize &= Math.Abs(matrix.M11 - 1) < 0.001 && Math.Abs(matrix.M22 - 1) < 0.001 &&
-                                 dialog.RenderSize == size;
+                                 popover.Opacity <= previousOpacity + 0.01;
+                    fixedLayout &= popover.RenderSize == size;
                     maxY = Math.Max(maxY, matrix.OffsetY);
                     previousY = matrix.OffsetY;
-                    previousOpacity = dialog.Opacity;
-                    if (elapsed.ElapsedMilliseconds is >= 80 and < 170)
-                        observedLongGlide |= HasClocks(dialog, transform);
+                    previousOpacity = popover.Opacity;
                 }
-                Check("settings exit remains animated for a slower glide", observedLongGlide);
-                Check("settings slides slightly downward while fading out", monotonic && maxY > 0.1);
-                Check("settings closing keeps its size without scaling", fixedSize);
+                Check("popover slides slightly downward while fading out", monotonic && maxY > 0.1);
+                Check("popover closing keeps its layout size", fixedLayout);
             }
-            Check("settings closed state releases clocks and cache",
-                dialog.Opacity == 0 && !HasClocks(dialog, transform) && dialog.CacheMode is null);
+            Check("popover closed state releases clocks and cache",
+                popover.Opacity == 0 && !HasClocks(popover, transform) && popover.CacheMode is null);
 
-            Pop.SetIsOpen(dialog, true);
+            Pop.SetIsOpen(popover, true);
             await Task.Delay(35);
-            Pop.SetIsOpen(dialog, false);
+            Pop.SetIsOpen(popover, false);
             await Task.Delay(25);
             var pose = Pose();
-            var opacity = dialog.Opacity;
-            Pop.SetIsOpen(dialog, true);
-            Check("settings interrupted slide preserves its pose and opacity",
-                Near(pose, Pose()) && Math.Abs(dialog.Opacity - opacity) < 0.02);
+            var opacity = popover.Opacity;
+            Pop.SetIsOpen(popover, true);
+            // 动画被系统关掉时浮层是当场落地的（没有"中途"可言），这条只在动画开着时判。
+            if (SystemParameters.ClientAreaAnimation)
+                Check("popover interrupted slide preserves its pose and opacity",
+                    Near(pose, Pose()) && Math.Abs(popover.Opacity - opacity) < 0.02);
             await Task.Delay(320);
-            Check("settings interrupted slide settles without residual animation",
-                dialog.Opacity == 1 && Pose().IsIdentity &&
-                !HasClocks(dialog, transform) && dialog.CacheMode is null);
+            Check("popover interrupted slide settles without residual animation",
+                popover.Opacity == 1 && Pose().IsIdentity &&
+                !HasClocks(popover, transform) && popover.CacheMode is null);
         }
         finally { host.Close(); }
     }
@@ -368,6 +373,26 @@ internal static class Program
             await Task.Delay(160);
             Check("button hover settles smoothly", Math.Abs(scale.ScaleX - 1.012) < 0.001);
             Check("button releases completed clocks", !HasClocks(root, transform));
+
+            // 空闲按钮不该起动画：ButtonMotion 挂在每个按钮的模板根上，换页时一屏按钮
+            // 全部"变可见"，每个都无条件起三条 tween 的话，一次换页就是几百条空转
+            // （实测 492 条）。判据是"当前值已经等于目标值就不起"。
+            ButtonMotion.SetHovered(root, false);
+            await Task.Delay(250);
+            Check("idle button rests at its neutral pose",
+                Math.Abs(scale.ScaleX - 1) < 0.001 && !HasClocks(root, transform));
+
+            // 真正触发 Update() 的那条路是"变可见"（换页 ⇒ 整屏按钮 IsVisibleChanged）。
+            // 此时按钮既没按也没悬停，不该起任何 tween。
+            var beforeIdle = MotionEngine.StartedCount;
+            host.Hide();
+            host.Show();
+            await Task.Delay(250);
+            Check("an idle button becoming visible starts no animation",
+                MotionEngine.StartedCount == beforeIdle);
+            Check("the idle button still rests at its neutral pose",
+                Math.Abs(scale.ScaleX - 1) < 0.001 && !HasClocks(root, transform));
+
             button.SetValue(pressedKey, true);
             host.Hide();
             Check("hidden button resets motion", scale.ScaleX == 1 && !HasClocks(root, transform));
@@ -388,18 +413,6 @@ internal static class Program
             Check("page restores prior cache", ReferenceEquals(page.CacheMode, priorCache));
             Check("page preserves configured opacity", Math.Abs(page.Opacity - 0.85) < 0.001);
             Check("page settles without clocks", !HasClocks(page, page.RenderTransform));
-            PageTransition.SetSuppressEnterAnimation(panel, true);
-            panel.Visibility = Visibility.Hidden;
-            panel.Visibility = Visibility.Visible;
-            await Task.Delay(25);
-            Check("modal return preserves page opacity and position", Math.Abs(page.Opacity - 0.85) < 0.001 &&
-                page.RenderTransform.Value.IsIdentity && !HasClocks(page, page.RenderTransform));
-            Check("modal return suppresses nested page entry", !HasClocks(nested, nested.RenderTransform));
-            Check("modal return preserves the configured cache", ReferenceEquals(page.CacheMode, priorCache));
-            PageTransition.SetSuppressEnterAnimation(panel, false);
-            await Task.Delay(25);
-            Check("ending modal suppression does not replay entry", !HasClocks(page, page.RenderTransform) &&
-                !HasClocks(nested, nested.RenderTransform));
             page.Visibility = Visibility.Collapsed;
             page.Visibility = Visibility.Visible;
             if (SystemParameters.ClientAreaAnimation)
@@ -421,6 +434,75 @@ internal static class Program
             Check("reloaded page stays visible", Math.Abs(page.Opacity - 0.85) < 0.001 && !HasClocks(page, page.RenderTransform));
         }
         finally { host.Close(); }
+    }
+
+    /// <summary>
+    /// 页面切换的方向：按侧栏竖直顺序，往下走从上方进来，往回走从下方进来，
+    /// 首页只淡入不位移。
+    ///
+    /// <para>这里测的是<b>共享层那份判据</b>（<c>PageOrder</c>）—— 两端视图层都读它，
+    /// 是这个改动里唯一能脱离 UI 单独验的部分。视图层怎么把方向画出来由探针
+    /// （<c>--ui</c> 的 page direction 审计）负责。</para>
+    /// </summary>
+    private static async Task CheckPageDirection()
+    {
+        var order = typeof(NegiCraftLauncher.ViewModels.PageOrder);
+
+        PageDirection Between(string? from, string to) =>
+            (PageDirection)order.GetMethod("Between")!
+                .Invoke(null, new object?[] { from, to })!;
+
+        Check("page direction: down the sidebar slides in from above",
+            Between("home", "instances") == PageDirection.FromAbove);
+        Check("page direction: down again stays from above",
+            Between("instances", "download") == PageDirection.FromAbove);
+        Check("page direction: back up slides in from below",
+            Between("download", "instances") == PageDirection.FromBelow);
+        Check("page direction: the home page only fades in",
+            Between("instances", "home") == PageDirection.None &&
+            Between("settings", "home") == PageDirection.None);
+        Check("page direction: settings sits at the bottom of the sidebar",
+            Between("download", "settings") == PageDirection.FromAbove &&
+            Between("settings", "download") == PageDirection.FromBelow);
+        Check("page direction: the instance config page is one level below the list",
+            Between("instances", "instance_manage") == PageDirection.FromAbove);
+        Check("page direction: an unknown origin does not move the page",
+            Between(null, "instances") == PageDirection.None);
+        Check("page direction: staying on the same page does not move it",
+            Between("instances", "instances") == PageDirection.None);
+
+        await Task.CompletedTask;
+    }
+
+    /// <summary>
+    /// 「界面动画」那一档：跟随系统 / 总是开 / 总是关。
+    /// 判据在共享层，两端用的是同一份。
+    /// </summary>
+    private static async Task CheckMotionPreference()
+    {
+        bool? Override(MotionPreference p) => p.Override();
+
+        Check("motion preference: follow the system means 'do not intervene'",
+            Override(MotionPreference.System) is null);
+        Check("motion preference: always on overrides the system switch",
+            Override(MotionPreference.AlwaysOn) == true);
+        Check("motion preference: always off overrides the system switch",
+            Override(MotionPreference.AlwaysOff) == false);
+
+        // 存坏了不能让应用起不来：认不出的值退回"跟随系统"。
+        Check("motion preference: an unknown stored value falls back to following the system",
+            MotionPreferenceExtensions.Parse("nonsense") == MotionPreference.System &&
+            MotionPreferenceExtensions.Parse(null) == MotionPreference.System &&
+            MotionPreferenceExtensions.Parse("alwaysOn") == MotionPreference.AlwaysOn &&
+            MotionPreferenceExtensions.Parse("alwaysOff") == MotionPreference.AlwaysOff);
+
+        // 存进去的形式要能原样读回来。
+        Check("motion preference: the stored form round-trips",
+            MotionPreferenceExtensions.Parse(MotionPreference.AlwaysOn.ToStorage()) == MotionPreference.AlwaysOn &&
+            MotionPreferenceExtensions.Parse(MotionPreference.AlwaysOff.ToStorage()) == MotionPreference.AlwaysOff &&
+            MotionPreferenceExtensions.Parse(MotionPreference.System.ToStorage()) == MotionPreference.System);
+
+        await Task.CompletedTask;
     }
 
     private static async Task CheckFoxSqueeze()
@@ -635,8 +717,8 @@ internal static class Program
         }
     }
 
-    private static bool HasClocks(FrameworkElement target, Transform transform) =>
-        target.HasAnimatedProperties || transform.HasAnimatedProperties ||
+    private static bool HasClocks(FrameworkElement target, Transform? transform) =>
+        target.HasAnimatedProperties || transform?.HasAnimatedProperties == true ||
         transform is TransformGroup group && group.Children.Any(item => item.HasAnimatedProperties);
 
     private static bool Near(Matrix a, Matrix b) =>

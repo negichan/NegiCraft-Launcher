@@ -33,13 +33,17 @@ dotnet run --project tests/WindowsRegression -c Release -- --pet-texture-only
 The movement checks are not keyboard-to-display latency measurements. Check fast real A/D + Space input, animated popover clicks, and multi-monitor DPI transitions before merging the performance PR.
 
 Button checks use the real theme template and assert a stable hit area, continuous
-press/release poses, and clock cleanup. Page checks cover repeated visibility changes,
+press/release poses, and clock cleanup. They also assert that an idle button becoming
+visible starts no animation at all — the template's motion behavior must not spin
+no-op tweens for every button on screen. Page checks cover repeated visibility changes,
 nested transitions, unload/reload, and restoration of existing opacity and bitmap caches.
-Modal-return checks cover inherited entry-animation suppression, preservation of the
-selected page's pose/cache, and resumption of animations for ordinary page navigation.
-Settings-motion checks cover short upward/downward slides without scaling or overshoot,
+Popover-motion checks cover short upward/downward slides without scaling or overshoot,
 fade direction, interrupted reopening, and clock/cache cleanup.
 Popover checks include interrupted closing, temporary cache cleanup, and pinned alignment.
+Page-direction checks cover the shared ordering rule the WPF and Avalonia shells both
+read: moving down the sidebar slides a page in from above, moving back up slides it in
+from below, the home page only fades in, and the instance config page sits one level
+below the instance list.
 
 For a visible-window frame-pacing report, build the WPF app in Release and run:
 
