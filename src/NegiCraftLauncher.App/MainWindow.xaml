@@ -1194,8 +1194,6 @@
                                                             <TextBlock Text="游戏核心与加载器" FontWeight="Medium" Foreground="#fafafa" FontSize="13" />
                                                             <TextBlock Text="{Binding EditingInstance.MetaText, FallbackValue=''}" FontSize="12" Foreground="#71717a" />
                                                         </neg:NegiStackPanel>
-                                                        <Button Grid.Column="1" Style="{StaticResource BtnSmOutlineStyle}" Content="切换核心版本"
-                                                                IsEnabled="False" ToolTip="换版本需重新下载依赖库，暂未开放。" />
                                                     </neg:NegiGrid>
                                                 </Border>
                                                 <Border Height="54">
@@ -1205,8 +1203,6 @@
                                                             <TextBlock Text="{Binding GameRoot}" FontSize="12" Foreground="#71717a"
                                                                        TextTrimming="CharacterEllipsis" FontFamily="Consolas" />
                                                         </neg:NegiStackPanel>
-                                                        <Button Grid.Column="1" Style="{StaticResource BtnSmOutlineStyle}" Content="迁移目录…"
-                                                                IsEnabled="False" ToolTip="实例迁移功能暂未开放。" />
                                                     </neg:NegiGrid>
                                                 </Border>
                                             </neg:NegiStackPanel>
