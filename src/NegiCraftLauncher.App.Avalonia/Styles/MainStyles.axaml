@@ -707,17 +707,8 @@
             <Setter Property="Stroke" Value="#52525b"/>
         </Style>
 
-        <!-- 页面与视图入场过渡动画 (0.20s CubicEaseOut 淡入) -->
-        <Style Selector="Panel.PageAnim[IsVisible=True]">
-            <Style.Animations>
-                <Animation Duration="0:0:0.20" Easing="CubicEaseOut" FillMode="Forward">
-                    <KeyFrame Cue="0%">
-                        <Setter Property="Opacity" Value="0.0"/>
-                    </KeyFrame>
-                    <KeyFrame Cue="100%">
-                        <Setter Property="Opacity" Value="1.0"/>
-                    </KeyFrame>
-                </Animation>
-            </Style.Animations>
-        </Style>
+        <!-- 页面入场过渡**不在这里**了：XAML 样式读不到"上一页是谁"，
+             而方向恰恰是"上一页 → 下一页"的函数（侧栏竖直顺序）。
+             改成代码驱动，见 App.Avalonia/Views/PageTransition.cs（与 WPF 侧对照的两份）。
+             Pages 仍然挂着 PageAnim 这个 class —— 只作标记，行为由代码接上去。 -->
 </Styles>

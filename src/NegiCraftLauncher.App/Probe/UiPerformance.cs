@@ -77,6 +77,30 @@ internal static class UiPerformance
                 }
             }));
 
+            // 页面切换的位移到底有没有发生：从渲染变换里读实际偏移。
+            // 这是"确定性"的那一半 —— fps 看不出来，位移读数看得见。
+            var pageOffsets = new List<(string Page, double Start, double Peak)>();
+            foreach (var page in new[] { "instances", "download", "home" })
+            {
+                vm.GoCommand.Execute(page == "instances" ? "home" : "instances");
+                await Task.Delay(300);
+                var element = (FrameworkElement)window.FindName(
+                    page == "home" ? "PageHome" : page == "instances" ? "PageInstances" : "PageDownload");
+                vm.GoCommand.Execute(page);
+                var start = 0.0;
+                var peak = 0.0;
+                for (var frame = 0; frame < 12; frame++)
+                {
+                    await Task.Delay(16);
+                    var transform = element.RenderTransform as System.Windows.Media.TranslateTransform;
+                    if (transform is null) break;
+                    var y = transform.Y;
+                    if (frame == 0) start = y;
+                    peak = Math.Max(peak, Math.Abs(y));
+                }
+                pageOffsets.Add((page, start, peak));
+            }
+
 
             var settingsOpenTimes = new List<double>();
             results.Add(await Measure("settings-page", window, async () =>
@@ -153,6 +177,12 @@ internal static class UiPerformance
                 Note = "Render callbacks measure UI frame pacing, not independently measured displayed FPS.",
                 Scenarios = results,
                 PageSwitchMs = pageSwitchTimes.Select(s => new { s.Page, Ms = Math.Round(s.Ms, 1) }).ToArray(),
+                PageTransitionOffsets = pageOffsets.Select(o => new
+                {
+                    o.Page,
+                    StartOffset = Math.Round(o.Start, 1),
+                    PeakOffset = Math.Round(o.Peak, 1),
+                }).ToArray(),
                 SettingsOpenMs = Summarize(settingsOpenTimes),
                 RepeatedToneUpdateMs = Summarize(sampleTimes),
             };
