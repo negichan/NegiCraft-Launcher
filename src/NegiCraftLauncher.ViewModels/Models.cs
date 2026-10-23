@@ -37,6 +37,16 @@ public partial class InstanceModel : ObservableObject
 
     public bool Isolated => Source.Isolated;
 
+    /// <summary>导出时保存框默认的文件名；名字里 Windows 不认的字符会被剔掉。</summary>
+    public string ExportFileName
+    {
+        get
+        {
+            var name = InstanceManager.SanitizeId(Source.DisplayName);
+            return (name.Length == 0 ? "整合包" : name) + ".mrpack";
+        }
+    }
+
     public string? JavaPath => Source.JavaPath;
 
     public int? MaxMemoryMb => Source.MaxMemoryMb;
@@ -83,6 +93,7 @@ public partial class InstanceModel : ObservableObject
         OnPropertyChanged(nameof(ModCountText));
         OnPropertyChanged(nameof(LastPlayedText));
         OnPropertyChanged(nameof(Isolated));
+        OnPropertyChanged(nameof(ExportFileName));
         OnPropertyChanged(nameof(JavaPath));
         OnPropertyChanged(nameof(MaxMemoryMb));
         OnPropertyChanged(nameof(ExtraJvmArguments));

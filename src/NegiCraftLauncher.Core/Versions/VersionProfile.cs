@@ -23,6 +23,13 @@ public sealed class VersionProfile
     [JsonPropertyName("jar")]
     public string? Jar { get; set; }
 
+    /// <summary>
+    ///     原版版本号。Mojang 与 Forge 的 profile 都会写，<b>不依赖继承链</b> ——
+    ///     Forge 1.16 时代的实例常常没有 inheritsFrom，导出整合包要靠它认出是哪个 MC 版本。
+    /// </summary>
+    [JsonPropertyName("clientVersion")]
+    public string? ClientVersion { get; set; }
+
     [JsonPropertyName("type")]
     public string Type { get; set; } = "release";
 
@@ -80,6 +87,7 @@ public sealed class VersionProfile
             InheritsFrom = null,
             // Forge-style profiles point at the vanilla jar; vanilla profiles leave this null.
             Jar = child.Jar ?? parent.Jar,
+            ClientVersion = child.ClientVersion ?? parent.ClientVersion,
             Type = string.IsNullOrEmpty(parent.Type) ? child.Type : parent.Type,
             MainClass = child.MainClass ?? parent.MainClass,
             MinecraftArguments = child.MinecraftArguments ?? parent.MinecraftArguments,

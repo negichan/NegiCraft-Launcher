@@ -163,6 +163,12 @@ public sealed class Launcher
             .ConfigureAwait(false);
     }
 
+    /// <summary>把实例打包成 .mrpack。文件 IO 与压缩在导出器里跑线程池，这里只转交当前目录的管理器。</summary>
+    public Task<InstanceExportResult> ExportInstanceAsync(
+        Instance instance, string targetPath,
+        IProgress<InstallProgress>? progress = null, CancellationToken ct = default) =>
+        InstanceExporter.ExportAsync(Instances, instance, targetPath, progress, ct);
+
     /// <summary>
     /// Creates the instance folder and downloads everything it needs, so the result can be launched
     /// straight away.

@@ -1762,6 +1762,9 @@ public partial class MainWindowViewModel : ViewModelBase
     public event Action? RequestAddModFile;
     public event Action? RequestAddResourcePackFile;
 
+    /// <summary>导出要先让视图弹保存框（两端的文件框 API 不同），拿到路径再回到 <see cref="ExportInstanceAsync"/>。</summary>
+    public event Action<InstanceModel>? RequestExportInstance;
+
     [RelayCommand]
     private void AddModFile() => RequestAddModFile?.Invoke();
 
@@ -2580,11 +2583,44 @@ public partial class MainWindowViewModel : ViewModelBase
         RefreshInstances();
     }
 
+    /// <summary>右键与配置页共用：真正落盘前先由视图问「存到哪」。</summary>
+    [RelayCommand]
+    private void ExportInstance(InstanceModel? instance)
+    {
+        if (instance is null) return;
+        RequestExportInstance?.Invoke(instance);
+    }
+
+    /// <summary>保存框选好路径之后从视图调进来。长活走任务列表，进度与取消都跟下载那套一致。</summary>
+    public async Task ExportInstanceAsync(InstanceModel? instance, string targetPath)
+    {
+        if (instance is null || string.IsNullOrWhiteSpace(targetPath)) return;
+
+        ShowBanner("正在导出整合包…");
+        var task = BeginTask($"导出 {instance.Name}");
+
+        try
+        {
+            var result = await _launcher.ExportInstanceAsync(
+                instance.Source, targetPath, Track(task), task.Cts!.Token);
+
+            FinishTask(task, "已完成");
+            ShowBanner($"已导出「{instance.ExportFileName}」：{result.FileCount} 个文件，{FormatFileSize(result.TotalBytes)}。");
+        }
+        catch (Exception ex)
+        {
+            EndTask(task, ex);
+            if (task.Status is not ("已暂停" or "已取消")) ShowBanner($"导出失败：{ex.Message}");
+        }
+    }
+
     [RelayCommand]
     private async Task DeleteInstanceAsync(InstanceModel instance)
     {
-        var ok = await ShowDialogAsync("删除实例",
-            $"「{instance.Name}」的版本文件夹会一并删除，存档也在里面。确定吗？", null, null, "删除");
+        var message = instance.Isolated
+            ? $"删除「{instance.Name}」？游戏目录、存档和模组会一起删除，无法恢复。"
+            : $"删除「{instance.Name}」？只删除版本本体，共用目录里的存档和模组不受影响。";
+        var ok = await ShowDialogAsync("删除实例", message, null, null, "删除");
         if (ok is null) return;
 
         if (CurrentInstance is { } current && current.Id == instance.Id)
