@@ -549,6 +549,16 @@
             </DataTrigger>
         </Style.Triggers>
     </Style>
+    <!-- 模组 tag 里的小方块：图标和文字是兄弟，没有 TextBlock 祖先可借前景色，
+         所以单独挂一份与 TagText 同规则的样式。 -->
+    <Style x:Key="TagIconStyle" TargetType="{x:Type materialIcons:MaterialIcon}">
+        <Setter Property="Foreground" Value="#a1a1aa" />
+        <Style.Triggers>
+            <DataTrigger Binding="{Binding IsCurrent}" Value="True">
+                <Setter Property="Foreground" Value="#fafafa" />
+            </DataTrigger>
+        </Style.Triggers>
+    </Style>
 
     <!-- 工具条上的 chip（排序）。选中态刻意用"卡底 + 描边"而不是只换字色：
          dark 下 accent 与 tabs 同值，靠底色分选中会和 hover 糊在一起（设置页导航就栽过）。 -->
