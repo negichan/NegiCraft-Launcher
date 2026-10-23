@@ -81,7 +81,7 @@ public partial class MainWindowViewModel : ViewModelBase
         ["emerald"] = "绿宝石块",
         ["redstone"] = "红石块",
         ["glowstone"] = "萤石",
-        ["anvil"] = "铁砧",
+        ["anvil"] = "铁砧（Forge）",
     };
 
     private static string BlockDisplayName(string key) =>
@@ -1712,6 +1712,8 @@ public partial class MainWindowViewModel : ViewModelBase
     [RelayCommand]
     private void SelectConfigTab(string tab)
     {
+        // 切走「概览」时那颗铅笔就没了，浮层还开着会悬在半空没锚点。
+        if (!string.IsNullOrEmpty(tab)) IsIconPickerOpen = false;
         if (!string.IsNullOrEmpty(tab)) ConfigTab = tab;
     }
 
@@ -1776,9 +1778,9 @@ public partial class MainWindowViewModel : ViewModelBase
     // ==========================================================
 
     /// <summary>图标那行在空闲时显示的说明（出错时会被换成具体的错误话）。</summary>
-    private const string IconHintIdle = "默认跟随加载器，也可以选一块预设方块";
+    private const string IconHintIdle = "点铅笔挑一个标志或方块";
 
-    /// <summary>这个实例有没有自定义图标 —— 决定「恢复默认」那颗按钮显不显示。</summary>
+    /// <summary>这个实例有没有自定义图标 —— 决定「重置」那颗按钮显不显示。</summary>
     public bool HasCustomIcon =>
         EditingInstance is { } model &&
         (!string.IsNullOrEmpty(model.Source.IconPreset) ||
@@ -1788,29 +1790,40 @@ public partial class MainWindowViewModel : ViewModelBase
     [ObservableProperty]
     private string _instanceIconHint = IconHintIdle;
 
-    /// <summary>「选一块方块」那排预设展不展开。</summary>
+    /// <summary>图标选择浮层开没开。</summary>
     [ObservableProperty]
     private bool _isIconPickerOpen;
 
     /// <summary>
-    /// 可选的预设方块 = <see cref="BlockIconKeys"/> 整张表（含铁砧 —— 它只是不进「按 id 散列」
-    /// 那个池子，用户自己挑它是正当的）。
+    /// 图标预设，<b>一个集合混排</b>：先三只加载器标志（Fabric / Quilt / NeoForge），
+    /// 再接 <see cref="BlockIconKeys"/> 整张方块表（含铁砧 —— 它只是不进「按 id 散列」那个池子，
+    /// 用户自己挑它是正当的）。合计 3 + 18 = 21 项，浮层按 7 列排成整三行。
     ///
-    /// <para><b>这里取 128 而不是原图</b>：这排格子只有 32 DIP（200% 缩放要 64 物理像素），
+    /// <para><b>为什么标志和方块混在一排</b>：分开摆会多出一行只有三个格子的空排，浮层白白高一截；
+    /// 21 = 7×3 刚好铺满，顺序上标志在前、方块在后，认得出来谁是谁。</para>
+    ///
+    /// <para><b>方块取 128 而不是原图</b>：格子只有 32 DIP（200% 缩放要 64 物理像素），
     /// 18 张 1024 全上就是 18 × 4 MB 的位图，为了几十像素的缩略图不值得。128 供 32~128 像素
-    /// 的格子都够用，一整套加起来才 1 MB 出头。真正上屏的实例图标走
-    /// <see cref="BlockIcon"/>，那边是 1024 原图。</para>
+    /// 的格子都够用，一整套加起来才 1 MB 出头。真正上屏的实例图标走 <see cref="BlockIcon"/>，
+    /// 那边是 1024 原图。<b>标志用原图</b>（80×80）：格子按 200% 缩放要 68 物理像素，
+    /// 80 够用，放大反而发软。</para>
     ///
-    /// <para>第一次用到时才建：18 张解码 + 缩放要两百多毫秒，别在建 VM 的时候干。</para>
+    /// <para>第一次用到时才建：21 张解码 + 缩放要两百多毫秒，别在建 VM 的时候干。</para>
     /// </summary>
     public ObservableCollection<BlockIconModel> IconPresets { get; } = new();
 
-    /// <summary>预设格子里那张缩略图的边长。见 <see cref="IconPresets"/> 的说明。</summary>
+    /// <summary>预设格子里那张缩略图的边长。</summary>
     private const int IconPresetThumbSize = 128;
 
     private void EnsureIconPresets()
     {
         if (IconPresets.Count > 0) return;
+
+        foreach (var (name, label) in LoaderPresetSources)
+        {
+            if (BuiltinIcons.Load(name) is not { } logo) continue;
+            IconPresets.Add(new BlockIconModel(LoaderPresetPrefix + name, $"{label} 标志", logo));
+        }
 
         foreach (var key in BlockIconKeys)
         {
@@ -1819,16 +1832,23 @@ public partial class MainWindowViewModel : ViewModelBase
         }
     }
 
-    /// <summary>展开/收起预设。展开时顺手把「当前选的是哪块」标出来。</summary>
+    /// <summary>
+    /// 打开图标选择浮层；打开时顺手把「当前选的是哪个」标出来。
+    ///
+    /// <para><b>为什么只负责「开」不负责「关」</b>：浮层是 <c>StaysOpen=False</c> 的 Popup，
+    /// 点到外面它会自己关掉并把 <see cref="IsIconPickerOpen"/> 写回 <c>false</c>；点铅笔那颗按钮
+    /// 本身也算「点到外面」，Popup 会先关、再执行这个命令 —— 如果这里还做 toggle，就会立刻
+    /// 重新打开，表现成「点了关不掉」。所以关闭只有两条路：点外面、选中一个图标。</para>
+    /// </summary>
     [RelayCommand]
-    private void ToggleIconPicker()
+    private void OpenIconPicker()
     {
         EnsureIconPresets();
-        IsIconPickerOpen = !IsIconPickerOpen;
-        if (IsIconPickerOpen) SyncIconPresetSelection();
+        SyncIconPresetSelection();
+        IsIconPickerOpen = true;
     }
 
-    /// <summary>把当前实例用的图标（如果是预设）在那排方块上标出来。</summary>
+    /// <summary>把当前实例用的图标（如果是预设）在格子上标出来。</summary>
     private void SyncIconPresetSelection()
     {
         var key = EditingInstance?.Source.IconPreset;
@@ -1864,7 +1884,7 @@ public partial class MainWindowViewModel : ViewModelBase
         SyncIconPresetSelection();
     }
 
-    /// <summary>清掉预设 / 旧的 icon.png，图标自动回落到加载器标志 / 方块。</summary>
+    /// <summary>重置图标：清掉预设 / 旧的 icon.png，图标回到「跟着加载器走」。</summary>
     [RelayCommand]
     private void ResetInstanceIcon()
     {
@@ -2713,7 +2733,14 @@ public partial class MainWindowViewModel : ViewModelBase
         // 用户自己挑的预设最优先 —— 它压过加载器标志，也压过盘上可能残留的旧 icon.png。
         if (!string.IsNullOrEmpty(instance.IconPreset))
         {
-            return BlockIcon(instance.IconPreset);
+            // 预设分两类：加载器标志（"loader:fabric"）和方块 key（"tnt"）。
+            // 标志读不到（资源缺失）时不当成方块 key 去画 —— 那会画出一个认不出的立方体，
+            // 不如继续往下走正常的兜底链。
+            if (LoaderPresetIcon(instance.IconPreset) is { } presetLogo) return presetLogo;
+            if (!instance.IconPreset.StartsWith(LoaderPresetPrefix, StringComparison.Ordinal))
+            {
+                return BlockIcon(instance.IconPreset);
+            }
         }
 
         if (!string.IsNullOrEmpty(instance.IconPath) && File.Exists(instance.IconPath))
@@ -2811,6 +2838,36 @@ public partial class MainWindowViewModel : ViewModelBase
             "forge" => ForgeBlockType,
             _ => null,
         };
+
+    /// <summary>
+    /// 预设图标里「加载器标志」那一类的前缀，写进 <see cref="Instance.IconPreset"/> 形如
+    /// <c>loader:fabric</c>。方块 key 不带前缀，所以老数据（<c>"tnt"</c> / <c>"glowstone"</c>）
+    /// 一个字节都不用改就能继续读。
+    ///
+    /// <para><b>为什么要有这个前缀</b>：标志和方块都存字符串，<c>"fabric"</c> 这个名字
+    /// 将来完全可能被某块方块占用（方块 key 就是文件名），加前缀把两类彻底分开。</para>
+    /// </summary>
+    private const string LoaderPresetPrefix = "loader:";
+
+    /// <summary>
+    /// 预设里那三只加载器标志的来源，文件是 <c>Assets/icon_&lt;Name&gt;.png</c>。
+    /// 它们排在 <see cref="IconPresets"/> 最前面，后面接方块。
+    /// Forge 不在表里 —— 它是那块铁砧方块（见 <see cref="ForgeBlockType"/>），
+    /// 在方块段里以「铁砧（Forge）」的名字出现。
+    /// OptiFine 也没有：闭源，官方没有能当方形标志用的图。
+    /// </summary>
+    private static readonly (string Name, string Label)[] LoaderPresetSources =
+    {
+        ("fabric", "Fabric"),
+        ("quilt", "Quilt"),
+        (NeoForgeIcon, "NeoForge"),
+    };
+
+    /// <summary>预设字符串是加载器标志时取那张图，否则 <c>null</c>（交给方块那边处理）。</summary>
+    private static PixelBuffer? LoaderPresetIcon(string preset) =>
+        preset.StartsWith(LoaderPresetPrefix, StringComparison.Ordinal)
+            ? BuiltinIcons.Load(preset[LoaderPresetPrefix.Length..])
+            : null;
 
     /// <summary>
     /// Forge 实例的图标方块。<b>故意不进 <see cref="BlockIcons"/> 那个散列池</b>：

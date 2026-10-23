@@ -7,6 +7,7 @@ using System.Threading.Tasks;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.ApplicationLifetimes;
+using Avalonia.Controls.Primitives;
 using Avalonia.Media.Imaging;
 using Avalonia.VisualTree;
 using NegiCraftLauncher.ViewModels;
@@ -378,6 +379,21 @@ public sealed class DebugBridge
                     });
                 case "shot":
                     return await PetDebugMailbox.Ui(() => Shot(arg));
+                // 图标预设浮层。`shot` 抓不到它 —— Popup 的内容挂在独立的 PopupRoot 上，
+                // 不在主窗口那棵渲染树里。所以给动词 + 单独一张图（与 WPF 探针同一套思路）。
+                case "iconpicker":
+                    await PetDebugMailbox.Ui(() => _vm.OpenIconPickerCommand.Execute(null));
+                    return "OK";
+                case "iconshot":
+                    return await PetDebugMailbox.Ui(() => ShotPopupChild("IconPickerPopup", arg));
+                // 浮层出场动画的状态。静态图看不出"有没有动"，只能把 transform 和透明度念出来。
+                case "iconstate":
+                    return await PetDebugMailbox.Ui(() =>
+                        _window.FindControl<Control>("IconPickerPopup") is Popup { Child: Control child } popup
+                            ? $"open={popup.IsOpen} shouldAnimate={Views.PageTransition.ShouldAnimate} " +
+                              $"loaded={child.IsLoaded} last={Views.PopupMotion.LastPlay} " +
+                              $"transform={child.RenderTransform?.GetType().Name ?? "null"} opacity={child.Opacity:0.00}"
+                            : "ERR no popup");
                 case "bgtuningshot":
                     // 背景调节是主窗口**外面**的一扇窗，`shot` 抓不到它，所以单开一个动词。
                     return await PetDebugMailbox.Ui(() =>
@@ -488,6 +504,26 @@ public sealed class DebugBridge
 
     /// <summary>Renders the live visual tree offscreen; no window visibility or focus required.</summary>
     private string Shot(string path) => ShotWindow(_window, path);
+
+    /// <summary>
+    /// 抓一个 Popup 的内容。<b>不能复用 <see cref="ShotWindow"/></b>：Popup 的内容挂在独立的
+    /// <c>PopupRoot</c> 上（自己一扇窗），主窗口的渲染树里根本没有它，硬抓只会得到空白。
+    /// </summary>
+    private string ShotPopupChild(string name, string path)
+    {
+        if (_window.FindControl<Control>(name) is not Popup { Child: Control child }) return "ERR no popup";
+
+        var top = TopLevel.GetTopLevel(child) as Visual ?? child;
+        var size = top.Bounds.Size;
+        if (size.Width <= 0 || size.Height <= 0) return $"ERR empty {size.Width:0}x{size.Height:0}";
+
+        using var rtb = new RenderTargetBitmap(
+            new PixelSize((int)Math.Ceiling(size.Width), (int)Math.Ceiling(size.Height)),
+            new Vector(96, 96));
+        rtb.Render(top);
+        rtb.Save(path, new PngBitmapEncoderOptions());
+        return $"OK {path} {size.Width:0}x{size.Height:0}";
+    }
 
     /// <summary>
     /// Render any window's content to a PNG. 背景调节搬出主窗口之后它是**另一扇窗**，

@@ -933,7 +933,7 @@
                                     <StackPanel Spacing="16" Margin="0,0,10,0">
                                         <Border Background="#18181b" BorderBrush="#26262b" BorderThickness="1" CornerRadius="12" Padding="16,0">
                                             <StackPanel>
-                                                <!-- 图标：默认跟着加载器走，也可以用笔改成本程序预设的方块 -->
+                                                <!-- 图标：默认跟着加载器走，也可以用笔改成程序自带的加载器标志或方块 -->
                                                 <Border Height="54" BorderBrush="#26262b" BorderThickness="0,0,0,1">
                                                     <Grid ColumnDefinitions="* Auto">
                                                         <StackPanel VerticalAlignment="Center" Spacing="2" Margin="0,0,16,0">
@@ -946,46 +946,26 @@
                                                                 <Image Source="{Binding EditingInstance.IconBitmap, Converter={StaticResource PixelsToBitmap}}"
                                                                        Width="36" Height="36" RenderOptions.BitmapInterpolationMode="HighQuality"/>
                                                             </Border>
-                                                            <Button Classes="IconBtn" Width="28" Height="28" ToolTip.Tip="换一块预设方块"
-                                                                    Command="{Binding ToggleIconPickerCommand}">
+                                                            <Button x:Name="IconPickerAnchor" Classes="IconBtn" Width="28" Height="28"
+                                                                    ToolTip.Tip="换图标（标志 / 方块）"
+                                                                    Command="{Binding OpenIconPickerCommand}">
                                                                 <materialIcons:MaterialIcon Kind="Pencil" Width="15" Height="15" Foreground="#a1a1aa"/>
                                                             </Button>
-                                                            <Button Classes="BtnSm BtnOutline" Content="恢复默认"
+                                                            <!-- 重置：只在有自定义图标时出现，清掉之后图标回到「跟着加载器走」。 -->
+                                                            <Button Classes="IconBtn" Width="28" Height="28" ToolTip.Tip="重置图标"
                                                                     Command="{Binding ResetInstanceIconCommand}"
-                                                                    IsVisible="{Binding HasCustomIcon}"/>
+                                                                    IsVisible="{Binding HasCustomIcon}">
+                                                                <materialIcons:MaterialIcon Kind="Restore" Width="15" Height="15" Foreground="#a1a1aa"/>
+                                                            </Button>
                                                         </StackPanel>
                                                     </Grid>
-                                                </Border>
-
-                                                <!-- 预设方块：只给程序自带的这十几块，不开放自选图片 -->
-                                                <Border BorderBrush="#26262b" BorderThickness="0,0,0,1" Padding="0,12,0,2"
-                                                        IsVisible="{Binding IsIconPickerOpen}">
-                                                    <ItemsControl ItemsSource="{Binding IconPresets}">
-                                                        <ItemsControl.ItemsPanel>
-                                                            <ItemsPanelTemplate>
-                                                                <WrapPanel Orientation="Horizontal"/>
-                                                            </ItemsPanelTemplate>
-                                                        </ItemsControl.ItemsPanel>
-                                                        <ItemsControl.ItemTemplate>
-                                                            <DataTemplate x:DataType="models:BlockIconModel">
-                                                                <Button Classes="IconTile" Classes.On="{Binding IsSelected}"
-                                                                        ToolTip.Tip="{Binding Name}"
-                                                                        Command="{Binding $parent[Window].((vm:MainWindowViewModel)DataContext).SetInstanceIconPresetCommand}"
-                                                                        CommandParameter="{Binding}">
-                                                                    <Image Source="{Binding Bitmap, Converter={StaticResource PixelsToBitmap}}"
-                                                                           Width="34" Height="34"
-                                                                           RenderOptions.BitmapInterpolationMode="HighQuality"/>
-                                                                </Button>
-                                                            </DataTemplate>
-                                                        </ItemsControl.ItemTemplate>
-                                                    </ItemsControl>
                                                 </Border>
 
                                                 <Border Height="54" BorderBrush="#26262b" BorderThickness="0,0,0,1">
                                                     <Grid ColumnDefinitions="* Auto">
                                                         <StackPanel VerticalAlignment="Center" Spacing="2" Margin="0,0,16,0">
                                                             <TextBlock Text="实例名称" FontWeight="Medium" Foreground="#fafafa" FontSize="13"/>
-                                                            <TextBlock Text="启动器中显示的自定义名称" FontSize="12" Foreground="#71717a"/>
+                                                            <TextBlock Text="只影响启动器中的显示名称" FontSize="12" Foreground="#71717a"/>
                                                         </StackPanel>
                                                         <TextBox Grid.Column="1" Width="220" Height="32" MinHeight="0" Text="{Binding ConfigInstName, Mode=TwoWay}"
                                                                  Background="#111114" BorderBrush="#26262b" BorderThickness="1"
@@ -1030,6 +1010,47 @@
                                                 HorizontalAlignment="Right" Command="{Binding SaveEditingInstanceCommand}"/>
                                     </StackPanel>
                                 </ScrollViewer>
+
+                                <!-- 图标选择浮层。放 Popup 而不是在卡片里往下展开：21 个格子铺开会把
+                                     下面每一行都顶下去，而这是个「挑一下就关」的动作，不该占一块常驻位置。
+                                     Avalonia 的 Placement 自带右对齐档（BottomEdgeAlignedRight），不用像
+                                     WPF 那边手算负偏移：浮层右沿贴着铅笔按钮，不会伸出窗口右边。
+                                     宽 316 = 7 格 × 42 步进（38 槽 + 4 间距）+ 左右各 10 内边距 + 2 余量；
+                                     3 只加载器标志 + 18 块方块 = 21 项，正好铺满三行，标志在前、方块在后。
+                                     注意：Popup 的内容是独立的可视树，`$parent[Window]` 在那里找不到，
+                                     命令只能就近取 ItemsControl 的 DataContext。
+                                     出场动画走 pop:PopupMotion（缩放+淡入），Avalonia 的 Popup 自己
+                                     没有任何动画，不挂这一条就是"啪"地出现。 -->
+                                <Popup x:Name="IconPickerPopup"
+                                       PlacementTarget="{Binding #IconPickerAnchor}"
+                                       Placement="BottomEdgeAlignedRight"
+                                       VerticalOffset="6"
+                                       IsLightDismissEnabled="True"
+                                       pop:PopupMotion.Enable="True" pop:PopupMotion.Origin="TopRight"
+                                       IsOpen="{Binding IsIconPickerOpen, Mode=TwoWay}">
+                                    <Border Width="316" Background="#18181b" BorderBrush="#26262b" BorderThickness="1"
+                                            CornerRadius="12" Padding="10,8">
+                                        <ItemsControl ItemsSource="{Binding IconPresets}">
+                                            <ItemsControl.ItemsPanel>
+                                                <ItemsPanelTemplate>
+                                                    <WrapPanel Orientation="Horizontal"/>
+                                                </ItemsPanelTemplate>
+                                            </ItemsControl.ItemsPanel>
+                                            <ItemsControl.ItemTemplate>
+                                                <DataTemplate x:DataType="models:BlockIconModel">
+                                                    <Button Classes="IconTile" Classes.On="{Binding IsSelected}"
+                                                            ToolTip.Tip="{Binding Name}"
+                                                            Command="{Binding $parent[ItemsControl].DataContext.SetInstanceIconPresetCommand}"
+                                                            CommandParameter="{Binding}">
+                                                        <Image Source="{Binding Bitmap, Converter={StaticResource PixelsToBitmap}}"
+                                                               Width="34" Height="34"
+                                                               RenderOptions.BitmapInterpolationMode="HighQuality"/>
+                                                    </Button>
+                                                </DataTemplate>
+                                            </ItemsControl.ItemTemplate>
+                                        </ItemsControl>
+                                    </Border>
+                                </Popup>
 
                                 <!-- 2. 模组 -->
                                 <Grid RowDefinitions="Auto *"
