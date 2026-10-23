@@ -1224,6 +1224,24 @@
                     <Border MinHeight="76" Padding="0,14" BorderBrush="#26262b" BorderThickness="0,0,0,1">
                         <neg:NegiGrid Columns="* Auto">
                             <neg:NegiStackPanel VerticalAlignment="Center" Spacing="2" Margin="0,0,16,0">
+                                <TextBlock Text="界面动画" FontWeight="Medium" Foreground="#fafafa" />
+                                <TextBlock Text="页面切换、浮层开合这类过渡。" FontSize="12" Foreground="#a0a0a8" TextWrapping="Wrap" />
+                                <TextBlock Text="「跟随系统」= 听 Windows 的「显示动画」设置（关掉系统动画时这里也不动）。"
+                                           FontSize="12" Foreground="#a0a0a8" TextWrapping="Wrap" />
+                            </neg:NegiStackPanel>
+                            <Button Grid.Column="1" Style="{StaticResource BtnSmOutlineStyle}"
+                                    Command="{Binding CycleMotionPreferenceCommand}">
+                                <neg:NegiStackPanel Orientation="Horizontal" Spacing="6">
+                                    <materialIcons:MaterialIcon Kind="MovieOpen" Width="14" Height="14" />
+                                    <TextBlock Text="{Binding MotionPreferenceLabel}" VerticalAlignment="Center" />
+                                </neg:NegiStackPanel>
+                            </Button>
+                        </neg:NegiGrid>
+                    </Border>
+
+                    <Border MinHeight="76" Padding="0,14" BorderBrush="#26262b" BorderThickness="0,0,0,1">
+                        <neg:NegiGrid Columns="* Auto">
+                            <neg:NegiStackPanel VerticalAlignment="Center" Spacing="2" Margin="0,0,16,0">
                                 <TextBlock Text="首页 3D 模型" FontWeight="Medium" Foreground="#fafafa" />
                                 <TextBlock Text="左键拖它的位置（会记住），右键转角度。关掉它会把拖过的位置一起清掉，重开回到默认站位。"
                                            FontSize="12" Foreground="#a0a0a8" TextWrapping="Wrap" />

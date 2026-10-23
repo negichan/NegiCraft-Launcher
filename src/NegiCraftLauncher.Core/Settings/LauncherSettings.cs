@@ -93,6 +93,14 @@ public sealed class LauncherSettings
 
     public bool IsDark { get; set; } = true;
 
+    /// <summary>
+    ///     界面动画的开法：<c>"system"</c>（跟随系统，默认）/ <c>"alwaysOn"</c> / <c>"alwaysOff"</c>。
+    ///
+    ///     <para>存成字符串而不是枚举，是为了让认不出的值能安全退回"跟随系统"
+    ///     （见 <c>MotionPreferenceExtensions.Parse</c>）—— 存坏了不该让应用起不来。</para>
+    /// </summary>
+    public string MotionPreference { get; set; } = "system";
+
     public string? CustomBackgroundPath { get; set; }
     public double BackgroundBlur { get; set; }
     public double BackgroundBrightness { get; set; }

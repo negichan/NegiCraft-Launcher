@@ -1854,6 +1854,23 @@
                                         <Border Height="58" BorderBrush="#26262b" BorderThickness="0,0,0,1">
                                             <Grid ColumnDefinitions="* Auto">
                                                 <StackPanel VerticalAlignment="Center" Spacing="2" Margin="0,0,16,0">
+                                                    <TextBlock Text="界面动画" FontWeight="Medium" Foreground="#fafafa"/>
+                                                    <TextBlock Text="页面切换、浮层开合这类过渡。"
+                                                               FontSize="12" Foreground="#71717a" TextWrapping="Wrap"/>
+                                                </StackPanel>
+                                                <Button Grid.Column="1" Classes="BtnSm BtnOutline"
+                                                        Command="{Binding CycleMotionPreferenceCommand}">
+                                                    <StackPanel Orientation="Horizontal" Spacing="6">
+                                                        <materialIcons:MaterialIcon Kind="MovieOpen" Width="14" Height="14"/>
+                                                        <TextBlock Text="{Binding MotionPreferenceLabel}" VerticalAlignment="Center"/>
+                                                    </StackPanel>
+                                                </Button>
+                                            </Grid>
+                                        </Border>
+
+                                        <Border Height="58" BorderBrush="#26262b" BorderThickness="0,0,0,1">
+                                            <Grid ColumnDefinitions="* Auto">
+                                                <StackPanel VerticalAlignment="Center" Spacing="2" Margin="0,0,16,0">
                                                     <TextBlock Text="首页 3D 模型" FontWeight="Medium" Foreground="#fafafa"/>
                                                     <TextBlock Text="左键拖它的位置（会记住），右键转角度。关掉它会把拖过的位置一起清掉，重开回到默认站位。"
                                                                FontSize="12" Foreground="#71717a" TextWrapping="Wrap"/>

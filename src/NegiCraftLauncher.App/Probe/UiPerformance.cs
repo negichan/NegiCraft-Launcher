@@ -27,6 +27,10 @@ internal static class UiPerformance
             window = new MainWindow { DataContext = vm, ShowActivated = false };
             window.Show();
             await Task.Delay(3000);
+            // 页面入场动画由 MotionEngine.Enabled 统一开关，而它默认读系统的"显示动画"设置。
+            // 测动画开销时必须把它强制打开，否则量到的是"瞬时切换"——动画压根没跑，
+            // 基线和改后都是同一个数字，对比没有意义。
+            if (args.Contains("--force-motion")) MotionEngine.Override = true;
             if (args.Contains("--no-effects")) Walk(window, element => element.Effect = null);
             if (args.Contains("--no-blur")) vm.BgBlur = 0;
             if (args.Contains("--no-skin-model")) vm.HomeSkinModelVisible = false;
@@ -76,7 +80,6 @@ internal static class UiPerformance
                     await Task.Delay(350);
                 }
             }));
-
             // 页面切换的位移到底有没有发生：从渲染变换里读实际偏移。
             // 这是"确定性"的那一半 —— fps 看不出来，位移读数看得见。
             var pageOffsets = new List<(string Page, double Start, double Peak)>();
@@ -100,7 +103,6 @@ internal static class UiPerformance
                 }
                 pageOffsets.Add((page, start, peak));
             }
-
 
             var settingsOpenTimes = new List<double>();
             results.Add(await Measure("settings-page", window, async () =>
@@ -171,7 +173,8 @@ internal static class UiPerformance
                 Dpi = VisualTreeHelper.GetDpi(window).DpiScaleX,
                 WindowSize = new[] { window.ActualWidth, window.ActualHeight },
                 Background = vm.IsVideoBackground ? "video" : vm.IsCustomBackground ? "image" : "pixel-art",
-                DiagnosticOptions = args.Where(arg => arg.StartsWith("--no-")).ToArray(),
+                MotionEnabled = MotionEngine.Enabled,
+                DiagnosticOptions = args.Where(arg => arg.StartsWith("--no-") || arg == "--force-motion").ToArray(),
                 StaticBackgroundToneTimerRunning = ((DispatcherTimer)typeof(MainWindow)
                     .GetField("_bgToneTimer", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(window)!).IsEnabled,
                 Note = "Render callbacks measure UI frame pacing, not independently measured displayed FPS.",

@@ -110,6 +110,13 @@ public partial class MainWindowViewModel : ViewModelBase
     /// </summary>
     public event Action<bool>? ThemeChanged;
 
+    /// <summary>
+    /// Raised whenever the animation preference changes. The VM does not know how a given UI
+    /// framework gates its animations, so the view subscribes and applies it — same shape as
+    /// <see cref="ThemeChanged"/>.
+    /// </summary>
+    public event Action<MotionPreference>? MotionPreferenceChanged;
+
     [ObservableProperty]
     private bool _isPetActive;
 
@@ -3376,6 +3383,15 @@ public partial class MainWindowViewModel : ViewModelBase
     [ObservableProperty]
     private bool _isDark = true;
 
+    /// <summary>
+    /// 界面动画的开法。见 <see cref="MotionPreference"/>。
+    ///
+    /// <para>存的是枚举，落到 settings.json 时转成字符串（见
+    /// <c>LauncherSettings.MotionPreference</c>）。</para>
+    /// </summary>
+    [ObservableProperty]
+    private MotionPreference _motionPreference = MotionPreference.System;
+
     /// <summary>设置页那行"游戏目录"：报的是实例页正在看的这一个，跟着那颗胶囊走。</summary>
     public string GameRoot => _launcher.ActiveFolder.Path;
 
@@ -3520,6 +3536,32 @@ public partial class MainWindowViewModel : ViewModelBase
 
     private void ApplyTheme() => ThemeChanged?.Invoke(IsDark);
 
+    /// <summary>在"跟随系统 / 总是开 / 总是关"之间轮换。</summary>
+    [RelayCommand]
+    private void CycleMotionPreference()
+    {
+        MotionPreference = MotionPreference switch
+        {
+            MotionPreference.System => MotionPreference.AlwaysOn,
+            MotionPreference.AlwaysOn => MotionPreference.AlwaysOff,
+            _ => MotionPreference.System,
+        };
+    }
+
+    /// <summary>直接定到某一档（设置页那颗按钮循环用不到时给外部用）。</summary>
+    [RelayCommand]
+    private void SetMotionPreference(MotionPreference preference) => MotionPreference = preference;
+
+    partial void OnMotionPreferenceChanged(MotionPreference value)
+    {
+        OnPropertyChanged(nameof(MotionPreferenceLabel));
+        MotionPreferenceChanged?.Invoke(value);
+        PersistSettings();
+    }
+
+    /// <summary>设置页那颗按钮上显示的字（"跟随系统" / "总是开" / "总是关"）。</summary>
+    public string MotionPreferenceLabel => MotionPreference.Label();
+
     [RelayCommand]
     private void OpenGameRoot() => OpenFolder(GameRoot);
 
@@ -3615,6 +3657,7 @@ public partial class MainWindowViewModel : ViewModelBase
                 _ => "自动",
             };
             IsDark = settings.IsDark;
+            MotionPreference = MotionPreferenceExtensions.Parse(settings.MotionPreference);
 
             if (!string.IsNullOrEmpty(settings.CustomBackgroundPath) &&
                 File.Exists(settings.CustomBackgroundPath))
@@ -3679,6 +3722,7 @@ public partial class MainWindowViewModel : ViewModelBase
         settings.InstanceViewMode = InstanceViewMode;
         settings.DownloadThreads = DownloadThreads;
         settings.IsDark = IsDark;
+        settings.MotionPreference = MotionPreference.ToStorage();
         settings.CustomBackgroundPath = CustomBackgroundPath;
         settings.VideoBackgroundPath = VideoBackgroundPath;
         settings.BackgroundBlur = BgBlur;
