@@ -1750,23 +1750,12 @@
                     </neg:NegiGrid>
                 </Grid>
 
-                <!-- 普通设置页和浮窗共用设置模板与状态。 -->
+                <!-- 设置页：整页模式，导航与卡片都用同一套设置模板。 -->
                 <Grid x:Name="PageSettings" Style="{StaticResource PageAnimStyle}"
                       Visibility="{Binding CurrentPage, Converter={StaticResource Equals}, ConverterParameter=settings}">
                     <neg:NegiGrid Rows="Auto *">
-                        <neg:NegiGrid Columns="* Auto" Margin="0,0,0,16">
-                            <TextBlock Text="设置" FontSize="20" FontWeight="SemiBold" Height="36"
-                                       VerticalAlignment="Center" Foreground="#fafafa" />
-                            <Button x:Name="SettingsWindowModeButton" Grid.Column="1"
-                                    Style="{StaticResource BtnSmOutlineStyle}" Height="32" Margin="0,0,84,0"
-                                    Click="OnSettingsModeClick" ToolTip="将设置的默认打开方式改为窗口"
-                                    AutomationProperties.Name="切换为窗口模式">
-                                <neg:NegiStackPanel Orientation="Horizontal" Spacing="6">
-                                    <materialIcons:MaterialIcon Kind="CogOutline" Width="16" Height="16" />
-                                    <TextBlock Text="切换为窗口模式" VerticalAlignment="Center" />
-                                </neg:NegiStackPanel>
-                            </Button>
-                        </neg:NegiGrid>
+                        <TextBlock Text="设置" FontSize="20" FontWeight="SemiBold" Height="36"
+                                   VerticalAlignment="Center" Foreground="#fafafa" Margin="0,0,0,16" />
                         <neg:NegiGrid Grid.Row="1" Columns="160 24 *">
                             <ContentControl x:Name="PageSettingsNavHost" HorizontalContentAlignment="Stretch"
                                             VerticalContentAlignment="Top" />
@@ -1780,64 +1769,6 @@
             </Grid>
 
         </Grid>
-
-                <!-- 设置浮窗：背景冻结后模糊，弹窗沿用已优化的动画。 -->
-                <Grid x:Name="SettingsOverlay" Panel.ZIndex="70" Visibility="Collapsed"
-                      PreviewKeyDown="OnSettingsPreviewKeyDown">
-                    <Grid x:Name="SettingsScrim" MouseLeftButtonDown="OnSettingsBackdropClick" Background="#09090b">
-                        <Image x:Name="SettingsBackdrop" Stretch="Fill" IsHitTestVisible="False" />
-                        <Border Background="#68000000" IsHitTestVisible="False" />
-                    </Grid>
-                    <Grid x:Name="SettingsDialog" MaxWidth="1020" MaxHeight="620" Margin="32"
-                          Style="{StaticResource PopoverStyle}"
-                          pop:Pop.Anchor="Center" pop:Pop.SlideOnly="True"
-                          KeyboardNavigation.TabNavigation="Cycle"
-                          KeyboardNavigation.ControlTabNavigation="Cycle"
-                          FocusManager.IsFocusScope="True">
-                    <Border Background="#18181b" BorderBrush="#3b3b40" BorderThickness="1" CornerRadius="8"
-                            SizeChanged="OnSettingsFrameSizeChanged">
-
-                        <neg:NegiGrid Columns="184 *">
-                            <Border Background="#141416" BorderBrush="#343438" BorderThickness="0,0,1,0" Padding="14,22,14,16">
-                            <neg:NegiGrid Rows="Auto * Auto">
-                                <neg:NegiStackPanel Orientation="Horizontal" Spacing="10" Margin="10,0,0,22">
-                                    <materialIcons:MaterialIcon Kind="CogOutline" Width="18" Height="18" />
-                                    <TextBlock Text="设置" FontSize="18" FontWeight="SemiBold" VerticalAlignment="Center" />
-                                </neg:NegiStackPanel>
-                            <ContentControl x:Name="DialogSettingsNavHost" Grid.Row="1"
-                                            HorizontalContentAlignment="Stretch" VerticalContentAlignment="Top" />
-                                <TextBlock Grid.Row="2" Text="NegiCraft Launcher" FontSize="11" Foreground="#81818b" Margin="10,16,0,0" />
-                            </neg:NegiGrid>
-                            </Border>
-                            <neg:NegiGrid Grid.Column="1" Rows="Auto *" Margin="24,20,18,20">
-                                <neg:NegiGrid Columns="* Auto Auto" Margin="0,0,4,20">
-                                    <TextBlock Text="{Binding CurrentSettingsTab}" FontSize="21" FontWeight="SemiBold" VerticalAlignment="Center" />
-                                    <Button x:Name="SettingsPageModeButton" Grid.Column="1"
-                                            Style="{StaticResource BtnSmOutlineStyle}" Height="32" Margin="12,0,8,0"
-                                            Click="OnSettingsModeClick" ToolTip="将设置的默认打开方式改为页面"
-                                            AutomationProperties.Name="切换为页面模式">
-                                        <neg:NegiStackPanel Orientation="Horizontal" Spacing="6">
-                                            <materialIcons:MaterialIcon Kind="CogOutline" Width="16" Height="16" />
-                                            <TextBlock Text="切换为页面模式" VerticalAlignment="Center" />
-                                        </neg:NegiStackPanel>
-                                    </Button>
-                                    <Button x:Name="SettingsCloseButton" Grid.Column="2" Style="{StaticResource WinCtrlStyle}"
-                                            Width="32" Height="32" Click="OnSettingsCloseClick" ToolTip="关闭设置"
-                                            AutomationProperties.Name="关闭设置">
-                                        <materialIcons:MaterialIcon Kind="Close" Width="18" Height="18" />
-                                    </Button>
-                                </neg:NegiGrid>
-                            <ScrollViewer x:Name="SettingsScroll" Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
-
-                            <!-- .set-card：每个标签一张卡，让每组都以一条无边框的行收尾。
-                                 Debug 卡同样由 MainWindow.Debug.cs 代码追加（仅 Debug 构建）。 -->
-                            <ContentControl x:Name="DialogSettingsCardsHost" HorizontalContentAlignment="Stretch" />
-                            </ScrollViewer>
-                            </neg:NegiGrid>
-                        </neg:NegiGrid>
-                    </Border>
-                    </Grid>
-                </Grid>
 
             <!-- ========================================== -->
             <!-- 6. 弹层外的点击遮罩（点外面就关）             -->

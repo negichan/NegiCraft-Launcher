@@ -9,9 +9,7 @@ using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using System.Windows.Interop;
 using System.Windows.Media;
-using System.Windows.Media.Imaging;
 using System.Windows.Threading;
-using NegiCraftLauncher.App.Controls;
 using NegiCraftLauncher.Pet;
 using NegiCraftLauncher.Raster;
 using NegiCraftLauncher.ViewModels;
@@ -128,11 +126,7 @@ public partial class MainWindow : Window
 
         // 首页小人的落点要在排版彻底落定之后再摆一次：障碍是量出来的，量得太早会把人推歪，
         // 而推开之后没人再把它摆回来（Avalonia 侧实测踩过，见那边 Opened 里的注释）。
-        ContentRendered += (_, _) =>
-        {
-            LayoutHomeSkinPreview();
-            ScheduleSettingsWarmup();
-        };
+        ContentRendered += (_, _) => LayoutHomeSkinPreview();
     }
 
     /// <summary>调试桥通过它拿桌宠窗口（可以关着，所以可空）。</summary>
@@ -147,7 +141,6 @@ public partial class MainWindow : Window
     /// </summary>
     private void OnShellSizeChanged(object sender, SizeChangedEventArgs e)
     {
-        _settingsBackdropCache = null;
         Shell.Clip = new RectangleGeometry(new Rect(0, 0, e.NewSize.Width, e.NewSize.Height), 22, 22);
 
         // 取景的余量是按壳尺寸算的，尺寸一变就要重算（视频的 Viewport 也绑在这个尺寸上）。
@@ -311,7 +304,6 @@ public partial class MainWindow : Window
             _vm.OpenPetRequested -= OnOpenPetRequested;
             _vm.RecallPetRequested -= ClosePetWindow;
             _vm.PropertyChanged -= OnViewModelPropertyChanged;
-            _vm.NavigationRequested -= OnSettingsNavigationRequested;
             _vm.ThemeChanged -= OnThemeChanged;
             _vm.BackgroundFramingChanged -= ApplyBackgroundFraming;
             _vm.RequestAddModFile -= OnRequestAddModFile;
@@ -327,7 +319,6 @@ public partial class MainWindow : Window
             _vm.OpenPetRequested += OnOpenPetRequested;
             _vm.RecallPetRequested += ClosePetWindow;
             _vm.PropertyChanged += OnViewModelPropertyChanged;
-            _vm.NavigationRequested += OnSettingsNavigationRequested;
             _vm.ThemeChanged += OnThemeChanged;
 
             // 取景只改变换、不碰像素，所以单独一条事件：拖动平移时一次调色都不该发生。
@@ -362,33 +353,9 @@ public partial class MainWindow : Window
 
     private void OnViewModelPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
-        // 弹窗背后那张"冻住的启动器"快照什么时候该作废：
-        // 开着的时候只有"改的是弹窗自己那几样"才留（那些不影响快照）；
-        // 关着的时候只认真正会改变画面的属性 —— 之前是"任何属性变化都作废"，
-        // 于是下载进度这种高频变化每秒把快照打掉十几次，每次打开设置都得重抓
-        // （实测重抓一次 220ms，是设置首开卡顿的全部来源）。
-        if (_settingsBackdropPrepared)
-        {
-            if (e.PropertyName is not (nameof(MainWindowViewModel.CurrentSettingsTab)
-                                    or nameof(MainWindowViewModel.IsJavaChooserOpen)
-                                    or nameof(MainWindowViewModel.JavaOptions)))
-                InvalidateSettingsBackdrop();
-        }
-        else if (e.PropertyName is nameof(MainWindowViewModel.CurrentPage)
-                                     or nameof(MainWindowViewModel.BgArt)
-                                     or nameof(MainWindowViewModel.BgBrightness)
-                                     or nameof(MainWindowViewModel.BgBlur)
-                                     or nameof(MainWindowViewModel.IsCustomBackground)
-                                     or nameof(MainWindowViewModel.IsVideoBackground))
-        {
-            InvalidateSettingsBackdrop();
-        }
-
         if (e.PropertyName == nameof(MainWindowViewModel.CurrentSettingsTab))
         {
-            SettingsScroll.ScrollToTop();
             PageSettingsScroll.ScrollToTop();
-            InvalidateSettingsBackdrop();
         }
 
         if (e.PropertyName is nameof(MainWindowViewModel.BgArt)
@@ -557,7 +524,6 @@ public partial class MainWindow : Window
 
     private void OnWindowKeyDown(object sender, KeyEventArgs e)
     {
-        if (IsSettingsOpen && _vm is not { IsClosePromptOpen: true }) return;
         if (e.Key is Key.LeftShift or Key.RightShift) SkinPreview.Sneaking = true;
 
         // 关闭询问窗是拦在"退出"前面的一道，Esc 关它等于按取消 —— 不能让 Esc 顺带把窗口也关了。

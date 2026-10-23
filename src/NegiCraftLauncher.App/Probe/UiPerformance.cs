@@ -8,6 +8,7 @@ using System.Windows.Media;
 using System.Windows.Threading;
 using NegiCraftLauncher.App;
 using NegiCraftLauncher.App.Services;
+using NegiCraftLauncher.Theme;
 using NegiCraftLauncher.ViewModels;
 
 namespace NegiCraftLauncher.App.Probe;
@@ -27,6 +28,26 @@ internal static class UiPerformance
             window.Show();
             await Task.Delay(3000);
             if (args.Contains("--no-effects")) Walk(window, element => element.Effect = null);
+            if (args.Contains("--no-blur")) vm.BgBlur = 0;
+            if (args.Contains("--no-skin-model")) vm.HomeSkinModelVisible = false;
+            // 整块背景藏掉：若瓶颈是"每帧要画的像素太多"，帧率会立刻上去。
+            if (args.Contains("--no-background"))
+            {
+                if (window.FindName("BgRoot") is UIElement bg) bg.Visibility = Visibility.Collapsed;
+            }
+            // 缩小窗口：若是"填充率不够"（每帧要重画的像素太多），帧率会随面积走。
+            var smallIndex = Array.IndexOf(args, "--window-size");
+            if (smallIndex >= 0 && smallIndex + 1 < args.Length)
+            {
+                var parts = args[smallIndex + 1].Split('x');
+                if (parts.Length == 2 &&
+                    int.TryParse(parts[0], out var w) && int.TryParse(parts[1], out var h))
+                {
+                    window.Width = w;
+                    window.Height = h;
+                    await Task.Delay(500);
+                }
+            }
             if (args.Contains("--no-static-cache"))
             {
                 foreach (var name in new[] { "BgRoot", "SidebarBackdrop", "ShellShadowLayer" })
@@ -44,28 +65,31 @@ internal static class UiPerformance
                     await Task.Delay(160);
                 }
             }));
+            var pageSwitchTimes = new List<(string Page, double Ms)>();
             results.Add(await Measure("pages", window, async () =>
             {
                 foreach (var page in new[] { "instances", "download", "settings", "home", "instances", "home" })
                 {
+                    var stamp = Stopwatch.GetTimestamp();
                     vm.GoCommand.Execute(page);
+                    pageSwitchTimes.Add((page, Stopwatch.GetElapsedTime(stamp).TotalMilliseconds));
                     await Task.Delay(350);
                 }
             }));
+
+
             var settingsOpenTimes = new List<double>();
-            results.Add(await Measure("settings-dialog", window, async () =>
+            results.Add(await Measure("settings-page", window, async () =>
             {
-                // 先给"空闲预热"一个窗口：上一次换页会把背景快照作废，而重抓一次要 220ms。
-                // 真实路径是"操作一阵子 → 停下来 → 打开设置"，这段时间必须算进去，
-                // 否则测出来的是"换页 350ms 后立刻开设置"这个最坏组合。
-                await Task.Delay(1800);
+                // 设置现在是整页模式，"打开"就是一次换页：看的是换页本身的开销，
+                // 连着量四次，取的是稳定态（第一次还带页面入场动画的冷启动）。
                 for (var i = 0; i < 4; i++)
                 {
                     var stamp = Stopwatch.GetTimestamp();
-                    window.OpenSettingsDialog();
+                    vm.GoCommand.Execute("settings");
                     settingsOpenTimes.Add(Stopwatch.GetElapsedTime(stamp).TotalMilliseconds);
                     await Task.Delay(320);
-                    window.IsSettingsOpen = false;
+                    vm.GoCommand.Execute("home");
                     await Task.Delay(280);
                 }
             }));
@@ -128,6 +152,7 @@ internal static class UiPerformance
                     .GetField("_bgToneTimer", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(window)!).IsEnabled,
                 Note = "Render callbacks measure UI frame pacing, not independently measured displayed FPS.",
                 Scenarios = results,
+                PageSwitchMs = pageSwitchTimes.Select(s => new { s.Page, Ms = Math.Round(s.Ms, 1) }).ToArray(),
                 SettingsOpenMs = Summarize(settingsOpenTimes),
                 RepeatedToneUpdateMs = Summarize(sampleTimes),
             };

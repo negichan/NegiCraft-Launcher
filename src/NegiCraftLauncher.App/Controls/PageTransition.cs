@@ -15,13 +15,6 @@ public static class PageTransition
     public static bool GetEnabled(DependencyObject target) => (bool)target.GetValue(EnabledProperty);
     public static void SetEnabled(DependencyObject target, bool value) => target.SetValue(EnabledProperty, value);
 
-    public static readonly DependencyProperty SuppressEnterAnimationProperty = DependencyProperty.RegisterAttached(
-        "SuppressEnterAnimation", typeof(bool), typeof(PageTransition),
-        new FrameworkPropertyMetadata(false, FrameworkPropertyMetadataOptions.Inherits));
-
-    public static bool GetSuppressEnterAnimation(DependencyObject target) => (bool)target.GetValue(SuppressEnterAnimationProperty);
-    public static void SetSuppressEnterAnimation(DependencyObject target, bool value) => target.SetValue(SuppressEnterAnimationProperty, value);
-
     private static void Changed(DependencyObject target, DependencyPropertyChangedEventArgs args)
     {
         if (target is not FrameworkElement element) return;
@@ -57,7 +50,7 @@ public static class PageTransition
         {
             if (!_target.IsLoaded || !_target.IsVisible || !GetEnabled(_target)) return;
             Reset();
-            if (!MotionEngine.Enabled || GetSuppressEnterAnimation(_target)) return;
+            if (!MotionEngine.Enabled) return;
 
             // A parent transition already moves this content; avoid invalidating its cache.
             for (var parent = VisualTreeHelper.GetParent(_target); parent is not null;
