@@ -1005,8 +1005,6 @@
                                                             <TextBlock Text="游戏核心与加载器" FontWeight="Medium" Foreground="#fafafa" FontSize="13"/>
                                                             <TextBlock Text="{Binding EditingInstance.MetaText, FallbackValue=''}" FontSize="12" Foreground="#71717a"/>
                                                         </StackPanel>
-                                                        <Button Grid.Column="1" Classes="BtnSm BtnOutline" Content="切换核心版本"
-                                                                IsEnabled="False" ToolTip.Tip="换版本需重新下载依赖库，暂未开放。"/>
                                                     </Grid>
                                                 </Border>
                                                 <Border Height="54">
@@ -1016,8 +1014,6 @@
                                                             <TextBlock Text="{Binding GameRoot}" FontSize="12" Foreground="#71717a"
                                                                        TextTrimming="CharacterEllipsis" FontFamily="Consolas"/>
                                                         </StackPanel>
-                                                        <Button Grid.Column="1" Classes="BtnSm BtnOutline" Content="迁移目录…"
-                                                                IsEnabled="False" ToolTip.Tip="实例迁移功能暂未开放。"/>
                                                     </Grid>
                                                 </Border>
                                             </StackPanel>
