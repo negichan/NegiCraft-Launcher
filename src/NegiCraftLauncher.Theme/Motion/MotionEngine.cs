@@ -56,12 +56,23 @@ public static class MotionEngine
     /// <summary>当前在飞的过渡数（只统计本层创建的）。调试看板用。</summary>
     public static int ActiveCount { get; private set; }
 
+    /// <summary>
+    /// 累计起过的过渡数。<b>只增不减</b>，用来量"这一轮操作里空转了多少条动画"。
+    ///
+    /// <para>为什么需要它：<see cref="ActiveCount"/> 只反映<b>此刻</b>在飞几条，
+    /// 而空转的动画（起止值相同、视觉上什么都不会发生）生命周期很短，
+    /// 采样时刻不同读数就不同。累计计数没有这个抖动 —— 同样的操作，
+    /// 改前改后数出来的条数是一样的，能直接比。</para>
+    /// </summary>
+    public static int StartedCount { get; private set; }
+
     /// <summary>过渡开始/结束时触发。事件在 UI 线程。</summary>
     public static event Action? ActivityChanged;
 
     internal static void TweenStarted()
     {
         ActiveCount++;
+        StartedCount++;
         ActivityChanged?.Invoke();
     }
 

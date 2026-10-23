@@ -70,9 +70,38 @@ public static class ButtonMotion
             var scale = pressed ? 0.965 : hovered ? 1.012 : 1;
             var y = pressed ? 0.8 : hovered ? -0.5 : 0;
             var duration = pressed ? Motion.Press : hovered ? Motion.Hover : Motion.Base;
-            _scaleX = MotionTween.Start(_scale, ScaleTransform.ScaleXProperty, scale, duration, Motion.Enter);
-            _scaleY = MotionTween.Start(_scale, ScaleTransform.ScaleYProperty, scale, duration, Motion.Enter);
-            _offsetY = MotionTween.Start(_position, TranslateTransform.YProperty, y, duration, Motion.Enter);
+            _scaleX = Retarget(_scaleX, _scale, ScaleTransform.ScaleXProperty, scale, duration);
+            _scaleY = Retarget(_scaleY, _scale, ScaleTransform.ScaleYProperty, scale, duration);
+            _offsetY = Retarget(_offsetY, _position, TranslateTransform.YProperty, y, duration);
+        }
+
+        /// <summary>
+        /// 已经站在目标值上就**不要起 tween**。
+        ///
+        /// <para>为什么重要：<c>ButtonMotion</c> 挂在**每一个**按钮的模板根上
+        /// （见 <c>Theme/Controls.xaml</c>），而 <c>Update()</c> 是被 <c>IsVisibleChanged</c>
+        /// 触发的 —— 换一页，一屏按钮全部"变可见"，每个都无条件起三条 tween。
+        /// 那些 tween 的目标值就是当前位置（既没按也没悬停 ⇒ 回到 1 和 0），
+        /// 视觉上什么都不会发生，但<b>动画时钟照样每帧在跑</b>。</para>
+        ///
+        /// <para>实测（Release / tier2 / 1300x840 / DPI 2x，动画强制打开）：换 6 次页
+        /// 期间新起的过渡条数 **492 → 12**（见 <c>MotionEngine.StartedCount</c> 与
+        /// 探针的 <c>--ui-performance</c>）。条数是确定的，帧率不是 ——
+        /// 同一份二进制连跑 pages 在 32~35fps 之间抖（见 docs/motion-engine.md
+        /// 记的 ±40% 跨进程波动），单看 fps 判不出这个改动。</para>
+        ///
+        /// <para>注意不是简单地"没按没悬停就不动"：从悬停状态退回静止是要动的
+        /// （回到 1 和 0），那时当前值 ≠ 目标值，这条自然就会起 tween。
+        /// 判据是"当前值和目标值一样吗"，不是"有没有按或悬停"。</para>
+        /// </summary>
+        private static MotionTween? Retarget(
+            MotionTween? previous, Animatable target, DependencyProperty property,
+            double to, TimeSpan duration)
+        {
+            // 旧的先收掉：它可能还在飞（上一帧的悬停动画），留着会和新的抢同一个属性。
+            previous?.Cancel();
+            if (Math.Abs((double)target.GetValue(property) - to) < 0.0001) return null;
+            return MotionTween.Start(target, property, to, duration, Motion.Enter);
         }
 
         public void Reset()
@@ -80,6 +109,7 @@ public static class ButtonMotion
             _scaleX?.Cancel();
             _scaleY?.Cancel();
             _offsetY?.Cancel();
+            _scaleX = _scaleY = _offsetY = null;
             _scale.ScaleX = _scale.ScaleY = 1;
             _position.Y = 0;
         }
