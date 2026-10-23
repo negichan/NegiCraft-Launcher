@@ -612,14 +612,23 @@
                                                                 <TextBlock Text="{Binding Name}" FontWeight="SemiBold" FontSize="14"
                                                                            MaxWidth="170" HorizontalAlignment="Left"
                                                                            Foreground="#fafafa" TextTrimming="CharacterEllipsis" VerticalAlignment="Center"/>
-                                                                <StackPanel Orientation="Horizontal" Spacing="6">
-                                                                    <Border Classes="TagPill" Classes.Current="{Binding IsCurrent}">
-                                                                        <TextBlock Text="{Binding VersionId}" Classes="TagText" Classes.Current="{Binding IsCurrent}"/>
+                                                                <!-- tag 行：版本 Auto（封顶 88）、加载器吃剩余宽度；超长都走省略号，悬停看完整文本。 -->
+                                                                <Grid Margin="0,0,4,0">
+                                                                    <Grid.ColumnDefinitions>
+                                                                        <ColumnDefinition Width="Auto"/>
+                                                                        <ColumnDefinition Width="*"/>
+                                                                    </Grid.ColumnDefinitions>
+                                                                    <Border Grid.Column="0" Classes="TagPill" Classes.Current="{Binding IsCurrent}"
+                                                                            MaxWidth="88" Margin="0,0,6,0">
+                                                                        <TextBlock Text="{Binding VersionId}" Classes="TagText" Classes.Current="{Binding IsCurrent}"
+                                                                                   TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding VersionId}"/>
                                                                     </Border>
-                                                                    <Border Classes="TagPill" Classes.Current="{Binding IsCurrent}">
-                                                                        <TextBlock Text="{Binding Loader}" Classes="TagText" Classes.Current="{Binding IsCurrent}"/>
+                                                                    <Border Grid.Column="1" Classes="TagPill" Classes.Current="{Binding IsCurrent}"
+                                                                            HorizontalAlignment="Left">
+                                                                        <TextBlock Text="{Binding Loader}" Classes="TagText" Classes.Current="{Binding IsCurrent}"
+                                                                                   TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Loader}"/>
                                                                     </Border>
-                                                                </StackPanel>
+                                                                </Grid>
                                                             </StackPanel>
                                                             <Button Grid.Column="2" Classes="IconBtn" Width="28" Height="28"
                                                                     VerticalAlignment="Top" ToolTip.Tip="更多" Click="OnRowMoreClick">
@@ -703,18 +712,26 @@
                                                                    TextTrimming="CharacterEllipsis" VerticalAlignment="Center"/>
 
                                                         <!-- tag 自己成列（稿子 .inst-row .tags{width:290px;flex:0 0 290px}、左对齐），
-                                                             不然名字短的时候这排会往左跑，行与行之间对不齐。 -->
-                                                        <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="6"
-                                                                    Width="290" HorizontalAlignment="Left"
-                                                                    Margin="14,0,0,0" VerticalAlignment="Center">
-                                                            <Border Classes="TagPill" Classes.Current="{Binding IsCurrent}">
-                                                                <TextBlock Text="{Binding VersionId}" Classes="TagText" Classes.Current="{Binding IsCurrent}"/>
+                                                             不然名字短的时候这排会往左跑，行与行之间对不齐。
+                                                             版本 Auto（封顶 88）、加载器吃剩余宽度；超长省略，悬停看完整文本。 -->
+                                                        <Grid Grid.Column="2" Width="290" Margin="14,0,0,0" VerticalAlignment="Center">
+                                                            <Grid.ColumnDefinitions>
+                                                                <ColumnDefinition Width="Auto"/>
+                                                                <ColumnDefinition Width="*"/>
+                                                                <ColumnDefinition Width="Auto"/>
+                                                            </Grid.ColumnDefinitions>
+                                                            <Border Grid.Column="0" Classes="TagPill" Classes.Current="{Binding IsCurrent}"
+                                                                    MaxWidth="88" Margin="0,0,6,0">
+                                                                <TextBlock Text="{Binding VersionId}" Classes="TagText" Classes.Current="{Binding IsCurrent}"
+                                                                           TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding VersionId}"/>
                                                             </Border>
-                                                            <Border Classes="TagPill" Classes.Current="{Binding IsCurrent}">
-                                                                <TextBlock Text="{Binding Loader}" Classes="TagText" Classes.Current="{Binding IsCurrent}"/>
+                                                            <Border Grid.Column="1" Classes="TagPill" Classes.Current="{Binding IsCurrent}"
+                                                                    HorizontalAlignment="Left" Margin="0,0,6,0">
+                                                                <TextBlock Text="{Binding Loader}" Classes="TagText" Classes.Current="{Binding IsCurrent}"
+                                                                           TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Loader}"/>
                                                             </Border>
                                                             <!-- 「N 模组」只在装了模组时出现：空 tag 是噪声，原版实例不需要被提醒自己是原版。 -->
-                                                            <Border Classes="TagPill" Classes.Current="{Binding IsCurrent}"
+                                                            <Border Grid.Column="2" Classes="TagPill" Classes.Current="{Binding IsCurrent}"
                                                                     IsVisible="{Binding HasMods}">
                                                                 <StackPanel Orientation="Horizontal" Spacing="4">
                                                                     <materialIcons:MaterialIcon Kind="CubeOutline" Width="12" Height="12"
@@ -722,7 +739,7 @@
                                                                     <TextBlock Text="{Binding ModCountText}" Classes="TagText" Classes.Current="{Binding IsCurrent}"/>
                                                                 </StackPanel>
                                                             </Border>
-                                                        </StackPanel>
+                                                        </Grid>
 
                                                         <TextBlock Grid.Column="3" Text="{Binding LastPlayedText}" FontSize="12"
                                                                    Foreground="#a1a1aa" Margin="12,0,12,0" HorizontalAlignment="Right"

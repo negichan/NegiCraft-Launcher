@@ -797,14 +797,22 @@
                                                             <TextBlock Text="{Binding Name}" FontWeight="SemiBold" FontSize="14"
                                                                        MaxWidth="170" HorizontalAlignment="Left"
                                                                        Foreground="#fafafa" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
-                                                            <neg:NegiStackPanel Orientation="Horizontal" Spacing="6">
-                                                                <Border Style="{StaticResource TagPillStyle}">
-                                                                    <TextBlock Text="{Binding VersionId}" Style="{StaticResource TagTextStyle}" />
+                                                            <!-- tag 行：版本 Auto（封顶 88）、加载器吃剩余宽度；超长都走省略号，悬停看完整文本。 -->
+                                                            <Grid Margin="0,0,4,0">
+                                                                <Grid.ColumnDefinitions>
+                                                                    <ColumnDefinition Width="Auto" />
+                                                                    <ColumnDefinition Width="*" />
+                                                                </Grid.ColumnDefinitions>
+                                                                <Border Grid.Column="0" Style="{StaticResource TagPillStyle}"
+                                                                        MaxWidth="88" Margin="0,0,6,0">
+                                                                    <TextBlock Text="{Binding VersionId}" Style="{StaticResource TagTextStyle}"
+                                                                               TextTrimming="CharacterEllipsis" ToolTip="{Binding VersionId}" />
                                                                 </Border>
-                                                                <Border Style="{StaticResource TagPillStyle}">
-                                                                    <TextBlock Text="{Binding Loader}" Style="{StaticResource TagTextStyle}" />
+                                                                <Border Grid.Column="1" Style="{StaticResource TagPillStyle}" HorizontalAlignment="Left">
+                                                                    <TextBlock Text="{Binding Loader}" Style="{StaticResource TagTextStyle}"
+                                                                               TextTrimming="CharacterEllipsis" ToolTip="{Binding Loader}" />
                                                                 </Border>
-                                                            </neg:NegiStackPanel>
+                                                            </Grid>
                                                         </neg:NegiStackPanel>
                                                         <Button Grid.Column="2" Style="{StaticResource IconBtnStyle}" Width="28" Height="28"
                                                                 VerticalAlignment="Top" ToolTip="更多" Click="OnRowMoreClick">
@@ -891,26 +899,34 @@
                                                                    TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
 
                                                         <!-- tag 自己成列（稿子 .inst-row .tags{width:290px;flex:0 0 290px}、左对齐），
-                                                             不然名字短的时候这排会往左跑，行与行之间对不齐。 -->
-                                                        <neg:NegiStackPanel Grid.Column="2" Orientation="Horizontal" Spacing="6"
-                                                                            Width="290" HorizontalAlignment="Left"
-                                                                            Margin="14,0,0,0" VerticalAlignment="Center">
-                                                            <Border Style="{StaticResource TagPillStyle}">
-                                                                <TextBlock Text="{Binding VersionId}" Style="{StaticResource TagTextStyle}" />
+                                                             不然名字短的时候这排会往左跑，行与行之间对不齐。
+                                                             版本 Auto（封顶 88）、加载器吃剩余宽度；超长省略，悬停看完整文本。 -->
+                                                        <Grid Grid.Column="2" Width="290" Margin="14,0,0,0" VerticalAlignment="Center">
+                                                            <Grid.ColumnDefinitions>
+                                                                <ColumnDefinition Width="Auto" />
+                                                                <ColumnDefinition Width="*" />
+                                                                <ColumnDefinition Width="Auto" />
+                                                            </Grid.ColumnDefinitions>
+                                                            <Border Grid.Column="0" Style="{StaticResource TagPillStyle}"
+                                                                    MaxWidth="88" Margin="0,0,6,0">
+                                                                <TextBlock Text="{Binding VersionId}" Style="{StaticResource TagTextStyle}"
+                                                                           TextTrimming="CharacterEllipsis" ToolTip="{Binding VersionId}" />
                                                             </Border>
-                                                            <Border Style="{StaticResource TagPillStyle}">
-                                                                <TextBlock Text="{Binding Loader}" Style="{StaticResource TagTextStyle}" />
+                                                            <Border Grid.Column="1" Style="{StaticResource TagPillStyle}"
+                                                                    HorizontalAlignment="Left" Margin="0,0,6,0">
+                                                                <TextBlock Text="{Binding Loader}" Style="{StaticResource TagTextStyle}"
+                                                                           TextTrimming="CharacterEllipsis" ToolTip="{Binding Loader}" />
                                                             </Border>
                                                             <!-- 「N 模组」只在装了模组时出现：空 tag 是噪声，原版实例不需要被提醒自己是原版。 -->
-                                                            <Border Style="{StaticResource TagPillStyle}"
+                                                            <Border Grid.Column="2" Style="{StaticResource TagPillStyle}"
                                                                     Visibility="{Binding HasMods, Converter={StaticResource BoolToVis}}">
                                                                 <neg:NegiStackPanel Orientation="Horizontal" Spacing="4">
                                                                     <materialIcons:MaterialIcon Kind="CubeOutline" Width="12" Height="12"
-                                                                                                Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType={x:Type TextBlock}}}" VerticalAlignment="Center" />
+                                                                                                Style="{StaticResource TagIconStyle}" VerticalAlignment="Center" />
                                                                     <TextBlock Text="{Binding ModCountText}" Style="{StaticResource TagTextStyle}" />
                                                                 </neg:NegiStackPanel>
                                                             </Border>
-                                                        </neg:NegiStackPanel>
+                                                        </Grid>
 
                                                         <TextBlock Grid.Column="3" Text="{Binding LastPlayedText}" FontSize="12"
                                                                    Foreground="#a1a1aa" Margin="12,0,12,0" HorizontalAlignment="Right"
