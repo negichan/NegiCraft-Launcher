@@ -5,8 +5,44 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <!-- Avalonia's build tasks auto-glob **/*.axaml into both AvaloniaXaml (compiled) and
-         AvaloniaResource (addressable via avares://), so the theme files need no explicit items. -->
     <PackageReference Include="Avalonia" Version="12.1.3" />
   </ItemGroup>
+
+  <ItemGroup>
+    <!-- Listed explicitly: the generated file must still be picked up when a build recreates it
+         after item evaluation (Avalonia's default **/*.axaml glob only sees files that exist then). -->
+    <AvaloniaXaml Remove="**\Controls.g.axaml" />
+    <AvaloniaResource Remove="**\Controls.g.axaml" />
+    <AvaloniaXaml Include="Generated\Controls.g.axaml" />
+    <AvaloniaResource Include="Generated\Controls.g.axaml" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Build-order dependency only: the generator runs from its own output, not referenced at runtime. -->
+    <ProjectReference Include="..\..\tools\NegiThemes\NegiThemes.csproj"
+                      ReferenceOutputAssembly="false"
+                      PrivateAssets="all" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <ThemeSourcePath>$(MSBuildThisFileDirectory)..\NegiCraftLauncher.Theme\Controls.xaml</ThemeSourcePath>
+    <ThemeOutputPath>$(MSBuildThisFileDirectory)Generated\Controls.g.axaml</ThemeOutputPath>
+    <ThemeGeneratorDll>$(MSBuildThisFileDirectory)..\..\tools\NegiThemes\bin\$(Configuration)\net10.0\NegiThemes.dll</ThemeGeneratorDll>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ThemeGeneratorInput Include="$(MSBuildThisFileDirectory)..\..\tools\NegiThemes\**\*.cs;$(MSBuildThisFileDirectory)..\..\tools\NegiThemes\*.csproj"
+                         Exclude="$(MSBuildThisFileDirectory)..\..\tools\NegiThemes\bin\**;$(MSBuildThisFileDirectory)..\..\tools\NegiThemes\obj\**" />
+  </ItemGroup>
+
+  <Target Name="GenerateNegiControlThemes"
+          AfterTargets="ResolveReferences"
+          Condition="'$(DesignTimeBuild)' != 'true'"
+          Inputs="$(ThemeSourcePath);@(ThemeGeneratorInput)"
+          Outputs="$(ThemeOutputPath)">
+    <Exec Command="&quot;$(DOTNET_HOST_PATH)&quot; &quot;$(ThemeGeneratorDll)&quot; --source &quot;$(ThemeSourcePath)&quot; --output &quot;$(ThemeOutputPath)&quot;"
+          Condition="'$(DOTNET_HOST_PATH)' != ''" />
+    <Exec Command="dotnet &quot;$(ThemeGeneratorDll)&quot; --source &quot;$(ThemeSourcePath)&quot; --output &quot;$(ThemeOutputPath)&quot;"
+          Condition="'$(DOTNET_HOST_PATH)' == ''" />
+  </Target>
 </Project>
