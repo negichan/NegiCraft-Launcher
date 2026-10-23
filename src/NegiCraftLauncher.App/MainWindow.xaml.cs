@@ -12,6 +12,7 @@ using System.Windows.Media;
 using System.Windows.Threading;
 using NegiCraftLauncher.Pet;
 using NegiCraftLauncher.Raster;
+using NegiCraftLauncher.Theme;
 using NegiCraftLauncher.ViewModels;
 using Forms = System.Windows.Forms;
 
@@ -305,6 +306,7 @@ public partial class MainWindow : Window
             _vm.RecallPetRequested -= ClosePetWindow;
             _vm.PropertyChanged -= OnViewModelPropertyChanged;
             _vm.ThemeChanged -= OnThemeChanged;
+            _vm.MotionPreferenceChanged -= ApplyMotionPreference;
             _vm.BackgroundFramingChanged -= ApplyBackgroundFraming;
             _vm.RequestAddModFile -= OnRequestAddModFile;
             _vm.RequestAddResourcePackFile -= OnRequestAddResourcePackFile;
@@ -320,11 +322,16 @@ public partial class MainWindow : Window
             _vm.RecallPetRequested += ClosePetWindow;
             _vm.PropertyChanged += OnViewModelPropertyChanged;
             _vm.ThemeChanged += OnThemeChanged;
+            _vm.MotionPreferenceChanged += ApplyMotionPreference;
 
             // 取景只改变换、不碰像素，所以单独一条事件：拖动平移时一次调色都不该发生。
             _vm.BackgroundFramingChanged += ApplyBackgroundFraming;
             _vm.RequestAddModFile += OnRequestAddModFile;
             _vm.RequestAddResourcePackFile += OnRequestAddResourcePackFile;
+
+            // 动画档位要在第一帧之前就定下来：DataContext 换完才定的话，
+            // 首页那一下入场动画会按旧的（可能是"关"）跑。
+            ApplyMotionPreference(_vm.MotionPreference);
 
             // 设置里存着视频壁纸的话，DataContext 一到就该把它挂上。
             ApplyVideoBackground();
@@ -337,6 +344,16 @@ public partial class MainWindow : Window
 
         OnDebugSectionAttach(_vm);
     }
+
+    /// <summary>
+    /// 设置页那一档动画（跟随系统 / 总是开 / 总是关）落到动画引擎上。
+    ///
+    /// <para>判据在共享层（<c>MotionPreferenceExtensions.Override</c>），
+    /// 这边只负责把结果写进 <c>MotionEngine.Override</c>。
+    /// Theme 工程刻意不引用 ViewModels（桌宠也要引它），所以判据不放在那边。</para>
+    /// </summary>
+    private void ApplyMotionPreference(MotionPreference preference) =>
+        MotionEngine.Override = preference.Override();
 
     /// <summary>
     /// 设置页里那块 <c>Debug</c> 分区的挂载点（导航项 + 卡片）。

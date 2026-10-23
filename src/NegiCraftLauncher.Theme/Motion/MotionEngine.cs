@@ -15,18 +15,34 @@ namespace NegiCraftLauncher.Theme;
 /// </summary>
 public static class MotionEngine
 {
-    private static bool? _enabled;
+    private static bool? _override;
     private static double _speedScale = 1;
 
     /// <summary>
     /// 全局开关。默认跟随 Windows"显示动画"设置（系统设置里关掉动画效果后整个应用不再动），
-    /// 也可以由设置页强制覆盖。
+    /// 也可以被强制覆盖。
+    ///
+    /// <para><b>覆盖值为什么是可空的</b>：<c>null</c> = 跟随系统（别插手），
+    /// <c>true</c>/<c>false</c> = 强制开/关。"跟随系统"必须**继续跟着系统走** ——
+    /// 用户开着应用去改了 Windows 的"显示动画"，应用得跟上。所以"跟随"不是
+    /// "把系统的当前值抄下来"，而是"别插手"—— 这正是可空覆盖值能表达、
+    /// 而一个普通 bool 表达不了的区别。</para>
+    ///
+    /// <para>⚠️ 设置页那一档（跟随系统 / 总是开 / 总是关）由**应用层**算完之后写进来 ——
+    /// 本工程刻意不引用 ViewModels（谁都能引它，包括桌宠），所以判据不放在这儿。
+    /// 见 <c>MainWindow.ApplyMotionPreference</c>。</para>
     /// </summary>
-    public static bool Enabled
+    public static bool? Override
     {
-        get => _enabled ?? SystemParameters.ClientAreaAnimation;
-        set => _enabled = value;
+        get => _override;
+        set => _override = value;
     }
+
+    /// <summary>
+    /// 现在到底放不放动画 —— 覆盖值优先，没有覆盖就看系统。
+    /// 业务代码一律问这个。
+    /// </summary>
+    public static bool Enabled => _override ?? SystemParameters.ClientAreaAnimation;
 
     /// <summary>
     /// 全局速度倍率（0.5 = 全部动画快一倍，2 = 慢一倍），对应手机开发者选项里的"动画缩放"。

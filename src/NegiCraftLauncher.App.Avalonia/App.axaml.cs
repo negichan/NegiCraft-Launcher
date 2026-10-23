@@ -32,6 +32,11 @@ public partial class App : Application
             ApplyTheme(vm.IsDark);
             vm.ThemeChanged += ApplyTheme;
 
+            // Same for the animation preference: the VM already holds the saved value,
+            // so seed it before the first page animates.
+            vm.MotionPreferenceChanged += ApplyMotionPreference;
+            ApplyMotionPreference(vm.MotionPreference);
+
             var window = new MainWindow
             {
                 DataContext = vm,
@@ -46,4 +51,20 @@ public partial class App : Application
 
     private static void ApplyTheme(bool dark) =>
         Current!.RequestedThemeVariant = dark ? ThemeVariant.Dark : ThemeVariant.Light;
+
+    /// <summary>
+    /// The animation preference, resolved against the platform's own "reduce motion" switch.
+    ///
+    /// <para><b>Avalonia has no system-wide "display animations" flag</b> the way WPF's
+    /// <c>SystemParameters.ClientAreaAnimation</c> does — <c>IPlatformSettings</c> exposes
+    /// tap sizes and colour values, nothing about motion. So on this side "follow the system"
+    /// has <b>no system signal to follow</b>, and the sensible default is to animate
+    /// (the OS-level reduce-motion setting is honoured by the compositor, not by us).</para>
+    ///
+    /// <para>The verdict still comes from the shared layer
+    /// (<c>MotionPreferenceExtensions.Override</c>) so both shells answer the same question
+    /// the same way — the only difference is what "the system says" means on each platform.</para>
+    /// </summary>
+    private static void ApplyMotionPreference(MotionPreference preference) =>
+        PageTransition.ShouldAnimate = preference.Override() ?? true;
 }
