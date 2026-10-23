@@ -385,7 +385,7 @@
                                             </Border>
                                             <StackPanel Grid.Column="1" VerticalAlignment="Center">
                                                 <TextBlock Text="还没有实例" FontSize="14" FontWeight="Bold" Foreground="#fafafa"/>
-                                                <TextBlock Text="点这里选择一个已有实例" FontSize="12" Foreground="#a1a1aa"/>
+                                                <TextBlock Text="选择已有实例，或安装新版本" FontSize="12" Foreground="#a1a1aa"/>
                                             </StackPanel>
                                             <materialIcons:MaterialIcon Grid.Column="2" Kind="ChevronUp"
                                                                        Width="18" Height="18" Foreground="#71717a"
@@ -773,8 +773,6 @@
                                 <materialIcons:MaterialIcon Kind="LayersOutline" Width="36" Height="36"
                                                             Foreground="#3f3f46" HorizontalAlignment="Center"/>
                                 <TextBlock Text="还没有实例" FontSize="14" Foreground="#a1a1aa" HorizontalAlignment="Center"/>
-                                <TextBlock Text="可以导入一份整合包，或者点右下角「新建」装一个 Minecraft 版本" FontSize="12"
-                                           Foreground="#71717a" HorizontalAlignment="Center"/>
                                 <StackPanel Orientation="Horizontal" Spacing="10" HorizontalAlignment="Center">
                                     <Button Classes="BtnSm BtnPrimary" Command="{Binding BeginPackImportCommand}">
                                         <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
@@ -785,7 +783,7 @@
                                     <Button Classes="BtnSm BtnOutline" Command="{Binding NewInstanceCommand}">
                                         <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
                                             <materialIcons:MaterialIcon Kind="Download" Width="15" Height="15" Foreground="#fafafa" VerticalAlignment="Center"/>
-                                            <TextBlock Text="下载 Minecraft" VerticalAlignment="Center"/>
+                                            <TextBlock Text="安装新版本" VerticalAlignment="Center"/>
                                         </StackPanel>
                                     </Button>
                                 </StackPanel>
@@ -797,13 +795,13 @@
                                 <TextBlock Text="{Binding InstanceEmptyHint}" FontSize="12" Foreground="#71717a" HorizontalAlignment="Center"/>
                             </StackPanel>
 
-                            <!-- 右下角悬浮新建：和首页停靠卡同一个内缩 -->
+                            <!-- 右下角悬浮安装入口：和首页停靠卡同一个内缩。空态已经有两颗主按钮，这颗就不重复出现了。 -->
                             <Border Classes="FabPill" HorizontalAlignment="Right" VerticalAlignment="Bottom"
-                                    Margin="0,0,24,24" ZIndex="40">
+                                    Margin="0,0,24,24" ZIndex="40" IsVisible="{Binding HasInstances}">
                                 <Button Classes="Fab" Command="{Binding NewInstanceCommand}">
                                     <StackPanel Orientation="Horizontal" Spacing="8">
                                         <materialIcons:MaterialIcon Kind="Plus" Width="16" Height="16"/>
-                                        <TextBlock Text="新建" VerticalAlignment="Center"/>
+                                        <TextBlock Text="安装新版本" VerticalAlignment="Center"/>
                                     </StackPanel>
                                 </Button>
                             </Border>
@@ -994,7 +992,7 @@
                                                     <Grid ColumnDefinitions="* Auto">
                                                         <StackPanel VerticalAlignment="Center" Spacing="2" Margin="0,0,16,0">
                                                             <TextBlock Text="版本隔离" FontWeight="Medium" Foreground="#fafafa" FontSize="13"/>
-                                                            <TextBlock Text="独立 saves、mods 与配置文件（推荐开启）" FontSize="12" Foreground="#71717a"/>
+                                                            <TextBlock Text="saves、mods 与配置独立存放（推荐）" FontSize="12" Foreground="#71717a"/>
                                                         </StackPanel>
                                                         <CheckBox Grid.Column="1" Classes="Tick" IsChecked="{Binding ConfigInstIsolated}"/>
                                                     </Grid>
@@ -1104,7 +1102,7 @@
                                             <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="10">
                                                 <materialIcons:MaterialIcon Kind="CubeOutline" Width="38" Height="38" Foreground="#52525b" HorizontalAlignment="Center"/>
                                                 <TextBlock Text="暂无模组" FontSize="14" FontWeight="SemiBold" Foreground="#fafafa" HorizontalAlignment="Center"/>
-                                                <TextBlock Text="点击右上角「添加模组」或将 .jar 文件放入 mods 文件夹" FontSize="12" Foreground="#a1a1aa" HorizontalAlignment="Center"/>
+                                                <TextBlock Text="可直接把 .jar 放进 mods 文件夹" FontSize="12" Foreground="#a1a1aa" HorizontalAlignment="Center"/>
                                             </StackPanel>
                                         </Border>
 
@@ -1177,7 +1175,7 @@
                                             <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="10">
                                                 <materialIcons:MaterialIcon Kind="PaletteOutline" Width="38" Height="38" Foreground="#52525b" HorizontalAlignment="Center"/>
                                                 <TextBlock Text="暂无资源包" FontSize="14" FontWeight="SemiBold" Foreground="#fafafa" HorizontalAlignment="Center"/>
-                                                <TextBlock Text="点击右上角「添加资源包」或将材质包放入 resourcepacks 文件夹" FontSize="12" Foreground="#a1a1aa" HorizontalAlignment="Center"/>
+                                                <TextBlock Text="可直接把材质包放进 resourcepacks 文件夹" FontSize="12" Foreground="#a1a1aa" HorizontalAlignment="Center"/>
                                             </StackPanel>
                                         </Border>
 
@@ -1239,7 +1237,7 @@
                                             <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="10">
                                                 <materialIcons:MaterialIcon Kind="Earth" Width="38" Height="38" Foreground="#52525b" HorizontalAlignment="Center"/>
                                                 <TextBlock Text="暂无世界存档" FontSize="14" FontWeight="SemiBold" Foreground="#fafafa" HorizontalAlignment="Center"/>
-                                                <TextBlock Text="启动游戏创建世界或将存档解压放入 saves 文件夹" FontSize="12" Foreground="#a1a1aa" HorizontalAlignment="Center"/>
+                                                <TextBlock Text="进游戏创建一个，或把存档解压到 saves 文件夹" FontSize="12" Foreground="#a1a1aa" HorizontalAlignment="Center"/>
                                             </StackPanel>
                                         </Border>
 
@@ -1289,7 +1287,7 @@
                                                     <Grid ColumnDefinitions="* Auto">
                                                         <StackPanel VerticalAlignment="Center" Spacing="2" Margin="0,0,16,0">
                                                             <TextBlock Text="独立 Java 运行时" FontWeight="Medium" Foreground="#fafafa" FontSize="13"/>
-                                                            <TextBlock Text="关掉则跟随设置 → Java 的全局选择" FontSize="12" Foreground="#71717a"/>
+                                                            <TextBlock Text="关闭后使用全局 Java 设置" FontSize="12" Foreground="#71717a"/>
                                                         </StackPanel>
                                                         <CheckBox Grid.Column="1" Classes="Tick" IsChecked="{Binding ConfigInstCustomJava}"/>
                                                     </Grid>
@@ -1342,7 +1340,7 @@
                                                     <Grid ColumnDefinitions="* Auto">
                                                         <StackPanel VerticalAlignment="Center" Spacing="2" Margin="0,0,16,0">
                                                             <TextBlock Text="JVM 附加启动参数" FontWeight="Medium" Foreground="#fafafa" FontSize="13"/>
-                                                            <TextBlock Text="按空白切开，逐条传给这台实例的 Java 进程" FontSize="12" Foreground="#71717a"/>
+                                                            <TextBlock Text="以空格分隔，逐条传给游戏进程" FontSize="12" Foreground="#71717a"/>
                                                         </StackPanel>
                                                         <TextBox Grid.Column="1" Width="220" Height="32" VerticalAlignment="Center"
                                                                  CornerRadius="8" Background="#111114" BorderBrush="#26262b"
@@ -1360,7 +1358,7 @@
                                                     <Grid ColumnDefinitions="* Auto">
                                                         <StackPanel VerticalAlignment="Center" Spacing="2" Margin="0,0,16,0">
                                                             <TextBlock Text="独立最大内存" FontWeight="Medium" Foreground="#fafafa" FontSize="13"/>
-                                                            <TextBlock Text="{Binding GlobalMemoryGbSummary, StringFormat='关掉则跟随全局设置（当前 {0}）'}"
+                                                            <TextBlock Text="{Binding GlobalMemoryGbSummary, StringFormat='关闭后使用全局设置（当前 {0}）'}"
                                                                        FontSize="12" Foreground="#71717a"/>
                                                         </StackPanel>
                                                         <CheckBox Grid.Column="1" Classes="Tick" IsChecked="{Binding ConfigInstCustomMemory}"/>
@@ -1381,7 +1379,7 @@
                                                     <Grid ColumnDefinitions="* Auto">
                                                         <StackPanel VerticalAlignment="Center" Spacing="2" Margin="0,0,16,0">
                                                             <TextBlock Text="内存预分配 (Xms)" FontWeight="Medium" Foreground="#fafafa" FontSize="13"/>
-                                                            <TextBlock Text="启动就把 -Xms 设为 -Xmx，减少 GC 碎片，代价是启动即占满内存"
+                                                            <TextBlock Text="启动时即占满最大内存，可减少 GC 碎片"
                                                                        FontSize="12" Foreground="#71717a"/>
                                                         </StackPanel>
                                                         <CheckBox Grid.Column="1" Classes="Tick" IsChecked="{Binding ConfigInstPreallocate}"/>
@@ -2457,7 +2455,7 @@
                                                         Foreground="#fafafa" VerticalAlignment="Center" Margin="0,0,12,0"/>
                             <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
                                 <TextBlock Text="导入整合包" FontSize="16" FontWeight="SemiBold" Foreground="#fafafa"/>
-                                <TextBlock Text="支持 Modrinth (.mrpack)、CurseForge (.zip)、MultiMC / Prism 与一整份 .minecraft 的压缩包"
+                                <TextBlock Text="支持 Modrinth、CurseForge 与 MultiMC / Prism 整合包"
                                            FontSize="12" Foreground="#a1a1aa" TextWrapping="Wrap"/>
                             </StackPanel>
                             <Button Grid.Column="2" Classes="WinCtrl" Width="26" Height="26" CornerRadius="7"
@@ -2481,7 +2479,7 @@
                                 <TextBlock Text="{Binding PackDropTitle}"
                                            FontSize="13.5" FontWeight="SemiBold" Foreground="#fafafa"
                                            HorizontalAlignment="Center" TextTrimming="CharacterEllipsis" MaxWidth="380"/>
-                                <TextBlock Text="支持 .mrpack 与 .zip；rar 解不了" FontSize="12"
+                                <TextBlock Text="支持 .mrpack / .zip" FontSize="12"
                                            Foreground="#71717a" HorizontalAlignment="Center"/>
                             </StackPanel>
                         </Panel>
@@ -2511,7 +2509,7 @@
                         <StackPanel Spacing="6">
                             <TextBlock Text="实例名称" FontSize="13" FontWeight="Medium" Foreground="#fafafa"/>
                             <TextBox CornerRadius="8" Background="#1c1c21" BorderBrush="#26262b"
-                                     PlaceholderText="默认用压缩包的名字" Text="{Binding PackInstanceName, Mode=TwoWay}"/>
+                                     PlaceholderText="留空则使用压缩包名称" Text="{Binding PackInstanceName, Mode=TwoWay}"/>
                         </StackPanel>
 
                         <StackPanel Spacing="6" IsVisible="{Binding IsPackImportBusy}">
@@ -2552,7 +2550,7 @@
                                                         Foreground="#fafafa" VerticalAlignment="Center" Margin="0,0,12,0"/>
                             <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
                                 <TextBlock Text="添加已有目录" FontSize="16" FontWeight="SemiBold" Foreground="#fafafa"/>
-                                <TextBlock Text="关联本地现成的游戏目录，和启动器自己的目录一起切换"
+                                <TextBlock Text="添加一个已有的 .minecraft 目录"
                                            FontSize="12" Foreground="#a1a1aa"/>
                             </StackPanel>
                             <Button Grid.Column="2" Classes="WinCtrl" Width="26" Height="26" CornerRadius="7"
@@ -2575,9 +2573,9 @@
                         </StackPanel>
 
                         <StackPanel Spacing="6">
-                            <TextBlock Text="显示别名" FontSize="13" FontWeight="Medium" Foreground="#fafafa"/>
+                            <TextBlock Text="名称" FontSize="13" FontWeight="Medium" Foreground="#fafafa"/>
                             <TextBox CornerRadius="8" Background="#1c1c21" BorderBrush="#26262b"
-                                     PlaceholderText="留空就用路径末段" Text="{Binding NewFolderName, Mode=TwoWay}"/>
+                                     PlaceholderText="留空则使用文件夹名" Text="{Binding NewFolderName, Mode=TwoWay}"/>
                         </StackPanel>
 
                         <!-- 这句是真校验：路径存不存在、有没有重复、versions 里几个实例。 -->
