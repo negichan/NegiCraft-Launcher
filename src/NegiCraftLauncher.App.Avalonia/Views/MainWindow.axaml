@@ -566,7 +566,7 @@
                                                          （见 MainWindow.axaml.cs 的 OnRowMoreClick）。 -->
                                                     <Button.ContextMenu>
                                                         <ContextMenu>
-                                                            <MenuItem Header="设为当前"
+                                                            <MenuItem Header="设为当前" IsVisible="{Binding !IsCurrent}"
                                                                       Command="{Binding $parent[Window].((vm:MainWindowViewModel)DataContext).MakeCurrentInstanceCommand}"
                                                                       CommandParameter="{Binding .}"/>
                                                             <MenuItem Header="立即启动"
@@ -575,8 +575,6 @@
                                                             <MenuItem Header="实例配置"
                                                                       Command="{Binding $parent[Window].((vm:MainWindowViewModel)DataContext).OpenInstanceConfigCommand}"
                                                                       CommandParameter="{Binding .}"/>
-                                                            <MenuItem Header="导出整合包" IsEnabled="False"
-                                                                      ToolTip.Tip="导出 .mrpack 还没做，先等着。"/>
                                                             <Separator/>
                                                             <MenuItem Header="重命名"
                                                                       Command="{Binding $parent[Window].((vm:MainWindowViewModel)DataContext).RenameInstanceCommand}"
@@ -660,7 +658,7 @@
                                                         CommandParameter="{Binding .}">
                                                     <Button.ContextMenu>
                                                         <ContextMenu>
-                                                            <MenuItem Header="设为当前"
+                                                            <MenuItem Header="设为当前" IsVisible="{Binding !IsCurrent}"
                                                                       Command="{Binding $parent[Window].((vm:MainWindowViewModel)DataContext).MakeCurrentInstanceCommand}"
                                                                       CommandParameter="{Binding .}"/>
                                                             <MenuItem Header="立即启动"
@@ -669,8 +667,6 @@
                                                             <MenuItem Header="实例配置"
                                                                       Command="{Binding $parent[Window].((vm:MainWindowViewModel)DataContext).OpenInstanceConfigCommand}"
                                                                       CommandParameter="{Binding .}"/>
-                                                            <MenuItem Header="导出整合包" IsEnabled="False"
-                                                                      ToolTip.Tip="导出 .mrpack 还没做，先等着。"/>
                                                             <Separator/>
                                                             <MenuItem Header="重命名"
                                                                       Command="{Binding $parent[Window].((vm:MainWindowViewModel)DataContext).RenameInstanceCommand}"
