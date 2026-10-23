@@ -19,8 +19,6 @@ public static class Pop
         "Pin", typeof(string), typeof(Pop), new PropertyMetadata(""));
     public static readonly DependencyProperty PinGapProperty = DependencyProperty.RegisterAttached(
         "PinGap", typeof(double), typeof(Pop), new PropertyMetadata(6.0));
-    public static readonly DependencyProperty SlideOnlyProperty = DependencyProperty.RegisterAttached(
-        "SlideOnly", typeof(bool), typeof(Pop), new PropertyMetadata(false));
     public static readonly DependencyProperty TipProperty = DependencyProperty.RegisterAttached(
         "Tip", typeof(bool), typeof(Pop), new PropertyMetadata(false));
     public static readonly DependencyProperty TipAxisProperty = DependencyProperty.RegisterAttached(
@@ -36,8 +34,6 @@ public static class Pop
     public static void SetPin(DependencyObject target, string value) => target.SetValue(PinProperty, value);
     public static double GetPinGap(DependencyObject target) => (double)target.GetValue(PinGapProperty);
     public static void SetPinGap(DependencyObject target, double value) => target.SetValue(PinGapProperty, value);
-    public static bool GetSlideOnly(DependencyObject target) => (bool)target.GetValue(SlideOnlyProperty);
-    public static void SetSlideOnly(DependencyObject target, bool value) => target.SetValue(SlideOnlyProperty, value);
     public static bool GetTip(DependencyObject target) => (bool)target.GetValue(TipProperty);
     public static void SetTip(DependencyObject target, bool value) => target.SetValue(TipProperty, value);
     public static string GetTipAxis(DependencyObject target) => (string)target.GetValue(TipAxisProperty);
@@ -93,10 +89,9 @@ public static class Pop
         {
             Measure();
             var tip = GetTip(_target);
-            var slideOnly = GetSlideOnly(_target);
             if (!_visible)
             {
-                _scale.ScaleX = _scale.ScaleY = tip || slideOnly ? 1 : 0.94;
+                _scale.ScaleX = _scale.ScaleY = tip ? 1 : 0.94;
                 _position.X = _pinX + _enterX;
                 _position.Y = _pinY + _enterY;
                 _target.Opacity = 0;
@@ -123,17 +118,7 @@ public static class Pop
                 return;
             }
             CacheForAnimation();
-            var curve = slideOnly ? Motion.Glide : Motion.Enter;
-            if (slideOnly)
-            {
-                _tweenX = MotionTween.Start(_position, TranslateTransform.XProperty, _pinX, Motion.Slide, curve);
-                _tweenY = MotionTween.Start(_position, TranslateTransform.YProperty, _pinY, Motion.Slide, curve);
-                // 淡入比滑入略早收尾，视觉上"到了就已经不透明"。
-                _tweenOpacity = MotionTween.Keyframes(
-                    _target, UIElement.OpacityProperty,
-                    [(Motion.Slow, 1), (Motion.Slide, 1)], curve, Settle);
-                return;
-            }
+            var curve = Motion.Enter;
             // 缩放的轻微过冲（0.94 → 1.014 → 1）是浮层"弹出来"的关键，去掉就变生硬。
             _tweenScaleX = MotionTween.Keyframes(
                 _scale, ScaleTransform.ScaleXProperty,
@@ -169,16 +154,12 @@ public static class Pop
                 return;
             }
             CacheForAnimation();
-            var slideOnly = GetSlideOnly(_target);
-            var curve = slideOnly ? Motion.Glide : Motion.Exit;
-            var duration = slideOnly ? Motion.Slow : Motion.Fast;
+            var curve = Motion.Exit;
+            var duration = Motion.Fast;
             _tweenX = MotionTween.Start(_position, TranslateTransform.XProperty, _pinX, duration, curve);
-            if (!slideOnly)
-            {
-                _tweenScaleX = MotionTween.Start(_scale, ScaleTransform.ScaleXProperty, 0.96, duration, curve);
-                _tweenScaleY = MotionTween.Start(_scale, ScaleTransform.ScaleYProperty, 0.96, duration, curve);
-            }
-            var exitY = slideOnly ? Math.Sign(_enterY) * 12 : _enterY * 0.75;
+            _tweenScaleX = MotionTween.Start(_scale, ScaleTransform.ScaleXProperty, 0.96, duration, curve);
+            _tweenScaleY = MotionTween.Start(_scale, ScaleTransform.ScaleYProperty, 0.96, duration, curve);
+            var exitY = _enterY * 0.75;
             _tweenY = MotionTween.Start(_position, TranslateTransform.YProperty, _pinY + exitY, duration, curve);
             _tweenOpacity = MotionTween.Start(_target, UIElement.OpacityProperty, 0, duration, curve, Rest);
         }
@@ -246,7 +227,7 @@ public static class Pop
                 else _enterY = -TipTravel;
                 return;
             }
-            _enterY = (fy >= 0.5 ? 1 : -1) * (GetSlideOnly(_target) ? 14 : 8);
+            _enterY = fy >= 0.5 ? 8 : -8;
             var pin = GetPin(_target);
             var trigger = GetTrigger(_target);
             if (pin.Length == 0 || trigger is null || !trigger.IsVisible ||

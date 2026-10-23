@@ -93,9 +93,6 @@ public sealed class LauncherSettings
 
     public bool IsDark { get; set; } = true;
 
-    /// <summary>WPF settings open as a dialog when enabled; older configurations keep the page.</summary>
-    public bool UseSettingsDialog { get; set; }
-
     public string? CustomBackgroundPath { get; set; }
     public double BackgroundBlur { get; set; }
     public double BackgroundBrightness { get; set; }

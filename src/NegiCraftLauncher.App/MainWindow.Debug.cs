@@ -2,7 +2,6 @@
 using System.ComponentModel;
 using System.Windows;
 using System.Windows.Controls;
-using System.Windows.Data;
 using System.Windows.Media;
 using System.Windows.Media.Effects;
 using NegiCraftLauncher.Theme;
@@ -118,70 +117,6 @@ public partial class MainWindow
 
         _dbgCard = BuildDebugCard();
         SettingsCardsPanel.Children.Add(_dbgCard);
-
-        var pageNavigation = new Button
-        {
-            Content = DebugTab,
-            Style = (Style)FindResource("SetNavBtnStyle"),
-        };
-        pageNavigation.Click += (_, _) =>
-        {
-            if (DataContext is MainWindowViewModel vm) vm.SelectSettingsTabCommand.Execute(DebugTab);
-        };
-        pageNavigation.SetBinding(Negi.OnProperty, new Binding
-        {
-            Source = _dbgNavButton,
-            Path = new PropertyPath(Negi.OnProperty),
-        });
-        ((Panel)PageSettingsNavHost.Content).Children.Add(pageNavigation);
-        ((Panel)PageSettingsCardsHost.Content).Children.Add(BuildDebugPageCard());
-    }
-
-    private Border BuildDebugPageCard()
-    {
-        var stack = new NegiStackPanel();
-        stack.Children.Add(HintRow("Debug 调试项", "仅在 Debug 模式可见；Release 打包时这段 UI 不会被编译进去。"));
-        var toggle = new CheckBox { VerticalAlignment = VerticalAlignment.Center };
-        toggle.SetBinding(CheckBox.IsCheckedProperty, new Binding(nameof(CheckBox.IsChecked))
-        {
-            Source = _dbgShadowToggle,
-            Mode = BindingMode.TwoWay,
-        });
-        stack.Children.Add(OptionRow("窗口阴影", "窗口外壳那圈投影（Tailwind shadow-lg，两层）。", toggle));
-        AddSlider("阴影浓度", _dbgShadowOpacity!, _dbgShadowOpacityText!);
-        AddSlider("侧栏磨砂模糊", _dbgSidebarBlur!, _dbgSidebarBlurText!);
-        AddSlider("浮卡投影模糊", _dbgCardBlur!, _dbgCardBlurText!, false);
-        var card = new Border
-        {
-            Background = _dbgCard!.Background,
-            BorderBrush = _dbgCard.BorderBrush,
-            BorderThickness = _dbgCard.BorderThickness,
-            CornerRadius = _dbgCard.CornerRadius,
-            Padding = _dbgCard.Padding,
-            Child = stack,
-        };
-        card.SetBinding(VisibilityProperty, new Binding(nameof(Visibility)) { Source = _dbgCard });
-        return card;
-
-        void AddSlider(string title, Slider source, TextBlock sourceValue, bool divider = true)
-        {
-            var slider = new Slider
-            {
-                Minimum = source.Minimum,
-                Maximum = source.Maximum,
-                Width = source.Width,
-                IsSnapToTickEnabled = source.IsSnapToTickEnabled,
-                TickFrequency = source.TickFrequency,
-            };
-            slider.SetBinding(Slider.ValueProperty, new Binding(nameof(Slider.Value))
-            {
-                Source = source,
-                Mode = BindingMode.TwoWay,
-            });
-            var value = ValueText("");
-            value.SetBinding(TextBlock.TextProperty, new Binding(nameof(TextBlock.Text)) { Source = sourceValue });
-            stack.Children.Add(SliderRow(title, slider, value, divider));
-        }
     }
 
     private Border BuildDebugCard()

@@ -208,7 +208,7 @@ public partial class MainWindow
     /// </summary>
     private void OnWindowDragOver(object sender, DragEventArgs e)
     {
-        if (SettingsOverlay.Visibility == Visibility.Visible)
+        if (PageSettings.Visibility == Visibility.Visible)
         {
             e.Effects = DragDropEffects.None;
             e.Handled = true;
@@ -240,7 +240,7 @@ public partial class MainWindow
 
     private void OnWindowDrop(object sender, DragEventArgs e)
     {
-        if (SettingsOverlay.Visibility == Visibility.Visible)
+        if (PageSettings.Visibility == Visibility.Visible)
         {
             e.Handled = true;
             return;
