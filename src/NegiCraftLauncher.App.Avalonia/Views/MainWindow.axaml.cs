@@ -8,6 +8,7 @@ using Avalonia.Controls;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Input;
 using Avalonia.Interactivity;
+using Avalonia.LogicalTree;
 using Avalonia.Media;
 using Avalonia.Platform;
 using Avalonia.Input.Platform;
@@ -71,6 +72,15 @@ public partial class MainWindow : Window
         AddHandler(DragDrop.DragOverEvent, OnWindowDragOver);
         AddHandler(DragDrop.DragLeaveEvent, OnWindowDragLeave);
         AddHandler(DragDrop.DropEvent, OnWindowDrop, handledEventsToo: true);
+
+        // 页面入场过渡：给每个挂着 PageAnim 的面板接上。
+        // 样式里那条"只淡入"的动画已经退役（见 MainStyles.axaml 的说明）——
+        // 方向要按"上一页 → 下一页"判，样式读不到上一页是谁。
+        foreach (var page in this.GetLogicalDescendants().OfType<Panel>()
+                     .Where(p => p.Classes.Contains("PageAnim")))
+        {
+            PageTransition.Attach(page);
+        }
 
         // 头几趟布局里 TranslatePoint 还给不出稳定的页内坐标（首页那圈 -100/-22 的负边距还没进到
         // 变换链），障碍会量歪 —— 而一旦把锚点当成"压到侧栏"推开，之后就再没人把它摆回来。

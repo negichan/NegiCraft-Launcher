@@ -193,10 +193,33 @@ public partial class MainWindowViewModel : ViewModelBase
 
     public bool IsInstancesActive => CurrentPage is "instances" or "instance_manage";
 
+    /// <summary>
+    /// 上一次所在的页面。用来算页面切换的方向（见 <see cref="PageDirection"/>）。
+    ///
+    /// <para>初值是 <c>"home"</c>，与 <c>_currentPage</c> 的初值一致 —— 应用起来就在首页，
+    /// 所以"从首页到实例页"的方向是算得出来的。</para>
+    /// </summary>
+    private string _previousPage = "home";
+
+    /// <summary>
+    /// 本次切换的方向。两端视图层读它来决定新页从哪边滑进来。
+    ///
+    /// <para><b>为什么放在 VM 而不是视图里算</b>：方向要按"上一页 → 下一页"判，
+    /// 而视图层只知道"现在在第几页"（可见性是绑定的，改页是异步的）。
+    /// 放在共享层还能保证 WPF 与 Avalonia 给出同一个方向。</para>
+    /// </summary>
+    public PageDirection LastPageDirection { get; private set; } = PageDirection.None;
+
     partial void OnCurrentPageChanged(string value)
     {
+        // 方向在这里算，而不是在 Go 里 —— <c>CurrentPage</c> 有十几处赋值点
+        // （进实例配置、关实例配置、启动后回首页……），只挑 Go 那一处算会漏掉。
+        LastPageDirection = PageOrder.Between(_previousPage, value);
+        _previousPage = value;
+
         OnPropertyChanged(nameof(IsOnHome));
         OnPropertyChanged(nameof(IsInstancesActive));
+        OnPropertyChanged(nameof(LastPageDirection));
         CloseAllPopovers();
     }
 

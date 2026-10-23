@@ -239,6 +239,7 @@ internal static class UiShot
         Check("selecting a tab keeps it selected",
             vm.CurrentSettingsTab == "Java");
 
+        AuditPageDirection(vm, log);
 
         var memory = FindMemorySlider((DependencyObject)window.FindName("PageSettingsCardsHost"));
         var originalMemory = vm.MaxMemoryGb;
@@ -279,6 +280,39 @@ internal static class UiShot
                 return null;
             }
         }
+    }
+
+    /// <summary>
+    /// 页面切换方向的判据。侧栏从上到下是 首页 / 实例 / 下载，设置在底部，
+    /// 实例配置页紧跟实例页（它是点进去的下一层）。
+    /// </summary>
+    private static void AuditPageDirection(MainWindowViewModel vm, StringBuilder log)
+    {
+        void Check(string label, bool valid) => log.AppendLine($"  {(valid ? "OK" : "!!")} page direction: {label}");
+
+        // 用一份干净的 VM，别继承探针跑到这儿时的当前页。
+        var probe = new MainWindowViewModel(new Services.WpfBitmapDecoder());
+
+        probe.GoCommand.Execute("home");
+        probe.GoCommand.Execute("instances");
+        Check("going down the sidebar slides in from above",
+            probe.LastPageDirection == PageDirection.FromAbove);
+
+        probe.GoCommand.Execute("download");
+        Check("down again stays from above",
+            probe.LastPageDirection == PageDirection.FromAbove);
+
+        probe.GoCommand.Execute("instances");
+        Check("going back up slides in from below",
+            probe.LastPageDirection == PageDirection.FromBelow);
+
+        probe.GoCommand.Execute("settings");
+        Check("settings sits at the bottom of the sidebar",
+            probe.LastPageDirection == PageDirection.FromAbove);
+
+        probe.GoCommand.Execute("home");
+        Check("the home page only fades in, whichever way it is entered from",
+            probe.LastPageDirection == PageDirection.None);
     }
 
     /// <summary>把所有带 x:Name 的元素的实际尺寸/可见性列出来，样式没命中时一眼看得出来。</summary>
