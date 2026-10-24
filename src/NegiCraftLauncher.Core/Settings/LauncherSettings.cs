@@ -26,6 +26,12 @@ public sealed class GameFolder
     /// <summary>新建与下载默认落到的那一个；列表里恰好一个为 true。</summary>
     public bool IsDefault { get; set; }
 
+    /// <summary>
+    ///     官方启动器目录（开机探测自动挂进来的那两个位置）。由启动器托管：
+    ///     不许从列表里移除 —— 只要官方启动器还装着，这个入口就一直在。
+    /// </summary>
+    public bool IsOfficial { get; set; }
+
     /// <summary>这个目录里当前选中的实例；各目录各记各的，切回来不用重选。</summary>
     public string? CurrentInstanceId { get; set; }
 }
@@ -62,6 +68,12 @@ public sealed class LauncherSettings
 
     /// <summary>实例页正在看的那个目录的路径。</summary>
     public string ActiveGameFolder { get; set; } = "";
+
+    /// <summary>
+    ///     官方启动器目录的首次探测做过了没有。做过就不再自动加 ——
+    ///     用户把那个目录从列表里删掉之后，不该每次开机又被复活。
+    /// </summary>
+    public bool OfficialFolderProbed { get; set; }
 
     /// <summary>Explicit javaw.exe; null means pick one automatically per version.</summary>
     public string? JavaPath { get; set; }
@@ -320,6 +332,12 @@ public sealed class LauncherSettings
             return false;
         }
 
+        if (folder.IsOfficial)
+        {
+            error = "官方启动器的目录由启动器托管，不能移除。";
+            return false;
+        }
+
         GameFolders.Remove(folder);
         return true;
     }
@@ -332,11 +350,17 @@ public sealed class LauncherSettings
         return true;
     }
 
-    /// <summary>没起别名时用的那个名字：路径末段（<c>…\.minecraft</c> 读作 <c>.minecraft</c>）。</summary>
+    /// <summary>
+    /// 没起别名时用的默认名：取游戏目录的<b>上一级</b>目录名 —— 游戏目录几乎都叫
+    /// <c>.minecraft</c>，按尾段起名整张列表全重名；上一级（启动器文件夹 / 用户自己起的名）
+    /// 才是有区分度的那层。上一级取不到（盘根）再退回尾段。
+    /// </summary>
     public static string SuggestFolderName(string path)
     {
-        var name = Path.GetFileName(NclPaths.NormaliseGameRoot(path));
-        return name.Length == 0 ? path : name;
+        var root = NclPaths.NormaliseGameRoot(path);
+        var parent = Path.GetDirectoryName(root);
+        var name = parent is { Length: > 0 } ? Path.GetFileName(parent) : Path.GetFileName(root);
+        return name.Length == 0 ? root : name;
     }
 
     private static bool SamePath(string left, string right) =>
@@ -365,7 +389,9 @@ public sealed class LauncherSettings
             GameFolders.Add(new GameFolder
             {
                 Path = legacy,
-                Name = SuggestFolderName(legacy),
+                // 自建的那份默认目录没有更好的名字可起 —— 列表里就它一个时，它就是「当前文件夹」。
+                // （官方启动器目录接管默认时，这个占位会被撤掉，见 Launcher.AdoptOfficialLauncherFolders。）
+                Name = "当前文件夹",
                 IsDefault = true,
                 // 旧配置只有一个全局当前实例，它属于默认目录。
                 CurrentInstanceId = CurrentInstanceId,

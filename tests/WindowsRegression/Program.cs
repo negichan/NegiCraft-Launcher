@@ -199,6 +199,8 @@ internal static class Program
             await CheckInstanceExport();
             CheckInstanceDeletion();
             CheckInstanceUiGuards();
+            CheckModMetaReader();
+            CheckOfficialLocator();
             await CheckFoxSqueeze();
 
             pet = new PetWindow("", null) { Left = 500, Top = 300 };
@@ -738,6 +740,94 @@ internal static class Program
             wpf.Contains("MemorySliderMax") && ava.Contains("MemorySliderMax"));
         Check("drop overlay text follows what is being dropped",
             wpf.Contains("DropOverlayText") && ava.Contains("DropOverlayText"));
+
+        // 其他启动器 式交互：卡片和列表行都是单击设当前、双击启动，行尾/卡片的齿轮进配置。
+        Check("cards and rows select on click and launch on double-click",
+            Count(wpf, "OnInstanceRowDoubleClick") >= 2 && Count(ava, "OnInstanceRowDoubleTapped") >= 2 &&
+            Count(wpf, "DataContext.MakeCurrentInstanceCommand") >= 2 &&
+            Count(ava, "DataContext).MakeCurrentInstanceCommand") >= 2);
+        Check("config entry sits beside every launch button",
+            Count(wpf, "CogOutline") >= 2 && Count(ava, "CogOutline") >= 2);
+
+        // 概览统计卡与模组元数据。
+        Check("overview shows creation date and folder size stats",
+            wpf.Contains("InstanceCreatedText") && ava.Contains("InstanceCreatedText") &&
+            wpf.Contains("InstanceFolderSizeText") && ava.Contains("InstanceFolderSizeText"));
+        Check("mod rows surface parsed mod names and versions",
+            wpf.Contains("ModVersionText") && ava.Contains("ModVersionText") &&
+            wpf.Contains("HasModVersion") && ava.Contains("HasModVersion"));
+
+        // 删除只在概览的危险区出现一次（文件与管理已瘦身）。
+        Check("delete lives only in the overview danger zone",
+            Count(wpf, "DeleteEditingInstanceCommand") == 1 && Count(ava, "DeleteEditingInstanceCommand") == 1);
+
+        // Java 与内存不再单列一页，拆成了独立的「设置」tab（隔离 / Java / 内存）。
+        Check("settings split into its own tab beside the overview",
+            !wpf.Contains("""ConfigTab, Converter={StaticResource Equals}, ConverterParameter=Java""") &&
+            !ava.Contains("""ConfigTab, Converter={x:Static ObjectConverters.Equal}, ConverterParameter='Java'""") &&
+            wpf.Contains("""ConfigTab, Converter={StaticResource Equals}, ConverterParameter=设置""") &&
+            ava.Contains("""ConfigTab, Converter={x:Static ObjectConverters.Equal}, ConverterParameter='设置'"""));
+    }
+
+    private static int Count(string haystack, string needle) =>
+        haystack.Split(new[] { needle }, StringSplitOptions.None).Length - 1;
+
+    /// <summary>
+    /// 模组 jar 元数据读取：fabric / forge 两种清单解析出名字与版本，
+    /// 没有清单的 jar 与根本不是 zip 的文件都安静地退回 null（调用方亮文件名）。
+    /// </summary>
+    private static void CheckModMetaReader()
+    {
+        var sandbox = Path.Combine(Path.GetTempPath(), "NCL", "modmeta-check", Guid.NewGuid().ToString("N"));
+        try
+        {
+            Directory.CreateDirectory(sandbox);
+
+            var fabricJar = Path.Combine(sandbox, "fabric-api.jar");
+            using (var zip = System.IO.Compression.ZipFile.Open(fabricJar, System.IO.Compression.ZipArchiveMode.Create))
+            using (var entry = zip.CreateEntry("fabric.mod.json").Open())
+            using (var writer = new StreamWriter(entry))
+            {
+                writer.Write("""{ "id": "fabric-api", "name": "Fabric API", "version": "0.100.0+1.21" }""");
+            }
+
+            var fabric = NegiCraftLauncher.Core.ModMetaReader.Read(fabricJar);
+            Check("modmeta reads fabric.mod.json", fabric is { Name: "Fabric API", Version: "0.100.0+1.21" });
+
+            var forgeJar = Path.Combine(sandbox, "examplemod.jar");
+            using (var zip = System.IO.Compression.ZipFile.Open(forgeJar, System.IO.Compression.ZipArchiveMode.Create))
+            using (var entry = zip.CreateEntry("META-INF/mods.toml").Open())
+            using (var writer = new StreamWriter(entry))
+            {
+                writer.Write("""
+                    modLoader="javafml"
+                    loaderVersion="[40,)"
+                    [[mods]]
+                    modId="examplemod"
+                    version="1.0.0"
+                    displayName="Example Mod"
+                    """);
+            }
+
+            var forge = NegiCraftLauncher.Core.ModMetaReader.Read(forgeJar);
+            Check("modmeta reads META-INF/mods.toml", forge is { Name: "Example Mod", Version: "1.0.0" });
+
+            var bareJar = Path.Combine(sandbox, "bare.jar");
+            using (System.IO.Compression.ZipFile.Open(bareJar, System.IO.Compression.ZipArchiveMode.Create)) { }
+            Check("modmeta returns null for a jar without manifests", NegiCraftLauncher.Core.ModMetaReader.Read(bareJar) is null);
+
+            var notZip = Path.Combine(sandbox, "broken.jar");
+            File.WriteAllText(notZip, "this is not a zip");
+            Check("modmeta returns null for a corrupt jar", NegiCraftLauncher.Core.ModMetaReader.Read(notZip) is null);
+        }
+        finally
+        {
+            try
+            {
+                if (Directory.Exists(sandbox)) Directory.Delete(sandbox, recursive: true);
+            }
+            catch (Exception) { }
+        }
     }
 
     private static string? FindRepoRoot()
@@ -748,6 +838,71 @@ internal static class Program
                 return dir.FullName;
         }
         return null;
+    }
+
+    /// <summary>
+    /// 官方启动器目录探测：桌面版与商店版两个默认位能被认出；
+    /// 光有 .minecraft 没有 versions/ 的不算装过游戏。
+    /// </summary>
+    private static void CheckOfficialLocator()
+    {
+        var sandbox = Path.Combine(Path.GetTempPath(), "NCL", "official-check", Guid.NewGuid().ToString("N"));
+        try
+        {
+            var roaming = Path.Combine(sandbox, "roaming");
+            var local = Path.Combine(sandbox, "local");
+            Directory.CreateDirectory(Path.Combine(roaming, ".minecraft", "versions"));
+
+            var found = NegiCraftLauncher.Core.OfficialMinecraft.LocateGameRoots(roaming, local);
+            Check("official desktop .minecraft is located",
+                found.Count == 1 && found[0].Name == "官方启动器" &&
+                found[0].Path == Path.Combine(roaming, ".minecraft"));
+
+            Directory.CreateDirectory(Path.Combine(local, "Packages",
+                "Microsoft.4297127D64EC6_8wekyb3d8bbwe", "LocalCache", "Roaming", ".minecraft", "versions"));
+            found = NegiCraftLauncher.Core.OfficialMinecraft.LocateGameRoots(roaming, local);
+            Check("microsoft store package location is located",
+                found.Count == 2 && found[1].Name == "官方启动器（商店版）");
+
+            // 空 .minecraft（没有 versions/）不认；基目录不存在更是一无所获。
+            Directory.Delete(Path.Combine(roaming, ".minecraft", "versions"));
+            found = NegiCraftLauncher.Core.OfficialMinecraft.LocateGameRoots(roaming, local);
+            Check("a .minecraft without versions is ignored", found.Count == 1 && found[0].Name.Contains("商店版"));
+
+            // 挂上 IsOfficial 的目录在 Settings 层拒绝移除；普通目录照常可移。
+            var settings = NegiCraftLauncher.Core.Settings.LauncherSettings.Load(Path.Combine(sandbox, "settings.json"));
+            Directory.CreateDirectory(Path.Combine(roaming, ".minecraft", "versions"));
+            if (settings.TryAddFolder(Path.Combine(roaming, ".minecraft"), "官方启动器", out var official, out _))
+            {
+                official!.IsOfficial = true;
+                var blocked = settings.TryRemoveFolder(Path.Combine(roaming, ".minecraft"), out var reason);
+                Check("official folder refuses removal", !blocked && reason.Contains("官方"));
+            }
+            else
+            {
+                Check("official folder refuses removal", false);
+            }
+
+            var plainRoot = Path.Combine(sandbox, "plain");
+            Directory.CreateDirectory(Path.Combine(plainRoot, "versions"));
+            settings.TryAddFolder(plainRoot, "自建", out _, out _);
+            Check("non-official folder still removable", settings.TryRemoveFolder(plainRoot, out _));
+
+            // 默认命名：上一级目录名（.minecraft 尾段没区分度）；自建默认目录叫「当前文件夹」。
+            Check("suggested names use the parent folder, not the .minecraft tail",
+                NegiCraftLauncher.Core.Settings.LauncherSettings.SuggestFolderName(Path.Combine(sandbox, "roaming", ".minecraft")) == "roaming");
+            var fresh = NegiCraftLauncher.Core.Settings.LauncherSettings.Load(Path.Combine(sandbox, "fresh-settings.json"));
+            Check("the seeded own folder is named 当前文件夹",
+                fresh.GameFolders.Count == 1 && fresh.GameFolders[0].Name == "当前文件夹");
+        }
+        finally
+        {
+            try
+            {
+                if (Directory.Exists(sandbox)) Directory.Delete(sandbox, recursive: true);
+            }
+            catch (Exception) { }
+        }
     }
 
     private static async Task CheckFoxSqueeze()

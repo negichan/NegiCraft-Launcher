@@ -1,4 +1,6 @@
 using System;
+using System.IO;
+using System.Linq;
 using System.Reflection;
 using System.Threading;
 using System.Threading.Tasks;
@@ -45,10 +47,56 @@ public sealed class Launcher
 
     public void Initialize()
     {
-        // 老那份不分目录的元数据先挂到默认目录下，之后每个目录只读自己那一段。
+        // 官方目录的接管要排在最前：它可能换掉默认与当前目录，后面挂旧元数据、
+        // 建实例管理器都得跟着新默认走。
+        AdoptOfficialLauncherFolders();
+
+        // 老那份不分目录的元数据先挂到默认目录下，之后每个目录只读自己那段。
         InstanceManager.AdoptLegacyMetadata(Settings.DefaultFolder.Path);
         Accounts.Load();
+
+        // 接管可能改了当前目录（ctor 时还是旧的）：管理器跟着换，再扫。
+        if (!string.Equals(Instances.GameRoot, Settings.ActiveFolder.Path, StringComparison.OrdinalIgnoreCase))
+        {
+            Instances = CreateManager(Settings.ActiveFolder.Path);
+        }
         Instances.Load();
+    }
+
+    /// <summary>
+    /// 第一次启动看一眼官方启动器把游戏装在哪（桌面版 / 商店版），在就挂进目录列表，
+    /// 条目带 <c>IsOfficial</c>（由启动器托管，不许移除）。
+    ///
+    /// <para>默认目录策略：官方目录在、而我们自己的默认还只是个没用过的占位（盘上根本不存在），
+    /// 就把默认与当前都交给官方目录、撤掉占位 —— 不自己另起炉灶。用户已经用自己的目录装过东西
+    /// （目录在盘上存在）就不动，只把官方目录加进列表备选。</para>
+    /// </summary>
+    private void AdoptOfficialLauncherFolders()
+    {
+        if (Settings.OfficialFolderProbed) return;
+
+        Settings.OfficialFolderProbed = true;
+        var roots = OfficialMinecraft.LocateGameRoots();
+        foreach (var root in roots)
+        {
+            if (Settings.FindFolder(root.Path) is not null) continue;
+            if (Settings.TryAddFolder(root.Path, root.Name, out var added, out _)) added!.IsOfficial = true;
+        }
+
+        var official = roots
+            .Select(r => Settings.FindFolder(r.Path))
+            .FirstOrDefault(f => f is not null);
+        var placeholder = Settings.DefaultFolder;
+        var pristine = string.Equals(placeholder.Path, NclPaths.DefaultGameRoot, StringComparison.OrdinalIgnoreCase) &&
+                       !Directory.Exists(placeholder.Path);
+        if (official is not null && pristine && !ReferenceEquals(official, placeholder))
+        {
+            Settings.TrySetDefaultFolder(official.Path);
+            Settings.ActiveGameFolder = official.Path;
+            if (!placeholder.IsOfficial) Settings.GameFolders.Remove(placeholder);
+        }
+
+        Settings.Save();
     }
 
     public IReadOnlyList<GameFolder> Folders => Settings.GameFolders;

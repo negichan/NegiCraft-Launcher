@@ -1812,6 +1812,70 @@ public partial class MainWindowViewModel : ViewModelBase
     [ObservableProperty]
     private string _configTab = "概览";
 
+    /// <summary>概览统计卡：版本目录的创建日期。版本本体目录没了/读不到就写「—」。</summary>
+    [ObservableProperty]
+    private string _instanceCreatedText = "—";
+
+    /// <summary>概览统计卡：版本本体目录的占用空间。大目录要慢慢扫，先写「统计中…」。</summary>
+    [ObservableProperty]
+    private string _instanceFolderSizeText = "统计中…";
+
+    /// <summary>进管理页时把概览统计卡的两格填上。扫目录放后台，await 回到 UI 线程再写属性。</summary>
+    private async Task RefreshInstanceStatsAsync()
+    {
+        if (EditingInstance is not { } instance) return;
+
+        var versionDir = NclPaths.InstanceDirectory(_launcher.Instances.GameRoot, instance.Source.Id);
+        try
+        {
+            InstanceCreatedText = Directory.GetCreationTime(versionDir).ToString("yyyy-MM-dd");
+        }
+        catch
+        {
+            InstanceCreatedText = "—";
+        }
+
+        // 只扫版本本体目录：非隔离实例的 GameDirectoryFor 是整个 .minecraft 根，
+        // 统计它既慢又把别的实例都算进来，数字没法解释。
+        InstanceFolderSizeText = "统计中…";
+        try
+        {
+            var bytes = await Task.Run(() => DirectorySize(versionDir));
+            InstanceFolderSizeText = FormatFileSize(bytes);
+        }
+        catch
+        {
+            InstanceFolderSizeText = "—";
+        }
+    }
+
+    private static long DirectorySize(string root)
+    {
+        long total = 0;
+        var pending = new Stack<string>();
+        pending.Push(root);
+        while (pending.Count > 0)
+        {
+            var dir = pending.Pop();
+            try
+            {
+                foreach (var entry in Directory.EnumerateFileSystemEntries(dir))
+                {
+                    if (Directory.Exists(entry)) pending.Push(entry);
+                    else
+                    {
+                        try { total += new FileInfo(entry).Length; } catch { }
+                    }
+                }
+            }
+            catch
+            {
+                // 单个目录读不了（权限 / 正在被删）就跳过，估个数比报错强。
+            }
+        }
+        return total;
+    }
+
     [RelayCommand]
     private void SelectConfigTab(string tab)
     {
@@ -2301,6 +2365,7 @@ public partial class MainWindowViewModel : ViewModelBase
         ConfigTab = "概览";
         ModSearch = "";
         RefreshInstanceManageData();
+        _ = RefreshInstanceStatsAsync();
 
         CurrentPage = "instance_manage";
     }
@@ -2605,15 +2670,18 @@ public partial class MainWindowViewModel : ViewModelBase
                         ? name[..^9]
                         : name;
 
-                    EditingMods.Add(new ModItemModel
-                    {
-                        FilePath = file,
-                        FileName = name,
-                        DisplayName = cleanName,
-                        IsEnabled = !isDisabled,
-                        FileSizeText = FormatFileSize(fi.Length),
-                        ModifiedTimeText = fi.LastWriteTime.ToString("yyyy-MM-dd HH:mm")
-                    });
+                    // 其他启动器 式：名字优先取 jar 清单里的模组名/版本，解析不到再亮文件名。
+                    // .disabled 只是改了名，zip 内容没动，照样能读。
+                    var meta = ModMetaReader.Read(file);
+                    var model = new ModItemModel(
+                        meta?.Name ?? Path.GetFileNameWithoutExtension(cleanName),
+                        meta?.Version);
+                    model.FilePath = file;
+                    model.FileName = name;
+                    model.IsEnabled = !isDisabled;
+                    model.FileSizeText = FormatFileSize(fi.Length);
+                    model.ModifiedTimeText = fi.LastWriteTime.ToString("yyyy-MM-dd HH:mm");
+                    EditingMods.Add(model);
                 }
             }
             catch { }

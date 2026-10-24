@@ -117,6 +117,9 @@ public partial class GameFolderModel : ObservableObject
 
     public bool IsDefault => Source.IsDefault;
 
+    /// <summary>官方启动器目录（开机自动挂进来的）：由启动器托管，列表里不给「移除」。</summary>
+    public bool IsOfficial => Source.IsOfficial;
+
     /// <summary>目录不在了（挪了盘、拔了移动硬盘）：列表里直说，不然空列表看着像实例被删了。</summary>
     public bool Exists => Core.NclPaths.NormaliseGameRoot(Path).Length > 0 && System.IO.Directory.Exists(Path);
 
@@ -279,13 +282,31 @@ public partial class JavaOptionModel : ObservableObject
 /// <summary>实例管理页「模组」标签里的一行。</summary>
 public partial class ModItemModel : ObservableObject
 {
+    public ModItemModel()
+    {
+    }
+
+    public ModItemModel(string displayName, string? modVersion)
+    {
+        DisplayName = displayName;
+        ModVersionText = modVersion ?? "";
+    }
+
     public string FilePath { get; set; } = "";
 
     [ObservableProperty]
     private string _fileName = "";
 
+    /// <summary>给人看的名字：优先是 jar 清单里解析出的模组名，解析不到就是去掉后缀的文件名。</summary>
     [ObservableProperty]
     private string _displayName = "";
+
+    /// <summary>jar 清单里声明的版本（fabric.mod.json / mods.toml …）。空串 = 没解析到，pill 不显示。</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasModVersion))]
+    private string _modVersionText = "";
+
+    public bool HasModVersion => ModVersionText.Length > 0;
 
     [ObservableProperty]
     private string _fileSizeText = "";

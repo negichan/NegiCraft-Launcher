@@ -770,6 +770,11 @@
                 <Setter Property="Background" Value="#fafafa" />
                 <Setter Property="Foreground" Value="#18181b" />
                 <Setter Property="BorderThickness" Value="0" />
+                <!-- 当前实例的启动钮展开成「▶ 启动」：只有主操作配得上文字，
+                     其余实例保持 32 的纯图标紧凑态。 -->
+                <Setter Property="Width" Value="Auto" />
+                <Setter Property="MinWidth" Value="76" />
+                <Setter Property="Padding" Value="12,0" />
             </DataTrigger>
             <MultiDataTrigger>
                 <MultiDataTrigger.Conditions>

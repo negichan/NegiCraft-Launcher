@@ -563,11 +563,13 @@
                                         </ItemsControl.ItemsPanel>
                                         <ItemsControl.ItemTemplate>
                                             <DataTemplate x:DataType="models:InstanceModel">
+                                                <!-- 和列表行同一套 其他启动器 交互：单击=设为当前，双击=启动，配置走齿轮。 -->
                                                 <Button Classes="InstCard"
                                                         Classes.Current="{Binding IsCurrent}"
                                                         Margin="0,0,12,12"
-                                                        Command="{Binding $parent[Window].((vm:MainWindowViewModel)DataContext).OpenInstanceConfigCommand}"
-                                                        CommandParameter="{Binding .}">
+                                                        Command="{Binding $parent[Window].((vm:MainWindowViewModel)DataContext).MakeCurrentInstanceCommand}"
+                                                        CommandParameter="{Binding .}"
+                                                        DoubleTapped="OnInstanceRowDoubleTapped">
                                                     <!-- 右键菜单与「⋯」共用这一份：⋯ 只是把同一个菜单就地开起来
                                                          （见 MainWindow.axaml.cs 的 OnRowMoreClick）。 -->
                                                     <Button.ContextMenu>
@@ -643,16 +645,27 @@
                                                             </Button>
                                                         </Grid>
 
-                                                        <!-- 下：最近游玩贴底，右边启动按钮。游戏在跑时压灰，点了没动静最伤人。 -->
-                                                        <Grid Grid.Row="1" ColumnDefinitions="* Auto">
+                                                        <!-- 下：最近游玩贴底，右边配置 + 启动。启动钮只在当前实例上展开出
+                                                             「启动」二字，其余保持纯图标；游戏运行中压灰。 -->
+                                                        <Grid Grid.Row="1" ColumnDefinitions="* Auto Auto">
                                                             <TextBlock Grid.Column="0" Text="{Binding LastPlayedText}" FontSize="12"
                                                                        Foreground="#a1a1aa" VerticalAlignment="Center" TextTrimming="CharacterEllipsis"/>
-                                                            <Button Grid.Column="1" Classes="CardPlay" Classes.Current="{Binding IsCurrent}" ToolTip.Tip="启动"
+                                                            <Button Grid.Column="1" Classes="IconBtn" Width="28" Height="28" Margin="0,0,6,0" ToolTip.Tip="实例配置"
+                                                                    Command="{Binding $parent[Window].((vm:MainWindowViewModel)DataContext).OpenInstanceConfigCommand}"
+                                                                    CommandParameter="{Binding .}">
+                                                                <materialIcons:MaterialIcon Kind="CogOutline" Width="16" Height="16" Foreground="#a1a1aa"/>
+                                                            </Button>
+                                                            <Button Grid.Column="2" Classes="CardPlay" Classes.Current="{Binding IsCurrent}" ToolTip.Tip="启动"
                                                                     IsEnabled="{Binding $parent[Window].((vm:MainWindowViewModel)DataContext).CanQuickLaunch}"
                                                                     Command="{Binding $parent[Window].((vm:MainWindowViewModel)DataContext).LaunchInstanceCommand}"
                                                                     CommandParameter="{Binding .}">
-                                                                <materialIcons:MaterialIcon Kind="Play" Width="18" Height="18"
-                                                                                            Foreground="{Binding $parent[Button].Foreground}"/>
+                                                                <StackPanel Orientation="Horizontal" Spacing="6">
+                                                                    <materialIcons:MaterialIcon Kind="Play" Width="18" Height="18"
+                                                                                                Foreground="{Binding $parent[Button].Foreground}"/>
+                                                                    <TextBlock Text="启动" FontSize="12.5" VerticalAlignment="Center"
+                                                                               IsVisible="{Binding IsCurrent}"
+                                                                               Foreground="{Binding $parent[Button].Foreground}"/>
+                                                                </StackPanel>
                                                             </Button>
                                                         </Grid>
                                                     </Grid>
@@ -671,11 +684,14 @@
                                     <ItemsControl Focusable="False" VerticalAlignment="Top" Margin="0,0,0,56" ItemsSource="{Binding VisibleInstances}">
                                         <ItemsControl.ItemTemplate>
                                             <DataTemplate x:DataType="models:InstanceModel">
+                                                <!-- 其他启动器 式行交互：单击=设为当前（高亮不跳页），双击=直接启动；
+                                                     进配置页走行尾的齿轮或右键菜单。 -->
                                                 <Button Classes="InstRow"
                                                         Classes.Current="{Binding IsCurrent}"
                                                         Margin="0,0,0,8"
-                                                        Command="{Binding $parent[Window].((vm:MainWindowViewModel)DataContext).OpenInstanceConfigCommand}"
-                                                        CommandParameter="{Binding .}">
+                                                        Command="{Binding $parent[Window].((vm:MainWindowViewModel)DataContext).MakeCurrentInstanceCommand}"
+                                                        CommandParameter="{Binding .}"
+                                                        DoubleTapped="OnInstanceRowDoubleTapped">
                                                     <Button.ContextMenu>
                                                         <ContextMenu>
                                                             <MenuItem Header="设为当前" IsVisible="{Binding !IsCurrent}"
@@ -708,7 +724,13 @@
                                                         </ContextMenu>
                                                     </Button.ContextMenu>
 
-                                                    <Grid ColumnDefinitions="Auto Auto Auto * Auto" Height="52">
+                                                    <Grid>
+                                                        <!-- 当前行左侧的指示条：贴到行的左沿（负边距探出内边距）。 -->
+                                                        <Border Width="3" CornerRadius="1.5" Background="#fafafa"
+                                                                HorizontalAlignment="Left" VerticalAlignment="Stretch"
+                                                                Margin="-14,7,0,7"
+                                                                IsVisible="{Binding IsCurrent}"/>
+                                                        <Grid ColumnDefinitions="Auto Auto Auto * Auto" Height="52">
                                                         <Border Grid.Column="0" Width="36" Height="36" CornerRadius="8" ClipToBounds="True" VerticalAlignment="Center">
                                                             <Image Source="{Binding IconBitmap, Converter={StaticResource PixelsToBitmap}}"
                                                                    Width="36" Height="36" RenderOptions.BitmapInterpolationMode="HighQuality"/>
@@ -755,18 +777,29 @@
                                                                    VerticalAlignment="Center" TextTrimming="CharacterEllipsis"/>
 
                                                         <StackPanel Grid.Column="4" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                                                            <Button Classes="IconBtn" Width="28" Height="28" ToolTip.Tip="实例配置"
+                                                                    Command="{Binding $parent[Window].((vm:MainWindowViewModel)DataContext).OpenInstanceConfigCommand}"
+                                                                    CommandParameter="{Binding .}">
+                                                                <materialIcons:MaterialIcon Kind="CogOutline" Width="16" Height="16" Foreground="#a1a1aa"/>
+                                                            </Button>
                                                             <Button Classes="CardPlay" Classes.Current="{Binding IsCurrent}" ToolTip.Tip="启动"
                                                                     IsEnabled="{Binding $parent[Window].((vm:MainWindowViewModel)DataContext).CanQuickLaunch}"
                                                                     Command="{Binding $parent[Window].((vm:MainWindowViewModel)DataContext).LaunchInstanceCommand}"
                                                                     CommandParameter="{Binding .}">
-                                                                <materialIcons:MaterialIcon Kind="Play" Width="18" Height="18"
-                                                                                            Foreground="{Binding $parent[Button].Foreground}"/>
+                                                                <StackPanel Orientation="Horizontal" Spacing="6">
+                                                                    <materialIcons:MaterialIcon Kind="Play" Width="18" Height="18"
+                                                                                                Foreground="{Binding $parent[Button].Foreground}"/>
+                                                                    <TextBlock Text="启动" FontSize="12.5" VerticalAlignment="Center"
+                                                                               IsVisible="{Binding IsCurrent}"
+                                                                               Foreground="{Binding $parent[Button].Foreground}"/>
+                                                                </StackPanel>
                                                             </Button>
                                                             <Button Classes="IconBtn" Width="28" Height="28"
                                                                     ToolTip.Tip="更多" Click="OnRowMoreClick">
                                                                 <materialIcons:MaterialIcon Kind="DotsHorizontal" Width="16" Height="16" Foreground="#a1a1aa"/>
                                                             </Button>
                                                         </StackPanel>
+                                                    </Grid>
                                                     </Grid>
                                                 </Button>
                                             </DataTemplate>
@@ -888,6 +921,16 @@
                                         </StackPanel>
                                     </Button>
 
+                                    <!-- 设置：隔离 / Java / 内存（其他启动器 的「设置」页同构） -->
+                                    <Button Classes="InstNavBtn"
+                                            Classes.On="{Binding ConfigTab, Converter={x:Static ObjectConverters.Equal}, ConverterParameter='设置'}"
+                                            Command="{Binding SelectConfigTabCommand}" CommandParameter="设置">
+                                        <StackPanel Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
+                                            <materialIcons:MaterialIcon Kind="CogOutline" Width="16" Height="16" VerticalAlignment="Center"/>
+                                            <TextBlock Text="设置" VerticalAlignment="Center"/>
+                                        </StackPanel>
+                                    </Button>
+
                                     <!-- 模组 -->
                                     <Button Classes="InstNavBtn"
                                             Classes.On="{Binding ConfigTab, Converter={x:Static ObjectConverters.Equal}, ConverterParameter='模组'}"
@@ -936,15 +979,7 @@
                                         </Grid>
                                     </Button>
 
-                                    <!-- Java 与内存 -->
-                                    <Button Classes="InstNavBtn"
-                                            Classes.On="{Binding ConfigTab, Converter={x:Static ObjectConverters.Equal}, ConverterParameter='Java'}"
-                                            Command="{Binding SelectConfigTabCommand}" CommandParameter="Java">
-                                        <StackPanel Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
-                                            <materialIcons:MaterialIcon Kind="RocketLaunchOutline" Width="16" Height="16" VerticalAlignment="Center"/>
-                                            <TextBlock Text="Java 与内存" VerticalAlignment="Center"/>
-                                        </StackPanel>
-                                    </Button>
+                                    <!-- Java 与内存已并入概览的设置卡，这里不再单列一页。 -->
 
                                     <!-- 文件与管理 -->
                                     <Button Classes="InstNavBtn"
@@ -963,55 +998,138 @@
 
                             <!-- Right Content Panels -->
                             <Grid Grid.Column="2">
-                                <!-- 1. 概览 -->
+                                <!-- 1. 概览：其他启动器 式 —— 头部大图标 + 就地改名，统计卡一眼看全，
+                                     快捷操作与危险区收在底部。 -->
                                 <ScrollViewer VerticalScrollBarVisibility="Auto"
                                               IsVisible="{Binding ConfigTab, Converter={x:Static ObjectConverters.Equal}, ConverterParameter='概览'}">
                                     <StackPanel Spacing="16" Margin="0,0,10,0">
+                                        <!-- 头部：图标 / 名称 / 元信息 / 换图标 -->
+                                        <Border Background="#18181b" BorderBrush="#26262b" BorderThickness="1" CornerRadius="12" Padding="16,14">
+                                            <Grid ColumnDefinitions="Auto * Auto">
+                                                <Border Grid.Column="0" Width="56" Height="56" CornerRadius="12" ClipToBounds="True"
+                                                        Background="#111114" VerticalAlignment="Top">
+                                                    <Image Source="{Binding EditingInstance.IconBitmap, Converter={StaticResource PixelsToBitmap}}"
+                                                           Width="56" Height="56" RenderOptions.BitmapInterpolationMode="HighQuality"/>
+                                                </Border>
+                                                <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="6" Margin="14,0,16,0">
+                                                    <!-- Delay 让自动保存等打字停稳再落盘。 -->
+                                                    <TextBox Width="280" Height="32" MinHeight="0"
+                                                             Text="{Binding ConfigInstName, Mode=TwoWay, Delay=500}"
+                                                             ToolTip.Tip="{Binding ConfigInstName}"
+                                                             Background="#111114" BorderBrush="#26262b" BorderThickness="1"
+                                                             CornerRadius="8" Foreground="#fafafa" Padding="10,0" FontSize="12.5"
+                                                             VerticalAlignment="Center"/>
+                                                    <TextBlock Text="{Binding EditingInstance.MetaText, FallbackValue=''}" FontSize="12"
+                                                               Foreground="#a1a1aa" TextTrimming="CharacterEllipsis"/>
+                                                    <TextBlock Text="{Binding EditingGameDirectory}" FontSize="11.5" Foreground="#52525b"
+                                                               FontFamily="Consolas" TextTrimming="CharacterEllipsis"
+                                                               ToolTip.Tip="{Binding EditingGameDirectory}"/>
+                                                </StackPanel>
+                                                <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="8" VerticalAlignment="Top">
+                                                    <Button x:Name="IconPickerAnchor" Classes="IconBtn" Width="28" Height="28"
+                                                            ToolTip.Tip="换图标（标志 / 方块）"
+                                                            Command="{Binding OpenIconPickerCommand}">
+                                                        <materialIcons:MaterialIcon Kind="Pencil" Width="15" Height="15" Foreground="#a1a1aa"/>
+                                                    </Button>
+                                                    <!-- 重置：只在有自定义图标时出现，清掉之后图标回到「跟着加载器走」。 -->
+                                                    <Button Classes="IconBtn" Width="28" Height="28" ToolTip.Tip="重置图标"
+                                                            Command="{Binding ResetInstanceIconCommand}"
+                                                            IsVisible="{Binding HasCustomIcon}">
+                                                        <materialIcons:MaterialIcon Kind="Restore" Width="15" Height="15" Foreground="#a1a1aa"/>
+                                                    </Button>
+                                                </StackPanel>
+                                            </Grid>
+                                        </Border>
+
+                                        <!-- 统计卡：六格。占用空间是后台慢慢扫出来的，先占着「统计中…」。 -->
+                                        <Border Background="#18181b" BorderBrush="#26262b" BorderThickness="1" CornerRadius="12" Padding="16,12">
+                                            <Grid ColumnDefinitions="* * *" RowDefinitions="Auto Auto">
+                                                <StackPanel Grid.Row="0" Grid.Column="0" Spacing="3" Margin="0,2,0,12">
+                                                    <TextBlock Text="最近游玩" FontSize="11.5" Foreground="#71717a"/>
+                                                    <TextBlock Text="{Binding EditingInstance.LastPlayedText, FallbackValue='—'}" FontSize="13" Foreground="#fafafa"/>
+                                                </StackPanel>
+                                                <StackPanel Grid.Row="0" Grid.Column="1" Spacing="3" Margin="0,2,0,12">
+                                                    <TextBlock Text="创建于" FontSize="11.5" Foreground="#71717a"/>
+                                                    <TextBlock Text="{Binding InstanceCreatedText}" FontSize="13" Foreground="#fafafa"/>
+                                                </StackPanel>
+                                                <StackPanel Grid.Row="0" Grid.Column="2" Spacing="3" Margin="0,2,0,12">
+                                                    <TextBlock Text="占用空间" FontSize="11.5" Foreground="#71717a"/>
+                                                    <TextBlock Text="{Binding InstanceFolderSizeText}" FontSize="13" Foreground="#fafafa"/>
+                                                </StackPanel>
+                                                <StackPanel Grid.Row="1" Grid.Column="0" Spacing="3">
+                                                    <TextBlock Text="模组" FontSize="11.5" Foreground="#71717a"/>
+                                                    <TextBlock Text="{Binding EditingModCountText}" FontSize="13" Foreground="#fafafa"/>
+                                                </StackPanel>
+                                                <StackPanel Grid.Row="1" Grid.Column="1" Spacing="3">
+                                                    <TextBlock Text="资源包" FontSize="11.5" Foreground="#71717a"/>
+                                                    <TextBlock Text="{Binding EditingResourcePackCountText}" FontSize="13" Foreground="#fafafa"/>
+                                                </StackPanel>
+                                                <StackPanel Grid.Row="1" Grid.Column="2" Spacing="3">
+                                                    <TextBlock Text="存档" FontSize="11.5" Foreground="#71717a"/>
+                                                    <TextBlock Text="{Binding EditingWorldCountText}" FontSize="13" Foreground="#fafafa"/>
+                                                </StackPanel>
+                                            </Grid>
+                                        </Border>
+
+                                        <!-- 快捷操作 -->
                                         <Border Background="#18181b" BorderBrush="#26262b" BorderThickness="1" CornerRadius="12" Padding="16,0">
                                             <StackPanel>
-                                                <!-- 图标：默认跟着加载器走，也可以用笔改成程序自带的加载器标志或方块 -->
                                                 <Border Height="54" BorderBrush="#26262b" BorderThickness="0,0,0,1">
                                                     <Grid ColumnDefinitions="* Auto">
                                                         <StackPanel VerticalAlignment="Center" Spacing="2" Margin="0,0,16,0">
-                                                            <TextBlock Text="实例图标" FontWeight="Medium" Foreground="#fafafa" FontSize="13"/>
-                                                            <TextBlock Text="{Binding InstanceIconHint}" FontSize="12" Foreground="#71717a"
-                                                                       TextTrimming="CharacterEllipsis"/>
+                                                            <TextBlock Text="打开实例文件夹" FontWeight="Medium" Foreground="#fafafa" FontSize="13"/>
+                                                            <TextBlock Text="{Binding EditingGameDirectory}" FontSize="12" Foreground="#71717a"
+                                                                       TextTrimming="CharacterEllipsis" FontFamily="Consolas"/>
                                                         </StackPanel>
-                                                        <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
-                                                            <Border Width="36" Height="36" CornerRadius="8" ClipToBounds="True" Background="#111114">
-                                                                <Image Source="{Binding EditingInstance.IconBitmap, Converter={StaticResource PixelsToBitmap}}"
-                                                                       Width="36" Height="36" RenderOptions.BitmapInterpolationMode="HighQuality"/>
-                                                            </Border>
-                                                            <Button x:Name="IconPickerAnchor" Classes="IconBtn" Width="28" Height="28"
-                                                                    ToolTip.Tip="换图标（标志 / 方块）"
-                                                                    Command="{Binding OpenIconPickerCommand}">
-                                                                <materialIcons:MaterialIcon Kind="Pencil" Width="15" Height="15" Foreground="#a1a1aa"/>
-                                                            </Button>
-                                                            <!-- 重置：只在有自定义图标时出现，清掉之后图标回到「跟着加载器走」。 -->
-                                                            <Button Classes="IconBtn" Width="28" Height="28" ToolTip.Tip="重置图标"
-                                                                    Command="{Binding ResetInstanceIconCommand}"
-                                                                    IsVisible="{Binding HasCustomIcon}">
-                                                                <materialIcons:MaterialIcon Kind="Restore" Width="15" Height="15" Foreground="#a1a1aa"/>
-                                                            </Button>
-                                                        </StackPanel>
+                                                        <Button Grid.Column="1" Classes="BtnSm BtnOutline"
+                                                                Command="{Binding OpenInstanceFolderCommand}" CommandParameter="{Binding EditingInstance}">
+                                                            <StackPanel Orientation="Horizontal" Spacing="6">
+                                                                <materialIcons:MaterialIcon Kind="FolderOutline" Width="14" Height="14"/>
+                                                                <TextBlock Text="打开" VerticalAlignment="Center"/>
+                                                            </StackPanel>
+                                                        </Button>
                                                     </Grid>
                                                 </Border>
+                                                <Border Height="54">
+                                                    <Grid ColumnDefinitions="* Auto">
+                                                        <StackPanel VerticalAlignment="Center" Spacing="2" Margin="0,0,16,0">
+                                                            <TextBlock Text="导出整合包" FontWeight="Medium" Foreground="#fafafa" FontSize="13"/>
+                                                            <TextBlock Text="打包模组与配置，不含存档；可分享或重新导入" FontSize="12" Foreground="#71717a"/>
+                                                        </StackPanel>
+                                                        <Button Grid.Column="1" Classes="BtnSm BtnOutline"
+                                                                Command="{Binding ExportInstanceCommand}" CommandParameter="{Binding EditingInstance}">
+                                                            <StackPanel Orientation="Horizontal" Spacing="6">
+                                                                <materialIcons:MaterialIcon Kind="PackageVariantClosed" Width="14" Height="14"/>
+                                                                <TextBlock Text="导出" VerticalAlignment="Center"/>
+                                                            </StackPanel>
+                                                        </Button>
+                                                    </Grid>
+                                                </Border>
+                                            </StackPanel>
+                                        </Border>
 
-                                                <Border Height="54" BorderBrush="#26262b" BorderThickness="0,0,0,1">
-                                                    <Grid ColumnDefinitions="* Auto">
-                                                        <StackPanel VerticalAlignment="Center" Spacing="2" Margin="0,0,16,0">
-                                                            <TextBlock Text="实例名称" FontWeight="Medium" Foreground="#fafafa" FontSize="13"/>
-                                                            <TextBlock Text="只影响启动器中的显示名称" FontSize="12" Foreground="#71717a"/>
-                                                        </StackPanel>
-                                                        <!-- Delay 让自动保存等打字停稳再落盘；宽度给到 280，长名字不至于盲改。 -->
-                                                        <TextBox Grid.Column="1" Width="280" Height="32" MinHeight="0"
-                                                                 Text="{Binding ConfigInstName, Mode=TwoWay, Delay=500}"
-                                                                 ToolTip.Tip="{Binding ConfigInstName}"
-                                                                 Background="#111114" BorderBrush="#26262b" BorderThickness="1"
-                                                                 CornerRadius="8" Foreground="#fafafa" Padding="10,0" FontSize="12.5"
-                                                                 VerticalAlignment="Center"/>
-                                                    </Grid>
-                                                </Border>
+                                        <!-- 危险区 -->
+                                        <Border Background="#18181b" BorderBrush="#26262b" BorderThickness="1" CornerRadius="12" Padding="16,0">
+                                            <Border Height="54">
+                                                <Grid ColumnDefinitions="* Auto">
+                                                    <StackPanel VerticalAlignment="Center" Spacing="2" Margin="0,0,16,0">
+                                                        <TextBlock Text="删除实例" FontWeight="Medium" Foreground="#fafafa" FontSize="13"/>
+                                                        <TextBlock Text="版本文件夹会移入回收站" FontSize="12" Foreground="#f87171"/>
+                                                    </StackPanel>
+                                                    <Button Grid.Column="1" Classes="BtnSm Danger" Content="删除"
+                                                            Command="{Binding DeleteEditingInstanceCommand}"/>
+                                                </Grid>
+                                            </Border>
+                                        </Border>
+                                    </StackPanel>
+                                </ScrollViewer>
+
+                                <!-- 1b. 设置：隔离 / Java / 内存，一行一项（其他启动器 的「设置」页同构）。 -->
+                                <ScrollViewer VerticalScrollBarVisibility="Auto"
+                                              IsVisible="{Binding ConfigTab, Converter={x:Static ObjectConverters.Equal}, ConverterParameter='设置'}">
+                                    <StackPanel Spacing="16" Margin="0,0,10,0">
+                                        <Border Background="#18181b" BorderBrush="#26262b" BorderThickness="1" CornerRadius="12" Padding="16,0">
+                                            <StackPanel>
                                                 <Border Height="54" BorderBrush="#26262b" BorderThickness="0,0,0,1">
                                                     <Grid ColumnDefinitions="* Auto">
                                                         <StackPanel VerticalAlignment="Center" Spacing="2" Margin="0,0,16,0">
@@ -1024,18 +1142,100 @@
                                                 <Border Height="54" BorderBrush="#26262b" BorderThickness="0,0,0,1">
                                                     <Grid ColumnDefinitions="* Auto">
                                                         <StackPanel VerticalAlignment="Center" Spacing="2" Margin="0,0,16,0">
-                                                            <TextBlock Text="游戏核心与加载器" FontWeight="Medium" Foreground="#fafafa" FontSize="13"/>
-                                                            <TextBlock Text="{Binding EditingInstance.MetaText, FallbackValue=''}" FontSize="12" Foreground="#71717a"/>
+                                                            <TextBlock Text="独立 Java 运行时" FontWeight="Medium" Foreground="#fafafa" FontSize="13"/>
+                                                            <TextBlock Text="关闭后使用全局 Java 设置" FontSize="12" Foreground="#71717a"/>
+                                                        </StackPanel>
+                                                        <CheckBox Grid.Column="1" Classes="Tick" IsChecked="{Binding ConfigInstCustomJava}"/>
+                                                    </Grid>
+                                                </Border>
+                                                <Border MinHeight="54" Padding="0,10" BorderBrush="#26262b" BorderThickness="0,0,0,1"
+                                                        IsVisible="{Binding ConfigInstCustomJava}">
+                                                    <Grid ColumnDefinitions="* Auto">
+                                                        <StackPanel VerticalAlignment="Center" Spacing="2" Margin="0,0,16,0">
+                                                            <TextBlock Text="运行时版本" FontWeight="Medium" Foreground="#fafafa" FontSize="13"/>
+                                                            <TextBlock Text="{Binding ConfigInstJavaLabel}" FontSize="12" Foreground="#71717a" TextTrimming="CharacterEllipsis"/>
+                                                        </StackPanel>
+                                                        <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                                                            <Button Classes="BtnSm BtnOutline" Width="160"
+                                                                    HorizontalContentAlignment="Stretch"
+                                                                    Command="{Binding ToggleInstJavaChooserCommand}">
+                                                                <Grid ColumnDefinitions="* Auto">
+                                                                    <TextBlock Grid.Column="0" Text="选择…" VerticalAlignment="Center" FontSize="12"/>
+                                                                    <materialIcons:MaterialIcon Grid.Column="1" Kind="ChevronDown" Width="14" Height="14" Foreground="#71717a"/>
+                                                                </Grid>
+                                                            </Button>
+                                                            <Button Classes="BtnSm BtnOutline" Click="OnPickInstJavaClick" ToolTip.Tip="浏览自定义路径">
+                                                                <StackPanel Orientation="Horizontal" Spacing="4">
+                                                                    <materialIcons:MaterialIcon Kind="FolderSearchOutline" Width="14" Height="14"/>
+                                                                    <TextBlock Text="浏览…" FontSize="12" VerticalAlignment="Center"/>
+                                                                </StackPanel>
+                                                            </Button>
+                                                        </StackPanel>
+                                                    </Grid>
+                                                </Border>
+                                                <Border BorderBrush="#26262b" BorderThickness="1" CornerRadius="10" Background="#111114" Padding="4"
+                                                        Margin="0,8,0,8" IsVisible="{Binding IsInstJavaChooserOpen}">
+                                                    <ItemsControl ItemsSource="{Binding InstJavaOptions}">
+                                                        <ItemsControl.ItemTemplate>
+                                                            <DataTemplate x:DataType="models:JavaOptionModel">
+                                                                <Button Classes="MenuItem"
+                                                                        Command="{Binding $parent[Window].((vm:MainWindowViewModel)DataContext).SelectInstJavaCommand}"
+                                                                        CommandParameter="{Binding .}">
+                                                                    <Grid ColumnDefinitions="* Auto">
+                                                                        <TextBlock Text="{Binding Label}" FontSize="13" Foreground="#fafafa"
+                                                                                   VerticalAlignment="Center" TextTrimming="CharacterEllipsis"/>
+                                                                        <materialIcons:MaterialIcon Grid.Column="1" Kind="Check" Width="14" Height="14"
+                                                                                                    Foreground="#fafafa" IsVisible="{Binding IsSelected}"/>
+                                                                    </Grid>
+                                                                </Button>
+                                                            </DataTemplate>
+                                                        </ItemsControl.ItemTemplate>
+                                                    </ItemsControl>
+                                                </Border>
+                                                <Border Height="54" BorderBrush="#26262b" BorderThickness="0,0,0,1">
+                                                    <Grid ColumnDefinitions="* Auto">
+                                                        <StackPanel VerticalAlignment="Center" Spacing="2" Margin="0,0,16,0">
+                                                            <TextBlock Text="JVM 附加启动参数" FontWeight="Medium" Foreground="#fafafa" FontSize="13"/>
+                                                            <TextBlock Text="以空格分隔，逐条传给游戏进程" FontSize="12" Foreground="#71717a"/>
+                                                        </StackPanel>
+                                                        <TextBox Grid.Column="1" Width="220" Height="32" VerticalAlignment="Center"
+                                                                 CornerRadius="8" Background="#111114" BorderBrush="#26262b"
+                                                                 PlaceholderText="-XX:+UseG1GC" FontSize="12"
+                                                                 Text="{Binding ConfigInstExtraJvmArgs, Mode=TwoWay, Delay=500}"/>
+                                                    </Grid>
+                                                </Border>
+                                                <Border Height="54" BorderBrush="#26262b" BorderThickness="0,0,0,1">
+                                                    <Grid ColumnDefinitions="* Auto">
+                                                        <StackPanel VerticalAlignment="Center" Spacing="2" Margin="0,0,16,0">
+                                                            <TextBlock Text="独立最大内存" FontWeight="Medium" Foreground="#fafafa" FontSize="13"/>
+                                                            <TextBlock Text="{Binding GlobalMemoryGbSummary, StringFormat='关闭后使用全局设置（当前 {0}）'}"
+                                                                       FontSize="12" Foreground="#71717a"/>
+                                                        </StackPanel>
+                                                        <CheckBox Grid.Column="1" Classes="Tick" IsChecked="{Binding ConfigInstCustomMemory}"/>
+                                                    </Grid>
+                                                </Border>
+                                                <Border Height="54" BorderBrush="#26262b" BorderThickness="0,0,0,1"
+                                                        IsVisible="{Binding ConfigInstCustomMemory}">
+                                                    <Grid ColumnDefinitions="* Auto">
+                                                        <TextBlock Text="分配给这个实例" FontWeight="Medium" Foreground="#fafafa" FontSize="13" VerticalAlignment="Center"/>
+                                                        <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
+                                                            <!-- 拖动期间数字跟着滑条走（#名字），落盘等拇指停下（Delay），
+                                                                 不然一寸一寸写盘、字还滞后。上限按物理内存封顶。 -->
+                                                            <Slider x:Name="InstMemSlider" Value="{Binding ConfigInstMemoryGb, Delay=300}"
+                                                                    Minimum="1" Maximum="{Binding MemorySliderMax}" Width="180"/>
+                                                            <TextBlock Text="{Binding #InstMemSlider.Value, StringFormat='{}{0} GB'}"
+                                                                       Width="48" TextAlignment="Right" Foreground="#fafafa" FontWeight="Medium" FontSize="13"/>
                                                         </StackPanel>
                                                     </Grid>
                                                 </Border>
                                                 <Border Height="54">
                                                     <Grid ColumnDefinitions="* Auto">
                                                         <StackPanel VerticalAlignment="Center" Spacing="2" Margin="0,0,16,0">
-                                                            <TextBlock Text="所属游戏目录" FontWeight="Medium" Foreground="#fafafa" FontSize="13"/>
-                                                            <TextBlock Text="{Binding GameRoot}" FontSize="12" Foreground="#71717a"
-                                                                       TextTrimming="CharacterEllipsis" FontFamily="Consolas"/>
+                                                            <TextBlock Text="内存预分配 (Xms)" FontWeight="Medium" Foreground="#fafafa" FontSize="13"/>
+                                                            <TextBlock Text="启动时即占满最大内存，可减少 GC 碎片"
+                                                                       FontSize="12" Foreground="#71717a"/>
                                                         </StackPanel>
+                                                        <CheckBox Grid.Column="1" Classes="Tick" IsChecked="{Binding ConfigInstPreallocate}"/>
                                                     </Grid>
                                                 </Border>
                                             </StackPanel>
@@ -1151,9 +1351,16 @@
                                                                 <CheckBox Grid.Column="0" Classes="Tick" IsChecked="{Binding IsEnabled, Mode=OneWay}"
                                                                           Command="{Binding $parent[Window].((vm:MainWindowViewModel)DataContext).ToggleModCommand}"
                                                                           CommandParameter="{Binding .}" Margin="0,0,12,0"/>
+                                                                <!-- 模组名称 + 版本 pill（jar 清单里解析出来的） -->
                                                                 <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
-                                                                    <TextBlock Text="{Binding DisplayName}" FontSize="13" FontWeight="Medium"
-                                                                               Foreground="#fafafa" TextTrimming="CharacterEllipsis"/>
+                                                                    <StackPanel Orientation="Horizontal" Spacing="6">
+                                                                        <TextBlock Text="{Binding DisplayName}" FontSize="13" FontWeight="Medium"
+                                                                                   Foreground="#fafafa" TextTrimming="CharacterEllipsis"/>
+                                                                        <Border Classes="TagPill" Padding="6,1" VerticalAlignment="Center"
+                                                                                IsVisible="{Binding HasModVersion}">
+                                                                            <TextBlock Text="{Binding ModVersionText}" Classes="TagText"/>
+                                                                        </Border>
+                                                                    </StackPanel>
                                                                     <TextBlock Text="{Binding FileName}" FontSize="11" Foreground="#52525b" TextTrimming="CharacterEllipsis"/>
                                                                 </StackPanel>
                                                                 <TextBlock Grid.Column="2" Text="{Binding FileSizeText}" FontSize="12" Foreground="#71717a"
@@ -1311,124 +1518,7 @@
                                     </Grid>
                                 </Grid>
 
-                                <!-- 5. Java 与内存 -->
-                                <ScrollViewer VerticalScrollBarVisibility="Auto"
-                                              IsVisible="{Binding ConfigTab, Converter={x:Static ObjectConverters.Equal}, ConverterParameter='Java'}">
-                                    <StackPanel Spacing="16" Margin="0,0,10,0">
-                                        <!-- Java 运行时 -->
-                                        <Border Background="#18181b" BorderBrush="#26262b" BorderThickness="1" CornerRadius="12" Padding="16,0">
-                                            <StackPanel>
-                                                <Border Height="54" BorderBrush="#26262b" BorderThickness="0,0,0,1">
-                                                    <Grid ColumnDefinitions="* Auto">
-                                                        <StackPanel VerticalAlignment="Center" Spacing="2" Margin="0,0,16,0">
-                                                            <TextBlock Text="独立 Java 运行时" FontWeight="Medium" Foreground="#fafafa" FontSize="13"/>
-                                                            <TextBlock Text="关闭后使用全局 Java 设置" FontSize="12" Foreground="#71717a"/>
-                                                        </StackPanel>
-                                                        <CheckBox Grid.Column="1" Classes="Tick" IsChecked="{Binding ConfigInstCustomJava}"/>
-                                                    </Grid>
-                                                </Border>
-                                                <Border MinHeight="54" Padding="0,10" BorderBrush="#26262b" BorderThickness="0,0,0,1"
-                                                        IsVisible="{Binding ConfigInstCustomJava}">
-                                                    <Grid ColumnDefinitions="* Auto">
-                                                        <StackPanel VerticalAlignment="Center" Spacing="2" Margin="0,0,16,0">
-                                                            <TextBlock Text="运行时版本" FontWeight="Medium" Foreground="#fafafa" FontSize="13"/>
-                                                            <TextBlock Text="{Binding ConfigInstJavaLabel}" FontSize="12" Foreground="#71717a" TextTrimming="CharacterEllipsis"/>
-                                                        </StackPanel>
-                                                        <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
-                                                            <Button Classes="BtnSm BtnOutline" Width="160"
-                                                                    HorizontalContentAlignment="Stretch"
-                                                                    Command="{Binding ToggleInstJavaChooserCommand}">
-                                                                <Grid ColumnDefinitions="* Auto">
-                                                                    <TextBlock Grid.Column="0" Text="选择…" VerticalAlignment="Center" FontSize="12"/>
-                                                                    <materialIcons:MaterialIcon Grid.Column="1" Kind="ChevronDown" Width="14" Height="14" Foreground="#71717a"/>
-                                                                </Grid>
-                                                            </Button>
-                                                            <Button Classes="BtnSm BtnOutline" Click="OnPickInstJavaClick" ToolTip.Tip="浏览自定义路径">
-                                                                <StackPanel Orientation="Horizontal" Spacing="4">
-                                                                    <materialIcons:MaterialIcon Kind="FolderSearchOutline" Width="14" Height="14"/>
-                                                                    <TextBlock Text="浏览…" FontSize="12" VerticalAlignment="Center"/>
-                                                                </StackPanel>
-                                                            </Button>
-                                                        </StackPanel>
-                                                    </Grid>
-                                                </Border>
-                                                <Border BorderBrush="#26262b" BorderThickness="1" CornerRadius="10" Background="#111114" Padding="4"
-                                                        Margin="0,8,0,8" IsVisible="{Binding IsInstJavaChooserOpen}">
-                                                    <ItemsControl ItemsSource="{Binding InstJavaOptions}">
-                                                        <ItemsControl.ItemTemplate>
-                                                            <DataTemplate x:DataType="models:JavaOptionModel">
-                                                                <Button Classes="MenuItem"
-                                                                        Command="{Binding $parent[Window].((vm:MainWindowViewModel)DataContext).SelectInstJavaCommand}"
-                                                                        CommandParameter="{Binding .}">
-                                                                    <Grid ColumnDefinitions="* Auto">
-                                                                        <TextBlock Text="{Binding Label}" FontSize="13" Foreground="#fafafa"
-                                                                                   VerticalAlignment="Center" TextTrimming="CharacterEllipsis"/>
-                                                                        <materialIcons:MaterialIcon Grid.Column="1" Kind="Check" Width="14" Height="14"
-                                                                                                    Foreground="#fafafa" IsVisible="{Binding IsSelected}"/>
-                                                                    </Grid>
-                                                                </Button>
-                                                            </DataTemplate>
-                                                        </ItemsControl.ItemTemplate>
-                                                    </ItemsControl>
-                                                </Border>
-                                                <Border Height="54">
-                                                    <Grid ColumnDefinitions="* Auto">
-                                                        <StackPanel VerticalAlignment="Center" Spacing="2" Margin="0,0,16,0">
-                                                            <TextBlock Text="JVM 附加启动参数" FontWeight="Medium" Foreground="#fafafa" FontSize="13"/>
-                                                            <TextBlock Text="以空格分隔，逐条传给游戏进程" FontSize="12" Foreground="#71717a"/>
-                                                        </StackPanel>
-                                                        <TextBox Grid.Column="1" Width="220" Height="32" VerticalAlignment="Center"
-                                                                 CornerRadius="8" Background="#111114" BorderBrush="#26262b"
-                                                                 PlaceholderText="-XX:+UseG1GC" FontSize="12"
-                                                                 Text="{Binding ConfigInstExtraJvmArgs, Mode=TwoWay, Delay=500}"/>
-                                                    </Grid>
-                                                </Border>
-                                            </StackPanel>
-                                        </Border>
-
-                                        <!-- 内存与性能 -->
-                                        <Border Background="#18181b" BorderBrush="#26262b" BorderThickness="1" CornerRadius="12" Padding="16,0">
-                                            <StackPanel>
-                                                <Border Height="54" BorderBrush="#26262b" BorderThickness="0,0,0,1">
-                                                    <Grid ColumnDefinitions="* Auto">
-                                                        <StackPanel VerticalAlignment="Center" Spacing="2" Margin="0,0,16,0">
-                                                            <TextBlock Text="独立最大内存" FontWeight="Medium" Foreground="#fafafa" FontSize="13"/>
-                                                            <TextBlock Text="{Binding GlobalMemoryGbSummary, StringFormat='关闭后使用全局设置（当前 {0}）'}"
-                                                                       FontSize="12" Foreground="#71717a"/>
-                                                        </StackPanel>
-                                                        <CheckBox Grid.Column="1" Classes="Tick" IsChecked="{Binding ConfigInstCustomMemory}"/>
-                                                    </Grid>
-                                                </Border>
-                                                <Border Height="54" BorderBrush="#26262b" BorderThickness="0,0,0,1"
-                                                        IsVisible="{Binding ConfigInstCustomMemory}">
-                                                    <Grid ColumnDefinitions="* Auto">
-                                                        <TextBlock Text="分配给这个实例" FontWeight="Medium" Foreground="#fafafa" FontSize="13" VerticalAlignment="Center"/>
-                                                        <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
-                                                            <!-- 拖动期间数字跟着滑条走（#名字），落盘等拇指停下（Delay），
-                                                                 不然一寸一寸写盘、字还滞后。上限按物理内存封顶。 -->
-                                                            <Slider x:Name="InstMemSlider" Value="{Binding ConfigInstMemoryGb, Delay=300}"
-                                                                    Minimum="1" Maximum="{Binding MemorySliderMax}" Width="180"/>
-                                                            <TextBlock Text="{Binding #InstMemSlider.Value, StringFormat='{}{0} GB'}"
-                                                                       Width="48" TextAlignment="Right" Foreground="#fafafa" FontWeight="Medium" FontSize="13"/>
-                                                        </StackPanel>
-                                                    </Grid>
-                                                </Border>
-                                                <Border Height="54">
-                                                    <Grid ColumnDefinitions="* Auto">
-                                                        <StackPanel VerticalAlignment="Center" Spacing="2" Margin="0,0,16,0">
-                                                            <TextBlock Text="内存预分配 (Xms)" FontWeight="Medium" Foreground="#fafafa" FontSize="13"/>
-                                                            <TextBlock Text="启动时即占满最大内存，可减少 GC 碎片"
-                                                                       FontSize="12" Foreground="#71717a"/>
-                                                        </StackPanel>
-                                                        <CheckBox Grid.Column="1" Classes="Tick" IsChecked="{Binding ConfigInstPreallocate}"/>
-                                                    </Grid>
-                                                </Border>
-                                            </StackPanel>
-                                        </Border>
-                                    </StackPanel>
-                                </ScrollViewer>
-
-                                <!-- 6. 文件与管理 -->
+                                <!-- 5. 文件与管理 -->
                                 <ScrollViewer VerticalScrollBarVisibility="Auto"
                                               IsVisible="{Binding ConfigTab, Converter={x:Static ObjectConverters.Equal}, ConverterParameter='目录'}">
                                     <StackPanel Spacing="16" Margin="0,0,10,0">
@@ -1482,7 +1572,7 @@
                                                         </Button>
                                                     </Grid>
                                                 </Border>
-                                                <Border Height="54" BorderBrush="#26262b" BorderThickness="0,0,0,1">
+                                                <Border Height="54">
                                                     <Grid ColumnDefinitions="* Auto">
                                                         <StackPanel VerticalAlignment="Center" Spacing="2" Margin="0,0,16,0">
                                                             <TextBlock Text="资源包 (resourcepacks)" FontWeight="Medium" Foreground="#fafafa" FontSize="13"/>
@@ -1498,31 +1588,7 @@
                                                         </Button>
                                                     </Grid>
                                                 </Border>
-                                                <Border Height="54" BorderBrush="#26262b" BorderThickness="0,0,0,1">
-                                                    <Grid ColumnDefinitions="* Auto">
-                                                        <StackPanel VerticalAlignment="Center" Spacing="2" Margin="0,0,16,0">
-                                                            <TextBlock Text="导出整合包" FontWeight="Medium" Foreground="#fafafa" FontSize="13"/>
-                                                            <TextBlock Text="打包模组与配置，不含存档；可分享或重新导入" FontSize="12" Foreground="#71717a"/>
-                                                        </StackPanel>
-                                                        <Button Grid.Column="1" Classes="BtnSm BtnOutline"
-                                                                Command="{Binding ExportInstanceCommand}" CommandParameter="{Binding EditingInstance}">
-                                                            <StackPanel Orientation="Horizontal" Spacing="6">
-                                                                <materialIcons:MaterialIcon Kind="PackageVariantClosed" Width="14" Height="14"/>
-                                                                <TextBlock Text="导出" VerticalAlignment="Center"/>
-                                                            </StackPanel>
-                                                        </Button>
-                                                    </Grid>
-                                                </Border>
-                                                <Border Height="54">
-                                                    <Grid ColumnDefinitions="* Auto">
-                                                        <StackPanel VerticalAlignment="Center" Spacing="2" Margin="0,0,16,0">
-                                                            <TextBlock Text="删除实例" FontWeight="Medium" Foreground="#fafafa" FontSize="13"/>
-                                                            <TextBlock Text="版本文件夹会一并删除，无法恢复" FontSize="12" Foreground="#f87171"/>
-                                                        </StackPanel>
-                                                        <Button Grid.Column="1" Classes="BtnSm Danger" Content="删除"
-                                                                Command="{Binding DeleteEditingInstanceCommand}"/>
-                                                    </Grid>
-                                                </Border>
+                                                <!-- 导出与删除挪去了概览（快捷操作 / 危险区），这里只留路径。 -->
                                             </StackPanel>
                                         </Border>
                                     </StackPanel>
@@ -2237,8 +2303,10 @@
                                                       Command="{Binding $parent[Window].((vm:MainWindowViewModel)DataContext).SetDefaultFolderCommand}"
                                                       CommandParameter="{Binding Path}"/>
                                             <MenuItem Header="复制路径" Click="OnCopyFolderPath"/>
-                                            <Separator/>
+                                            <!-- 官方启动器目录由启动器托管，不给移除入口（Settings 层还有一道守卫）。 -->
+                                            <Separator IsVisible="{Binding !IsOfficial}"/>
                                             <MenuItem Header="移除此目录" Foreground="#f87171"
+                                                      IsVisible="{Binding !IsOfficial}"
                                                       Command="{Binding $parent[Window].((vm:MainWindowViewModel)DataContext).RemoveFolderCommand}"
                                                       CommandParameter="{Binding Path}"/>
                                         </ContextMenu>
