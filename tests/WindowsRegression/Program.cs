@@ -197,6 +197,8 @@ internal static class Program
             await CheckMotionPreference();
             await CheckMenuSeparator();
             await CheckInstanceExport();
+            CheckInstanceDeletion();
+            CheckInstanceUiGuards();
             await CheckFoxSqueeze();
 
             pet = new PetWindow("", null) { Left = 500, Top = 300 };
@@ -645,6 +647,107 @@ internal static class Program
                 // 临时目录删不掉不影响检查结果。
             }
         }
+    }
+
+    /// <summary>
+    /// 删除实例 = versions/&lt;id&gt; 整目录进回收站、实例表里除名。回收站本身的内容不在此断言
+    /// （那要扒 Shell 命名空间），这里守住的是「删完原位必须没了、不抛异常、不留半棵目录」。
+    /// </summary>
+    private static void CheckInstanceDeletion()
+    {
+        var sandbox = Path.Combine(Path.GetTempPath(), "NCL", "delete-check", Guid.NewGuid().ToString("N"));
+        var game = Path.Combine(sandbox, "game");
+        var version = Path.Combine(game, "versions", "DelPack");
+
+        try
+        {
+            Directory.CreateDirectory(Path.Combine(version, "saves", "world"));
+            File.WriteAllText(Path.Combine(version, "DelPack.json"), """
+                {
+                  "id": "DelPack",
+                  "clientVersion": "1.20.1",
+                  "type": "release",
+                  "mainClass": "net.minecraft.client.main.Main"
+                }
+                """);
+            File.WriteAllText(Path.Combine(version, "saves", "world", "level.dat"), "save");
+
+            var manager = new InstanceManager(game, Path.Combine(sandbox, "instances.json"));
+            manager.Load();
+            manager.Delete(manager.Instances.Single().Id);
+
+            Check("instance delete removes the version directory", !Directory.Exists(version));
+            Check("instance delete forgets the instance", manager.Instances.Count == 0);
+
+            // 单文件 / 单目录走同一条回收站路：外壳调用失败也会兜底成永久删除，原位同样必须空。
+            var stray = Path.Combine(sandbox, "stray.txt");
+            File.WriteAllText(stray, "x");
+            NegiCraftLauncher.Core.RecycleBin.Delete(stray);
+            Check("recycle delete removes the original file", !File.Exists(stray));
+
+            var folder = Path.Combine(sandbox, "folder");
+            Directory.CreateDirectory(Path.Combine(folder, "inner"));
+            File.WriteAllText(Path.Combine(folder, "inner", "a.txt"), "a");
+            NegiCraftLauncher.Core.RecycleBin.Delete(folder);
+            Check("recycle delete removes the original directory", !Directory.Exists(folder));
+        }
+        finally
+        {
+            try
+            {
+                if (Directory.Exists(sandbox)) Directory.Delete(sandbox, recursive: true);
+            }
+            catch (Exception)
+            {
+                // 临时目录删不掉不影响检查结果。
+            }
+        }
+    }
+
+    /// <summary>
+    /// 两份 UI 壳（WPF / Avalonia）上这次交互改动的防回归：保存按钮、管理页分隔线、成功横幅
+    /// 不能回来；播放禁用态、刷新 / 清筛选 / 批量开关、内存上限、拖放文案的绑定不能丢。
+    /// 走源码扫描而不是开真窗口 —— 这些都是「XAML 里写没写」的问题，编译器不管。
+    /// </summary>
+    private static void CheckInstanceUiGuards()
+    {
+        var root = FindRepoRoot();
+        if (root is null)
+        {
+            Check("ui guards locate the repository", false);
+            return;
+        }
+
+        var wpf = File.ReadAllText(Path.Combine(root, "src", "NegiCraftLauncher.App", "MainWindow.xaml"));
+        var wpfFiles = File.ReadAllText(Path.Combine(root, "src", "NegiCraftLauncher.App", "MainWindow.Files.cs"));
+        var ava = File.ReadAllText(Path.Combine(root, "src", "NegiCraftLauncher.App.Avalonia", "Views", "MainWindow.axaml"));
+        var avaFiles = File.ReadAllText(Path.Combine(root, "src", "NegiCraftLauncher.App.Avalonia", "Views", "MainWindow.Files.cs"));
+
+        const string Splitter = """<Rectangle Grid.Column="1" Width="1" Fill="#26262b" HorizontalAlignment="Center" VerticalAlignment="Stretch"/>""";
+
+        Check("both shells drop the explicit save button", !wpf.Contains("保存配置") && !ava.Contains("保存配置"));
+        Check("both shells drop the manage-page splitter line", !wpf.Contains(Splitter) && !ava.Contains(Splitter));
+        Check("file pickers stop toasting success", !wpfFiles.Contains("已添加") && !avaFiles.Contains("已添加"));
+        Check("both shells grey launch entry points while the game runs",
+            wpf.Contains("CanQuickLaunch") && ava.Contains("CanQuickLaunch"));
+        Check("both shells expose refresh / clear-filter / bulk mod toggles",
+            wpf.Contains("RefreshInstancesListCommand") && ava.Contains("RefreshInstancesListCommand") &&
+            wpf.Contains("ClearInstanceFiltersCommand") && ava.Contains("ClearInstanceFiltersCommand") &&
+            wpf.Contains("EnableAllModsCommand") && ava.Contains("EnableAllModsCommand"));
+        Check("both shells cap the memory slider by physical RAM",
+            wpf.Contains("MemorySliderMax") && ava.Contains("MemorySliderMax"));
+        Check("drop overlay text follows what is being dropped",
+            wpf.Contains("DropOverlayText") && ava.Contains("DropOverlayText"));
+    }
+
+    private static string? FindRepoRoot()
+    {
+        for (var dir = new DirectoryInfo(AppContext.BaseDirectory); dir is not null; dir = dir.Parent)
+        {
+            if (File.Exists(Path.Combine(dir.FullName, "src", "NegiCraftLauncher.App", "MainWindow.xaml")))
+                return dir.FullName;
+        }
+        return null;
     }
 
     private static async Task CheckFoxSqueeze()
