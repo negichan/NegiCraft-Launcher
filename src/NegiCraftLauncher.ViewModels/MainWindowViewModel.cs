@@ -1127,8 +1127,31 @@ public partial class MainWindowViewModel : ViewModelBase
     /// <summary>有实例，但被搜索/筛选筛到一条不剩 —— 空状态要换一套话术。</summary>
     public bool HasNoInstanceMatches => HasInstances && VisibleInstances.Count == 0;
 
-    /// <summary>筛空了的一句话提示：只说下一步，不复述当前筛选条件。</summary>
-    public string InstanceEmptyHint => "换个关键词，或清除筛选";
+    /// <summary>筛空了的一句话提示：跟着筛法走，只点了加载器时说「换关键词」就是瞎指挥。</summary>
+    public string InstanceEmptyHint
+    {
+        get
+        {
+            var hasQuery = InstanceSearch.Trim().Length > 0;
+            var hasLoader = InstanceLoader != LoaderOptionModel.AllName;
+            if (hasQuery && hasLoader) return "这个加载器下没有叫这个名字的实例";
+            if (hasQuery) return "换个关键词试试";
+            return "这个加载器下还没有实例";
+        }
+    }
+
+    /// <summary>一键清掉搜索词和加载器筛选。空态里光出主意不给出口，等于没说。</summary>
+    [RelayCommand]
+    private void ClearInstanceFilters()
+    {
+        InstanceLoader = LoaderOptionModel.AllName;
+        InstanceSearch = "";
+        MarkLoaderSelected();
+    }
+
+    /// <summary>实例页工具条那颗刷新：外部装的版本不用等游戏退出或切目录才出现。</summary>
+    [RelayCommand]
+    private void RefreshInstancesList() => RefreshInstances();
 
     /// <summary>加载器筛选的下拉。选项来自 <see cref="LoaderChoices" />，所以列表比"所有存在的加载器"短得多。</summary>
     [ObservableProperty]
@@ -1196,6 +1219,13 @@ public partial class MainWindowViewModel : ViewModelBase
     [RelayCommand]
     private async Task LaunchInstanceAsync(InstanceModel instance)
     {
+        // 先判断再动状态：运行中直接回掉的话，当前实例被换、页面被跳，游戏却没动静。
+        if (IsLaunching || IsGameRunning)
+        {
+            ShowBanner("游戏正在运行中。");
+            return;
+        }
+
         MakeCurrentInstance(instance);
         CurrentPage = "home";
         await LaunchGameAsync();
@@ -1461,6 +1491,14 @@ public partial class MainWindowViewModel : ViewModelBase
     [ObservableProperty]
     private bool _isDropOverlayVisible;
 
+    /// <summary>拖放遮罩上那句主文案：管理页里拖 .jar 是加模组，不是导整合包。</summary>
+    [ObservableProperty]
+    private string _dropOverlayText = "释放以导入整合包";
+
+    /// <summary>遮罩第二行小字（装到哪）：只有导整合包时才有意义。</summary>
+    [ObservableProperty]
+    private string _dropOverlaySubtext = "";
+
     public string PackProgressText => IsPackImportBusy
         ? $"{PackStageText} {PackProgressValue:0}%"
         : "";
@@ -1691,6 +1729,80 @@ public partial class MainWindowViewModel : ViewModelBase
     [ObservableProperty]
     private bool _configInstPreallocate;
 
+    /// <summary>装填字段 / 程序化回拨期间压住自动保存与隔离询问，免得自己触发自己。</summary>
+    private bool _suppressInstAutosave;
+
+    // 改动即存：字段落盘不再等「保存」按钮（按钮已经没了）。文本框和滑条在 XAML 侧
+    // 用 Binding.Delay 挡住逐键 / 逐像素的写入，走到这里的就是停稳了的值。
+    partial void OnConfigInstNameChanged(string value) => AutosaveInstance();
+    partial void OnConfigInstExtraJvmArgsChanged(string value) => AutosaveInstance();
+    partial void OnConfigInstMemoryGbChanged(int value) => AutosaveInstance();
+    partial void OnConfigInstPreallocateChanged(bool value) => AutosaveInstance();
+    partial void OnConfigInstCustomMemoryChanged(bool value) => AutosaveInstance();
+    partial void OnConfigInstJavaPathChanged(string? value) => AutosaveInstance();
+
+    partial void OnConfigInstIsolatedChanged(bool value) => _ = HandleIsolatedToggleAsync(value);
+
+    partial void OnConfigInstCustomJavaChanged(bool value)
+    {
+        if (value && string.IsNullOrWhiteSpace(ConfigInstJavaPath))
+        {
+            // 勾了「独立 Java」还没挑运行时：把选择器递到眼前，而不是让他存一个空承诺。
+            IsInstJavaChooserOpen = true;
+        }
+        else if (!value)
+        {
+            ConfigInstJavaLabel = "跟随全局设置";
+        }
+
+        AutosaveInstance();
+    }
+
+    /// <summary>滑条上限跟着物理内存走：8 GB 的机器不该能拉出 32 GB 的 -Xmx。</summary>
+    public int MemorySliderMax => Math.Clamp(PhysicalMemoryGb, 2, 32);
+
+    private static int _physicalMemoryGb = -1;
+
+    private static int PhysicalMemoryGb
+    {
+        get
+        {
+            if (_physicalMemoryGb > 0) return _physicalMemoryGb;
+            _physicalMemoryGb = 32;
+            if (OperatingSystem.IsWindows())
+            {
+                try
+                {
+                    var status = new MemoryStatusEx { Length = (uint)System.Runtime.InteropServices.Marshal.SizeOf<MemoryStatusEx>() };
+                    if (GlobalMemoryStatusEx(ref status)) _physicalMemoryGb = (int)Math.Clamp(status.TotalPhys / (1024L * 1024 * 1024), 1, 32);
+                }
+                catch
+                {
+                    // 拿不到就按 32 上限走，跟老行为一致。
+                }
+            }
+            return _physicalMemoryGb;
+        }
+    }
+
+    [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)]
+    private struct MemoryStatusEx
+    {
+        public uint Length;
+        public uint MemoryLoad;
+        public ulong TotalPhys;
+        public ulong AvailPhys;
+        public ulong TotalPageFile;
+        public ulong AvailPageFile;
+        public ulong TotalVirtual;
+        public ulong AvailVirtual;
+        public ulong AvailExtendedVirtual;
+    }
+
+    [System.Runtime.InteropServices.DllImport("kernel32.dll", SetLastError = true)]
+    [return: System.Runtime.InteropServices.MarshalAs(System.Runtime.InteropServices.UnmanagedType.Bool)]
+    private static extern bool GlobalMemoryStatusEx(ref MemoryStatusEx status);
+
     public ObservableCollection<JavaOptionModel> InstJavaOptions { get; } = new();
 
     public string GlobalMemoryGbSummary => $"{MaxMemoryGb} GB";
@@ -1763,6 +1875,38 @@ public partial class MainWindowViewModel : ViewModelBase
 
     [RelayCommand]
     private void AddResourcePackFile() => RequestAddResourcePackFile?.Invoke();
+
+    /// <summary>把 .jar 拖进管理页窗口 = 加进 mods。复制语义与「添加模组」按钮一致，静默完成。</summary>
+    public void AddModFilesFromDrop(IEnumerable<string> files)
+    {
+        if (CopyIntoInstanceFolder(files, EditingModsDirectory, ".jar")) RefreshEditingMods();
+    }
+
+    /// <summary>资源包页里拖 .zip = 加进 resourcepacks。</summary>
+    public void AddResourcePackFilesFromDrop(IEnumerable<string> files)
+    {
+        if (CopyIntoInstanceFolder(files, EditingResourcePacksDirectory, ".zip")) RefreshEditingResourcePacks();
+    }
+
+    private bool CopyIntoInstanceFolder(IEnumerable<string> files, string targetDir, string extension)
+    {
+        var copied = false;
+        try
+        {
+            Directory.CreateDirectory(targetDir);
+            foreach (var file in files)
+            {
+                if (!file.EndsWith(extension, StringComparison.OrdinalIgnoreCase)) continue;
+                File.Copy(file, Path.Combine(targetDir, Path.GetFileName(file)), overwrite: true);
+                copied = true;
+            }
+        }
+        catch (Exception ex)
+        {
+            ShowBanner($"添加文件失败：{ex.Message}");
+        }
+        return copied;
+    }
 
     // ==========================================================
     // 实例图标
@@ -2085,11 +2229,11 @@ public partial class MainWindowViewModel : ViewModelBase
         SyncIconPresetSelection();
     }
 
-    /// <summary>返回实例列表页并保存可能改过的基本设置。</summary>
+    /// <summary>返回实例列表页。字段都是改动即存，这里只剩一件事：名称被清空时救回来。</summary>
     [RelayCommand]
     private void BackToInstances()
     {
-        SaveEditingInstanceInternal();
+        RestoreInstanceNameIfCleared();
         CurrentPage = "instances";
     }
 
@@ -2101,7 +2245,6 @@ public partial class MainWindowViewModel : ViewModelBase
 
         MakeCurrentInstance(instance);
         OnPropertyChanged(nameof(IsEditingCurrentInstance));
-        ShowBanner($"已将「{instance.Name}」设为当前实例。");
     }
 
     /// <summary>从管理页启动当前正在编辑的实例，启动后返回首页。</summary>
@@ -2110,36 +2253,46 @@ public partial class MainWindowViewModel : ViewModelBase
     {
         if (EditingInstance is not { } instance) return;
 
-        SaveEditingInstanceInternal();
+        RestoreInstanceNameIfCleared();
         await LaunchInstanceAsync(instance);
     }
 
-    /// <summary>删除当前正在编辑的实例，删完回实例列表。</summary>
+    /// <summary>删除当前正在编辑的实例。确认之前不跳页 —— 取消的人不该被踢出编辑现场。</summary>
     [RelayCommand]
     private async Task DeleteEditingInstanceAsync()
     {
         if (EditingInstance is not { } instance) return;
 
-        CurrentPage = "instances";
         await DeleteInstanceAsync(instance);
+        if (_launcher.Instances.Find(instance.Id) is null) CurrentPage = "instances";
     }
 
     [RelayCommand]
     private void OpenInstanceConfig(InstanceModel instance)
     {
-        EditingInstance = instance;
-        ConfigInstName = instance.Name;
-        ConfigInstIsolated = instance.Isolated;
-        ConfigInstJavaPath = instance.JavaPath;
-        ConfigInstCustomJava = !string.IsNullOrWhiteSpace(instance.JavaPath);
+        // 装填字段期间别触发自动保存 —— 那只是把旧值原样写回去。
+        _suppressInstAutosave = true;
+        try
+        {
+            EditingInstance = instance;
+            ConfigInstName = instance.Name;
+            ConfigInstIsolated = instance.Isolated;
+            ConfigInstJavaPath = instance.JavaPath;
+            ConfigInstCustomJava = !string.IsNullOrWhiteSpace(instance.JavaPath);
 
-        ConfigInstCustomMemory = instance.MaxMemoryMb.HasValue;
-        ConfigInstMemoryGb = instance.MaxMemoryMb.HasValue
-            ? Math.Clamp(instance.MaxMemoryMb.Value / 1024, 1, 32)
-            : MaxMemoryGb;
+            ConfigInstCustomMemory = instance.MaxMemoryMb.HasValue;
+            ConfigInstMemoryGb = instance.MaxMemoryMb.HasValue
+                ? Math.Clamp(instance.MaxMemoryMb.Value / 1024, 1, 32)
+                : MaxMemoryGb;
+            ConfigInstMemoryGb = Math.Clamp(ConfigInstMemoryGb, 1, MemorySliderMax);
 
-        ConfigInstExtraJvmArgs = instance.ExtraJvmArguments ?? "";
-        ConfigInstPreallocate = instance.PreallocateMemory;
+            ConfigInstExtraJvmArgs = instance.ExtraJvmArguments ?? "";
+            ConfigInstPreallocate = instance.PreallocateMemory;
+        }
+        finally
+        {
+            _suppressInstAutosave = false;
+        }
 
         RefreshInstJavaOptions();
         IsInstJavaChooserOpen = false;
@@ -2149,9 +2302,15 @@ public partial class MainWindowViewModel : ViewModelBase
         ModSearch = "";
         RefreshInstanceManageData();
 
-        IsInstConfigOpen = false;
         CurrentPage = "instance_manage";
     }
+
+    /// <summary>
+    /// 显式「保存配置」。WPF 端已改成改动即存、按钮撤掉；Avalonia 端还留着那两颗按钮，
+    /// 命令因此保留 —— 走的还是同一条落盘路。
+    /// </summary>
+    [RelayCommand]
+    private void SaveEditingInstance() => SaveEditingInstanceInternal();
 
     [RelayCommand]
     private void CloseInstanceConfig()
@@ -2160,18 +2319,83 @@ public partial class MainWindowViewModel : ViewModelBase
         CurrentPage = "instances";
     }
 
-    [RelayCommand]
-    private void SaveEditingInstance()
+    /// <summary>
+    /// 名称被清空时自动保存会整段跳过（空名存不进去），返回/启动前把旧名字填回去并补一次保存，
+    /// 免得「名字没打完就点返回」把内存、Java 那些改动一起带走。
+    /// </summary>
+    private void RestoreInstanceNameIfCleared()
     {
-        if (SaveEditingInstanceInternal())
+        if (EditingInstance is not { } instance) return;
+        if (!string.IsNullOrWhiteSpace(ConfigInstName)) return;
+
+        _suppressInstAutosave = true;
+        ConfigInstName = instance.Name;
+        _suppressInstAutosave = false;
+        SaveEditingInstanceInternal();
+    }
+
+    /// <summary>改动即存：管理页里任何字段变了就走这里，静默落盘，只在失败时开口。</summary>
+    private void AutosaveInstance()
+    {
+        if (_suppressInstAutosave || EditingInstance is null) return;
+        if (string.IsNullOrWhiteSpace(ConfigInstName)) return;   // 打字中间态，离开页面时会救回来
+
+        SaveEditingInstanceInternal();
+
+        // 「独立 Java」勾着但没选路径：存进去的是空 = 跟随全局。把勾选态同步回来，别让它撒谎。
+        if (ConfigInstCustomJava && string.IsNullOrWhiteSpace(ConfigInstJavaPath))
         {
-            ShowBanner($"实例「{ConfigInstName.Trim()}」配置已保存。");
+            _suppressInstAutosave = true;
+            ConfigInstCustomJava = false;
+            ConfigInstJavaLabel = "跟随全局设置";
+            _suppressInstAutosave = false;
         }
     }
 
-    // 保留旧命名以防外部或旧视图绑定调用
-    [RelayCommand]
-    private void SaveInstanceConfig() => SaveEditingInstance();
+    /// <summary>切版本隔离前问一句：文件不搬家，存档和模组会「看起来没了」。</summary>
+    private async Task HandleIsolatedToggleAsync(bool value)
+    {
+        if (_suppressInstAutosave || EditingInstance is not { } instance) return;
+        if (value == instance.Isolated) return;   // 程序化回拨，不是用户的选择
+
+        var oldDir = _launcher.Instances.GameDirectoryFor(instance.Source);
+        if (!GameDirHasContent(oldDir))
+        {
+            // 两边都空，切了也没损失。
+            AutosaveInstance();
+            RefreshInstanceManageData();
+            return;
+        }
+
+        var answer = await ShowDialogAsync("版本隔离",
+            $"切换后，已有的存档与模组仍留在原来的目录，不会跟着移动。\n要把「{instance.Name}」切换为{(value ? "独立存放" : "共用目录")}吗？",
+            null, null, "切换");
+        if (answer is null)
+        {
+            _suppressInstAutosave = true;
+            ConfigInstIsolated = instance.Isolated;
+            _suppressInstAutosave = false;
+            return;
+        }
+
+        AutosaveInstance();
+        // 目录换了，模组 / 世界 / 资源包三张列表得跟着换，不然同一页里路径和内容互相矛盾。
+        RefreshInstanceManageData();
+    }
+
+    private static bool GameDirHasContent(string dir)
+    {
+        foreach (var sub in new[] { "saves", "mods", "resourcepacks" })
+        {
+            var path = Path.Combine(dir, sub);
+            try
+            {
+                if (Directory.Exists(path) && Directory.EnumerateFileSystemEntries(path).Any()) return true;
+            }
+            catch { }
+        }
+        return false;
+    }
 
     private bool SaveEditingInstanceInternal()
     {
@@ -2185,7 +2409,9 @@ public partial class MainWindowViewModel : ViewModelBase
         }
 
         var javaPath = ConfigInstCustomJava ? ConfigInstJavaPath : null;
-        var maxMemoryMb = ConfigInstCustomMemory ? (int?)(ConfigInstMemoryGb * 1024) : null;
+        var maxMemoryMb = ConfigInstCustomMemory
+            ? (int?)(Math.Clamp(ConfigInstMemoryGb, 1, MemorySliderMax) * 1024)
+            : null;
 
         _launcher.Instances.Update(EditingInstance.Id, name, ConfigInstIsolated, javaPath, maxMemoryMb,
             ConfigInstExtraJvmArgs, ConfigInstPreallocate);
@@ -2238,21 +2464,15 @@ public partial class MainWindowViewModel : ViewModelBase
             var oldPath = item.FilePath;
             if (!File.Exists(oldPath)) return;
 
-            string newPath;
-            if (item.IsEnabled)
-            {
-                newPath = oldPath.EndsWith(".disabled", StringComparison.OrdinalIgnoreCase)
+            // 先算目标路径、后改 UI 状态：改名一抛异常，勾选框不能停在和磁盘相反的那一格。
+            var disabling = item.IsEnabled;
+            string newPath = disabling
+                ? oldPath.EndsWith(".disabled", StringComparison.OrdinalIgnoreCase)
                     ? oldPath
-                    : oldPath + ".disabled";
-                item.IsEnabled = false;
-            }
-            else
-            {
-                newPath = oldPath.EndsWith(".disabled", StringComparison.OrdinalIgnoreCase)
+                    : oldPath + ".disabled"
+                : oldPath.EndsWith(".disabled", StringComparison.OrdinalIgnoreCase)
                     ? oldPath[..^9]
                     : oldPath;
-                item.IsEnabled = true;
-            }
 
             if (!string.Equals(oldPath, newPath, StringComparison.OrdinalIgnoreCase))
             {
@@ -2261,6 +2481,8 @@ public partial class MainWindowViewModel : ViewModelBase
                 item.FilePath = newPath;
                 item.FileName = Path.GetFileName(newPath);
             }
+
+            item.IsEnabled = !disabling;
 
             var enabledCount = EditingMods.Count(m => m.IsEnabled);
             EditingModCountText = EditingMods.Count == enabledCount
@@ -2283,7 +2505,7 @@ public partial class MainWindowViewModel : ViewModelBase
 
         try
         {
-            if (File.Exists(item.FilePath)) File.Delete(item.FilePath);
+            RecycleBin.Delete(item.FilePath);
             EditingMods.Remove(item);
             FilteredEditingMods.Remove(item);
             var enabledCount = EditingMods.Count(m => m.IsEnabled);
@@ -2294,7 +2516,6 @@ public partial class MainWindowViewModel : ViewModelBase
             OnPropertyChanged(nameof(HasEditingMods));
             OnPropertyChanged(nameof(HasFilteredEditingMods));
             EditingInstance?.Refresh();
-            ShowBanner($"已删除模组「{item.DisplayName}」。");
         }
         catch (Exception ex)
         {
@@ -2310,19 +2531,11 @@ public partial class MainWindowViewModel : ViewModelBase
 
         try
         {
-            if (item.IsDirectory)
-            {
-                if (Directory.Exists(item.FilePath)) Directory.Delete(item.FilePath, true);
-            }
-            else
-            {
-                if (File.Exists(item.FilePath)) File.Delete(item.FilePath);
-            }
+            RecycleBin.Delete(item.FilePath);
             EditingResourcePacks.Remove(item);
             EditingResourcePackCountText = $"{EditingResourcePacks.Count} 资源包";
             OnPropertyChanged(nameof(EditingResourcePackCountText));
             OnPropertyChanged(nameof(HasEditingResourcePacks));
-            ShowBanner($"已删除资源包「{item.Name}」。");
         }
         catch (Exception ex)
         {
@@ -2333,22 +2546,34 @@ public partial class MainWindowViewModel : ViewModelBase
     [RelayCommand]
     private async Task DeleteWorldAsync(WorldItemModel item)
     {
-        var ok = await ShowDialogAsync("删除世界存档", $"确定要删除世界「{item.Name}」吗？删除后无法恢复。", null, null, "删除");
+        var ok = await ShowDialogAsync("删除世界存档", $"确定要删除世界「{item.Name}」吗？删除后会移入回收站。", null, null, "删除");
         if (ok is null) return;
 
         try
         {
-            if (Directory.Exists(item.FolderPath)) Directory.Delete(item.FolderPath, true);
+            RecycleBin.Delete(item.FolderPath);
             EditingWorlds.Remove(item);
             EditingWorldCountText = $"{EditingWorlds.Count} 世界";
             OnPropertyChanged(nameof(EditingWorldCountText));
             OnPropertyChanged(nameof(HasEditingWorlds));
-            ShowBanner($"已删除世界「{item.Name}」。");
         }
         catch (Exception ex)
         {
             ShowBanner($"删除世界失败：{ex.Message}");
         }
+    }
+
+    /// <summary>几十个模组逐个点是折磨：一把全开 / 全关，走的是和单个开关同一条改名路。</summary>
+    [RelayCommand]
+    private void EnableAllMods()
+    {
+        foreach (var mod in EditingMods.Where(m => !m.IsEnabled).ToList()) ToggleMod(mod);
+    }
+
+    [RelayCommand]
+    private void DisableAllMods()
+    {
+        foreach (var mod in EditingMods.Where(m => m.IsEnabled).ToList()) ToggleMod(mod);
     }
 
     private void RefreshEditingMods()
@@ -2517,6 +2742,8 @@ public partial class MainWindowViewModel : ViewModelBase
     private void SelectInstJava(JavaOptionModel option)
     {
         foreach (var o in InstJavaOptions) o.IsSelected = ReferenceEquals(o, option);
+        // 挑了具体运行时就是「独立」；挑回「自动」则顺带把勾选摘掉，两边不能各说各话。
+        ConfigInstCustomJava = option.Path is not null;
         ConfigInstJavaPath = option.Path;
         ConfigInstJavaLabel = option.Label;
         IsInstJavaChooserOpen = false;
@@ -2581,7 +2808,6 @@ public partial class MainWindowViewModel : ViewModelBase
     {
         CurrentResCategory = "game";
         CurrentPage = "download";
-        ShowBanner("选择版本安装，装好后会自动设为当前实例。");
     }
 
     [RelayCommand]
@@ -2590,8 +2816,11 @@ public partial class MainWindowViewModel : ViewModelBase
         var name = await ShowDialogAsync("重命名实例", instance.Name, "新名字", instance.Name, "保存");
         if (name is null || string.IsNullOrWhiteSpace(name)) return;
 
-        _launcher.Instances.Rename(instance.Id, name);
-        RefreshInstances();
+        if (!_launcher.Instances.Rename(instance.Id, name)) return;
+
+        // 原地刷新而不是整表重建：列表一长，改个名字不该把滚动条弹回顶部。
+        instance.Refresh();
+        if (InstanceSort == "名称") ApplyInstanceFilter();
     }
 
     /// <summary>右键与配置页共用：真正落盘前先由视图问「存到哪」。</summary>
@@ -2629,8 +2858,8 @@ public partial class MainWindowViewModel : ViewModelBase
     private async Task DeleteInstanceAsync(InstanceModel instance)
     {
         var message = instance.Isolated
-            ? $"删除「{instance.Name}」？游戏目录、存档和模组会一起删除，无法恢复。"
-            : $"删除「{instance.Name}」？只删除版本本体，共用目录里的存档和模组不受影响。";
+            ? $"删除「{instance.Name}」？游戏目录、存档和模组会一起移入回收站。"
+            : $"删除「{instance.Name}」？只删除版本本体（移入回收站），共用目录里的存档和模组不受影响。";
         var ok = await ShowDialogAsync("删除实例", message, null, null, "删除");
         if (ok is null) return;
 
@@ -2921,11 +3150,19 @@ public partial class MainWindowViewModel : ViewModelBase
 
     public bool CanLaunch => !IsLaunching && !IsGameRunning && CurrentInstance is not null;
 
-    partial void OnIsLaunchingChanged(bool value) => OnPropertyChanged(nameof(CanLaunch));
+    /// <summary>卡片 / 列表 / 管理页头上的启动入口：游戏在跑就压灰，而不是点了没动静。</summary>
+    public bool CanQuickLaunch => !IsLaunching && !IsGameRunning;
+
+    partial void OnIsLaunchingChanged(bool value)
+    {
+        OnPropertyChanged(nameof(CanLaunch));
+        OnPropertyChanged(nameof(CanQuickLaunch));
+    }
 
     partial void OnIsGameRunningChanged(bool value)
     {
         OnPropertyChanged(nameof(CanLaunch));
+        OnPropertyChanged(nameof(CanQuickLaunch));
         LaunchBtnText = value ? "游戏运行中" : "启动游戏";
     }
 

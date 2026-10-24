@@ -209,10 +209,8 @@ public sealed class InstanceManager
         Save();
 
         var directory = _repository.DirectoryOf(id);
-        if (Directory.Exists(directory))
-        {
-            Directory.Delete(directory, recursive: true);
-        }
+        // 版本本体进回收站：整个目录可能几百 MB，但同盘移动只是改名，不复制数据。
+        RecycleBin.Delete(directory);
 
         return true;
     }

@@ -115,7 +115,6 @@ public partial class MainWindow
                     File.Copy(file, dest, overwrite: true);
                 }
                 vm.RefreshInstanceManageDataCommand.Execute(null);
-                vm.ShowBanner($"已添加 {dlg.FileNames.Length} 个模组。");
             }
             catch (Exception ex)
             {
@@ -147,7 +146,6 @@ public partial class MainWindow
                     File.Copy(file, dest, overwrite: true);
                 }
                 vm.RefreshInstanceManageDataCommand.Execute(null);
-                vm.ShowBanner($"已添加 {dlg.FileNames.Length} 个资源包。");
             }
             catch (Exception ex)
             {
@@ -220,10 +218,11 @@ public partial class MainWindow
     }
 
     /// <summary>
-    ///     拖文件进窗口 = 导入整合包。
+    ///     拖文件进窗口：管理页里 .jar 是加模组、资源包页里 .zip 是加资源包，其余才是导整合包。
     ///
     ///     <para><b>DragOver 每动一下就来一次</b>，所以遮罩只在该亮的时候亮着写；真正判"离开了"要看
-    ///     指针是不是出了窗口边界 —— 子元素之间穿来穿去也会发 DragLeave，直接熄就会一路闪。</para>
+    ///     指针是不是出了窗口边界 —— 子元素之间穿来穿去也会发 DragLeave，直接熄就会一路闪。
+    ///     文案只在遮罩从暗转亮那一次算，不跟着鼠标每个 move 算一遍。</para>
     /// </summary>
     private void OnWindowDragOver(object sender, DragEventArgs e)
     {
@@ -241,9 +240,35 @@ public partial class MainWindow
             return;
         }
 
+        if (!vm.IsDropOverlayVisible) UpdateDropOverlayText(vm, e.Data);
+
         vm.IsDropOverlayVisible = true;
         e.Effects = DragDropEffects.Copy;
         e.Handled = true;
+    }
+
+    /// <summary>拖的是什么、在哪一页，决定遮罩上那句「松手会发生什么」。</summary>
+    private static void UpdateDropOverlayText(MainWindowViewModel vm, IDataObject data)
+    {
+        if (vm.CurrentPage == "instance_manage" &&
+            data.GetData(DataFormats.FileDrop) is string[] { Length: > 0 } dragged)
+        {
+            if (dragged.Any(f => f.EndsWith(".jar", StringComparison.OrdinalIgnoreCase)))
+            {
+                vm.DropOverlayText = "释放以添加模组";
+                vm.DropOverlaySubtext = "复制进当前实例的 mods 文件夹";
+                return;
+            }
+            if (vm.ConfigTab == "资源包" && dragged.Any(f => f.EndsWith(".zip", StringComparison.OrdinalIgnoreCase)))
+            {
+                vm.DropOverlayText = "释放以添加资源包";
+                vm.DropOverlaySubtext = "复制进当前实例的 resourcepacks 文件夹";
+                return;
+            }
+        }
+
+        vm.DropOverlayText = "释放以导入整合包";
+        vm.DropOverlaySubtext = $"导入到当前文件夹：{vm.ActiveFolderName}";
     }
 
     private void OnWindowDragLeave(object sender, DragEventArgs e)
@@ -270,6 +295,23 @@ public partial class MainWindow
 
         // 只接第一个文件：一次拖进来五个包，串行导入要排十分钟，不如让人再拖一次。
         if (e.Data.GetData(DataFormats.FileDrop) is not string[] { Length: > 0 } files) return;
+
+        // 管理页里拖 .jar / （资源包页）.zip 是往实例里加东西，不走整合包导入。
+        if (vm.CurrentPage == "instance_manage")
+        {
+            if (files.Any(f => f.EndsWith(".jar", StringComparison.OrdinalIgnoreCase)))
+            {
+                vm.AddModFilesFromDrop(files.Where(f => f.EndsWith(".jar", StringComparison.OrdinalIgnoreCase)));
+                e.Handled = true;
+                return;
+            }
+            if (vm.ConfigTab == "资源包" && files.Any(f => f.EndsWith(".zip", StringComparison.OrdinalIgnoreCase)))
+            {
+                vm.AddResourcePackFilesFromDrop(files.Where(f => f.EndsWith(".zip", StringComparison.OrdinalIgnoreCase)));
+                e.Handled = true;
+                return;
+            }
+        }
 
         vm.OfferPackFile(files[0]);
         e.Handled = true;

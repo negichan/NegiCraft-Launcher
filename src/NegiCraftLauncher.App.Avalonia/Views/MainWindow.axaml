@@ -450,7 +450,7 @@
 
                         <!-- 第二层工具条：统一 32 高。它已经在窗口操作区下面，所以能一直铺到内容列右边缘。
                              搜索框不再吃满整行 —— 右边那排（导入 / 添加目录 / 目录切换 / 视图切换）要地方。 -->
-                        <Grid Grid.Row="1" ColumnDefinitions="Auto Auto Auto Auto * Auto Auto Auto Auto Auto" Height="32" Margin="0,0,0,16">
+                        <Grid Grid.Row="1" ColumnDefinitions="Auto Auto Auto Auto * Auto Auto Auto Auto Auto Auto" Height="32" Margin="0,0,0,16">
                             <!-- 搜索框：统一定义在 Theme.Avalonia/Generated/Controls.g.axaml 中的 Classes="SearchBox"，
                                  内含 32 高度、8 圆角、左侧放大镜（防击穿）、右侧动态清空按钮。 -->
                             <TextBox Grid.Column="0" x:Name="SearchBox" Classes="SearchBox"
@@ -539,6 +539,12 @@
                                     </Button>
                                 </StackPanel>
                             </Border>
+
+                            <!-- 刷新：外部装的版本不用等游戏退出或切目录才冒出来。 -->
+                            <Button Grid.Column="10" Classes="BtnSm BtnOutline" Height="32" Margin="8,0,0,0"
+                                    Command="{Binding RefreshInstancesListCommand}" ToolTip.Tip="刷新实例列表">
+                                <materialIcons:MaterialIcon Kind="Refresh" Width="14" Height="14"/>
+                            </Button>
                         </Grid>
 
                         <Panel Grid.Row="2">
@@ -570,6 +576,7 @@
                                                                       Command="{Binding $parent[Window].((vm:MainWindowViewModel)DataContext).MakeCurrentInstanceCommand}"
                                                                       CommandParameter="{Binding .}"/>
                                                             <MenuItem Header="立即启动"
+                                                                      IsEnabled="{Binding $parent[Window].((vm:MainWindowViewModel)DataContext).CanQuickLaunch}"
                                                                       Command="{Binding $parent[Window].((vm:MainWindowViewModel)DataContext).LaunchInstanceCommand}"
                                                                       CommandParameter="{Binding .}"/>
                                                             <MenuItem Header="实例配置"
@@ -636,11 +643,12 @@
                                                             </Button>
                                                         </Grid>
 
-                                                        <!-- 下：最近游玩贴底，右边启动按钮 -->
+                                                        <!-- 下：最近游玩贴底，右边启动按钮。游戏在跑时压灰，点了没动静最伤人。 -->
                                                         <Grid Grid.Row="1" ColumnDefinitions="* Auto">
                                                             <TextBlock Grid.Column="0" Text="{Binding LastPlayedText}" FontSize="12"
                                                                        Foreground="#a1a1aa" VerticalAlignment="Center" TextTrimming="CharacterEllipsis"/>
                                                             <Button Grid.Column="1" Classes="CardPlay" Classes.Current="{Binding IsCurrent}" ToolTip.Tip="启动"
+                                                                    IsEnabled="{Binding $parent[Window].((vm:MainWindowViewModel)DataContext).CanQuickLaunch}"
                                                                     Command="{Binding $parent[Window].((vm:MainWindowViewModel)DataContext).LaunchInstanceCommand}"
                                                                     CommandParameter="{Binding .}">
                                                                 <materialIcons:MaterialIcon Kind="Play" Width="18" Height="18"
@@ -674,6 +682,7 @@
                                                                       Command="{Binding $parent[Window].((vm:MainWindowViewModel)DataContext).MakeCurrentInstanceCommand}"
                                                                       CommandParameter="{Binding .}"/>
                                                             <MenuItem Header="立即启动"
+                                                                      IsEnabled="{Binding $parent[Window].((vm:MainWindowViewModel)DataContext).CanQuickLaunch}"
                                                                       Command="{Binding $parent[Window].((vm:MainWindowViewModel)DataContext).LaunchInstanceCommand}"
                                                                       CommandParameter="{Binding .}"/>
                                                             <MenuItem Header="实例配置"
@@ -747,6 +756,7 @@
 
                                                         <StackPanel Grid.Column="4" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
                                                             <Button Classes="CardPlay" Classes.Current="{Binding IsCurrent}" ToolTip.Tip="启动"
+                                                                    IsEnabled="{Binding $parent[Window].((vm:MainWindowViewModel)DataContext).CanQuickLaunch}"
                                                                     Command="{Binding $parent[Window].((vm:MainWindowViewModel)DataContext).LaunchInstanceCommand}"
                                                                     CommandParameter="{Binding .}">
                                                                 <materialIcons:MaterialIcon Kind="Play" Width="18" Height="18"
@@ -790,9 +800,18 @@
                             </StackPanel>
 
                             <StackPanel IsVisible="{Binding HasNoInstanceMatches}"
-                                        HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="8">
+                                        HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="10">
                                 <TextBlock Text="没有匹配的实例" FontSize="14" Foreground="#a1a1aa" HorizontalAlignment="Center"/>
                                 <TextBlock Text="{Binding InstanceEmptyHint}" FontSize="12" Foreground="#71717a" HorizontalAlignment="Center"/>
+                                <!-- 光出主意不给出口等于没说：一键清掉搜索词和加载器筛选。 -->
+                                <Button Classes="BtnSm BtnOutline" Height="28" HorizontalAlignment="Center"
+                                        IsVisible="{Binding HasInstanceFilter}"
+                                        Command="{Binding ClearInstanceFiltersCommand}">
+                                    <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                                        <materialIcons:MaterialIcon Kind="FilterOffOutline" Width="14" Height="14"/>
+                                        <TextBlock Text="清除筛选" FontSize="12" VerticalAlignment="Center"/>
+                                    </StackPanel>
+                                </Button>
                             </StackPanel>
 
                             <!-- 右下角悬浮安装入口：和首页停靠卡同一个内缩。空态已经有两颗主按钮，这颗就不重复出现了。 -->
@@ -843,6 +862,7 @@
                                         IsVisible="{Binding !IsEditingCurrentInstance}"
                                         Command="{Binding MakeEditingInstanceCurrentCommand}"/>
                                 <Button Classes="BtnSm BtnPrimary" Height="34"
+                                        IsEnabled="{Binding CanQuickLaunch}"
                                         Command="{Binding LaunchEditingInstanceCommand}">
                                     <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
                                         <materialIcons:MaterialIcon Kind="Play" Width="16" Height="16"/>
@@ -852,8 +872,9 @@
                             </StackPanel>
                         </Grid>
 
-                        <!-- Main Content: Left Nav (180px) + Splitter + Right Detail Panels -->
-                        <Grid Grid.Row="1" ColumnDefinitions="180 32 *">
+                        <!-- Main Content: Left Nav (180px) + Right Detail Panels. 中间不画分隔线 ——
+                             侧栏自己有 #0c0c0e 的底和圆角，再压一根线就是多出来的一道框。 -->
+                        <Grid Grid.Row="1" ColumnDefinitions="180 24 *">
                             <!-- Left Tab Nav -->
                             <Border Grid.Column="0" Background="#0c0c0e" CornerRadius="12" Padding="8,10" VerticalAlignment="Stretch">
                                 <StackPanel Spacing="4">
@@ -938,7 +959,7 @@
                             </Border>
 
                             <!-- Splitter Line -->
-                            <Rectangle Grid.Column="1" Width="1" Fill="#26262b" HorizontalAlignment="Center" VerticalAlignment="Stretch"/>
+                            <!-- （已删：侧栏有底色和圆角，独立的一根线是多余的框。） -->
 
                             <!-- Right Content Panels -->
                             <Grid Grid.Column="2">
@@ -982,7 +1003,10 @@
                                                             <TextBlock Text="实例名称" FontWeight="Medium" Foreground="#fafafa" FontSize="13"/>
                                                             <TextBlock Text="只影响启动器中的显示名称" FontSize="12" Foreground="#71717a"/>
                                                         </StackPanel>
-                                                        <TextBox Grid.Column="1" Width="220" Height="32" MinHeight="0" Text="{Binding ConfigInstName, Mode=TwoWay}"
+                                                        <!-- Delay 让自动保存等打字停稳再落盘；宽度给到 280，长名字不至于盲改。 -->
+                                                        <TextBox Grid.Column="1" Width="280" Height="32" MinHeight="0"
+                                                                 Text="{Binding ConfigInstName, Mode=TwoWay, Delay=500}"
+                                                                 ToolTip.Tip="{Binding ConfigInstName}"
                                                                  Background="#111114" BorderBrush="#26262b" BorderThickness="1"
                                                                  CornerRadius="8" Foreground="#fafafa" Padding="10,0" FontSize="12.5"
                                                                  VerticalAlignment="Center"/>
@@ -992,7 +1016,7 @@
                                                     <Grid ColumnDefinitions="* Auto">
                                                         <StackPanel VerticalAlignment="Center" Spacing="2" Margin="0,0,16,0">
                                                             <TextBlock Text="版本隔离" FontWeight="Medium" Foreground="#fafafa" FontSize="13"/>
-                                                            <TextBlock Text="saves、mods 与配置独立存放（推荐）" FontSize="12" Foreground="#71717a"/>
+                                                            <TextBlock Text="存档与模组独立存放（推荐）；切换时已有文件不会移动" FontSize="12" Foreground="#71717a"/>
                                                         </StackPanel>
                                                         <CheckBox Grid.Column="1" Classes="Tick" IsChecked="{Binding ConfigInstIsolated}"/>
                                                     </Grid>
@@ -1016,9 +1040,6 @@
                                                 </Border>
                                             </StackPanel>
                                         </Border>
-
-                                        <Button Classes="BtnSm BtnPrimary" Content="保存配置" Height="34" Width="100"
-                                                HorizontalAlignment="Right" Command="{Binding SaveEditingInstanceCommand}"/>
                                     </StackPanel>
                                 </ScrollViewer>
 
@@ -1067,27 +1088,41 @@
                                 <Grid RowDefinitions="Auto *"
                                       IsVisible="{Binding ConfigTab, Converter={x:Static ObjectConverters.Equal}, ConverterParameter='模组'}">
                                     <!-- Toolbar -->
-                                    <Grid Grid.Row="0" ColumnDefinitions="Auto * Auto Auto Auto" Height="32" Margin="0,0,0,12">
+                                    <Grid Grid.Row="0" ColumnDefinitions="Auto * Auto Auto Auto Auto Auto" Height="32" Margin="0,0,0,12">
                                         <TextBox Grid.Column="0" Classes="SearchBox" Width="200"
                                                  PlaceholderText="搜索模组..."
                                                  Text="{Binding ModSearch, Mode=TwoWay}"/>
                                         <TextBlock Grid.Column="1" Text="{Binding EditingModCountText}" FontSize="12.5" Foreground="#a1a1aa"
                                                    VerticalAlignment="Center" Margin="12,0,0,0"/>
                                         <Button Grid.Column="2" Classes="BtnSm BtnOutline" Height="32" Margin="0,0,8,0"
-                                                Command="{Binding AddModFileCommand}">
+                                                Command="{Binding EnableAllModsCommand}" ToolTip.Tip="一键启用全部模组">
+                                            <StackPanel Orientation="Horizontal" Spacing="6">
+                                                <materialIcons:MaterialIcon Kind="CheckAll" Width="14" Height="14"/>
+                                                <TextBlock Text="全部启用" FontSize="12" VerticalAlignment="Center"/>
+                                            </StackPanel>
+                                        </Button>
+                                        <Button Grid.Column="3" Classes="BtnSm BtnOutline" Height="32" Margin="0,0,8,0"
+                                                Command="{Binding DisableAllModsCommand}" ToolTip.Tip="一键禁用全部模组">
+                                            <StackPanel Orientation="Horizontal" Spacing="6">
+                                                <materialIcons:MaterialIcon Kind="CloseBoxOutline" Width="14" Height="14"/>
+                                                <TextBlock Text="全部禁用" FontSize="12" VerticalAlignment="Center"/>
+                                            </StackPanel>
+                                        </Button>
+                                        <Button Grid.Column="4" Classes="BtnSm BtnOutline" Height="32" Margin="0,0,8,0"
+                                                Command="{Binding AddModFileCommand}" ToolTip.Tip="复制选中的 .jar 到 mods 文件夹，原文件保留">
                                             <StackPanel Orientation="Horizontal" Spacing="6">
                                                 <materialIcons:MaterialIcon Kind="Plus" Width="14" Height="14"/>
                                                 <TextBlock Text="添加模组" FontSize="12" VerticalAlignment="Center"/>
                                             </StackPanel>
                                         </Button>
-                                        <Button Grid.Column="3" Classes="BtnSm BtnOutline" Height="32" Margin="0,0,8,0"
+                                        <Button Grid.Column="5" Classes="BtnSm BtnOutline" Height="32" Margin="0,0,8,0"
                                                 Command="{Binding OpenEditingModsCommand}">
                                             <StackPanel Orientation="Horizontal" Spacing="6">
                                                 <materialIcons:MaterialIcon Kind="FolderOutline" Width="14" Height="14"/>
                                                 <TextBlock Text="打开文件夹" FontSize="12" VerticalAlignment="Center"/>
                                             </StackPanel>
                                         </Button>
-                                        <Button Grid.Column="4" Classes="BtnSm BtnOutline" Height="32"
+                                        <Button Grid.Column="6" Classes="BtnSm BtnOutline" Height="32"
                                                 Command="{Binding RefreshInstanceManageDataCommand}" ToolTip.Tip="刷新模组列表">
                                             <materialIcons:MaterialIcon Kind="Refresh" Width="14" Height="14"/>
                                         </Button>
@@ -1115,7 +1150,7 @@
                                                             <Grid ColumnDefinitions="Auto * Auto Auto Auto">
                                                                 <CheckBox Grid.Column="0" Classes="Tick" IsChecked="{Binding IsEnabled, Mode=OneWay}"
                                                                           Command="{Binding $parent[Window].((vm:MainWindowViewModel)DataContext).ToggleModCommand}"
-                                                                          CommandParameter="{Binding .}" Margin="0,0,12,0" ToolTip.Tip="切换启用 / 禁用"/>
+                                                                          CommandParameter="{Binding .}" Margin="0,0,12,0"/>
                                                                 <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
                                                                     <TextBlock Text="{Binding DisplayName}" FontSize="13" FontWeight="Medium"
                                                                                Foreground="#fafafa" TextTrimming="CharacterEllipsis"/>
@@ -1345,7 +1380,7 @@
                                                         <TextBox Grid.Column="1" Width="220" Height="32" VerticalAlignment="Center"
                                                                  CornerRadius="8" Background="#111114" BorderBrush="#26262b"
                                                                  PlaceholderText="-XX:+UseG1GC" FontSize="12"
-                                                                 Text="{Binding ConfigInstExtraJvmArgs, Mode=TwoWay}"/>
+                                                                 Text="{Binding ConfigInstExtraJvmArgs, Mode=TwoWay, Delay=500}"/>
                                                     </Grid>
                                                 </Border>
                                             </StackPanel>
@@ -1369,8 +1404,11 @@
                                                     <Grid ColumnDefinitions="* Auto">
                                                         <TextBlock Text="分配给这个实例" FontWeight="Medium" Foreground="#fafafa" FontSize="13" VerticalAlignment="Center"/>
                                                         <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
-                                                            <Slider Value="{Binding ConfigInstMemoryGb}" Minimum="1" Maximum="32" Width="180"/>
-                                                            <TextBlock Text="{Binding ConfigInstMemoryGb, StringFormat='{}{0} GB'}"
+                                                            <!-- 拖动期间数字跟着滑条走（#名字），落盘等拇指停下（Delay），
+                                                                 不然一寸一寸写盘、字还滞后。上限按物理内存封顶。 -->
+                                                            <Slider x:Name="InstMemSlider" Value="{Binding ConfigInstMemoryGb, Delay=300}"
+                                                                    Minimum="1" Maximum="{Binding MemorySliderMax}" Width="180"/>
+                                                            <TextBlock Text="{Binding #InstMemSlider.Value, StringFormat='{}{0} GB'}"
                                                                        Width="48" TextAlignment="Right" Foreground="#fafafa" FontWeight="Medium" FontSize="13"/>
                                                         </StackPanel>
                                                     </Grid>
@@ -1387,9 +1425,6 @@
                                                 </Border>
                                             </StackPanel>
                                         </Border>
-
-                                        <Button Classes="BtnSm BtnPrimary" Content="保存配置" Height="34" Width="100"
-                                                HorizontalAlignment="Right" Command="{Binding SaveEditingInstanceCommand}"/>
                                     </StackPanel>
                                 </ScrollViewer>
 
@@ -2612,10 +2647,10 @@
                     <StackPanel Spacing="10" HorizontalAlignment="Center">
                         <materialIcons:MaterialIcon Kind="PackageVariantClosed" Width="34" Height="34"
                                                     Foreground="#fafafa" HorizontalAlignment="Center"/>
-                        <TextBlock Text="释放以导入整合包" FontSize="16" FontWeight="SemiBold"
+                        <TextBlock Text="{Binding DropOverlayText}" FontSize="16" FontWeight="SemiBold"
                                    Foreground="#fafafa" HorizontalAlignment="Center"/>
-                        <TextBlock Text="{Binding ActiveFolderName, StringFormat=导入到当前文件夹：{0}}"
-                                   FontSize="12" Foreground="#a1a1aa" HorizontalAlignment="Center"/>
+                        <TextBlock Text="{Binding DropOverlaySubtext}" FontSize="12" Foreground="#a1a1aa"
+                                   HorizontalAlignment="Center" TextWrapping="Wrap"/>
                     </StackPanel>
                 </Border>
             </Panel>

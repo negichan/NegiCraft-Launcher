@@ -553,6 +553,29 @@ public partial class MainWindow : Window
         {
             _vm.CancelCloseCommand.Execute(null);
             e.Handled = true;
+            return;
+        }
+
+        // Esc 的第二档：先收浮层（下拉 / 图标选择 / 运行时选择），都收干净了在管理页里才是「返回」。
+        // 对话框开着时不动 —— 它有自己的 Esc（取消），这里抢了反而把确认流程打断。
+        if (e.Key == Key.Escape && _vm is { IsDialogOpen: false } vm)
+        {
+            if (vm.IsIconPickerOpen || vm.IsInstJavaChooserOpen)
+            {
+                vm.IsIconPickerOpen = false;
+                vm.IsInstJavaChooserOpen = false;
+                e.Handled = true;
+            }
+            else if (vm.HasOpenPopover)
+            {
+                vm.CloseAllPopoversCommand.Execute(null);
+                e.Handled = true;
+            }
+            else if (vm.CurrentPage == "instance_manage")
+            {
+                vm.BackToInstancesCommand.Execute(null);
+                e.Handled = true;
+            }
         }
     }
 

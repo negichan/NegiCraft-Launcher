@@ -194,24 +194,52 @@ public partial class MainWindow
     }
 
     /// <summary>
-    ///     拖文件进窗口 = 导入整合包。
+    ///     拖文件进窗口：管理页里 .jar 是加模组、资源包页里 .zip 是加资源包，其余才是导整合包。
     ///
     ///     <para><b>DragOver 每动一下就来一次</b>，所以遮罩只在该亮的时候亮着写；真正判"离开了"要看
-    ///     指针是不是出了窗口边界 —— 子元素之间穿来穿去也会发 DragLeave，直接熄就会一路闪。</para>
+    ///     指针是不是出了窗口边界 —— 子元素之间穿来穿去也会发 DragLeave，直接熄就会一路闪。
+    ///     文案只在遮罩从暗转亮那一次算，不跟着鼠标每个 move 算一遍。</para>
     /// </summary>
     private void OnWindowDragOver(object? sender, DragEventArgs e)
     {
         if (_vm is not { } vm) return;
 
-        if (e.DataTransfer.TryGetFiles() is not { Length: > 0 })
+        if (e.DataTransfer.TryGetFiles() is not { Length: > 0 } files)
         {
             e.DragEffects = DragDropEffects.None;
             return;
         }
 
+        if (!vm.IsDropOverlayVisible) UpdateDropOverlayText(vm, files);
+
         vm.IsDropOverlayVisible = true;
         e.DragEffects = DragDropEffects.Copy;
         e.Handled = true;
+    }
+
+    /// <summary>拖的是什么、在哪一页，决定遮罩上那句「松手会发生什么」。</summary>
+    private static void UpdateDropOverlayText(MainWindowViewModel vm, IStorageItem[] files)
+    {
+        var paths = files.Select(f => f.TryGetLocalPath()).Where(p => !string.IsNullOrEmpty(p)).ToArray();
+
+        if (vm.CurrentPage == "instance_manage")
+        {
+            if (paths.Any(p => p!.EndsWith(".jar", StringComparison.OrdinalIgnoreCase)))
+            {
+                vm.DropOverlayText = "释放以添加模组";
+                vm.DropOverlaySubtext = "复制进当前实例的 mods 文件夹";
+                return;
+            }
+            if (vm.ConfigTab == "资源包" && paths.Any(p => p!.EndsWith(".zip", StringComparison.OrdinalIgnoreCase)))
+            {
+                vm.DropOverlayText = "释放以添加资源包";
+                vm.DropOverlaySubtext = "复制进当前实例的 resourcepacks 文件夹";
+                return;
+            }
+        }
+
+        vm.DropOverlayText = "释放以导入整合包";
+        vm.DropOverlaySubtext = $"导入到当前文件夹：{vm.ActiveFolderName}";
     }
 
     private void OnWindowDragLeave(object? sender, DragEventArgs e)
@@ -231,11 +259,39 @@ public partial class MainWindow
 
         vm.IsDropOverlayVisible = false;
 
-        // 只接第一个文件：一次拖进来五个包，串行导入要排十分钟，不如让人再拖一次。
         if (e.DataTransfer.TryGetFiles() is not { Length: > 0 } files) return;
-        if (files[0].TryGetLocalPath() is not { Length: > 0 } path) return;
 
-        vm.OfferPackFile(path);
+        var paths = files.Select(f => f.TryGetLocalPath())
+            .Where(p => !string.IsNullOrEmpty(p))
+            .Select(p => p!)
+            .ToArray();
+        if (paths.Length == 0) return;
+
+        // 管理页里拖 .jar /（资源包页）.zip 是往实例里加东西，不走整合包导入。
+        if (vm.CurrentPage == "instance_manage")
+        {
+            var jars = paths.Where(p => p.EndsWith(".jar", StringComparison.OrdinalIgnoreCase)).ToArray();
+            if (jars.Length > 0)
+            {
+                vm.AddModFilesFromDrop(jars);
+                e.Handled = true;
+                return;
+            }
+
+            if (vm.ConfigTab == "资源包")
+            {
+                var zips = paths.Where(p => p.EndsWith(".zip", StringComparison.OrdinalIgnoreCase)).ToArray();
+                if (zips.Length > 0)
+                {
+                    vm.AddResourcePackFilesFromDrop(zips);
+                    e.Handled = true;
+                    return;
+                }
+            }
+        }
+
+        // 只接第一个文件：一次拖进来五个包，串行导入要排十分钟，不如让人再拖一次。
+        vm.OfferPackFile(paths[0]);
         e.Handled = true;
     }
 
@@ -253,25 +309,7 @@ public partial class MainWindow
             }
         });
 
-        if (files.Count > 0 && !string.IsNullOrEmpty(_vm.EditingModsDirectory))
-        {
-            Directory.CreateDirectory(_vm.EditingModsDirectory);
-            int added = 0;
-            foreach (var f in files)
-            {
-                var src = f.Path.LocalPath;
-                if (!File.Exists(src)) continue;
-                var dest = Path.Combine(_vm.EditingModsDirectory, Path.GetFileName(src));
-                try
-                {
-                    File.Copy(src, dest, true);
-                    added++;
-                }
-                catch { }
-            }
-            _vm.RefreshInstanceManageDataCommand.Execute(null);
-            _vm.ShowBanner($"已添加 {added} 个模组。");
-        }
+        if (files.Count > 0) _vm.AddModFilesFromDrop(files.Select(f => f.Path.LocalPath));
     }
 
     private async void OnRequestAddResourcePackFile()
@@ -288,25 +326,7 @@ public partial class MainWindow
             }
         });
 
-        if (files.Count > 0 && !string.IsNullOrEmpty(_vm.EditingResourcePacksDirectory))
-        {
-            Directory.CreateDirectory(_vm.EditingResourcePacksDirectory);
-            int added = 0;
-            foreach (var f in files)
-            {
-                var src = f.Path.LocalPath;
-                if (!File.Exists(src)) continue;
-                var dest = Path.Combine(_vm.EditingResourcePacksDirectory, Path.GetFileName(src));
-                try
-                {
-                    File.Copy(src, dest, true);
-                    added++;
-                }
-                catch { }
-            }
-            _vm.RefreshInstanceManageDataCommand.Execute(null);
-            _vm.ShowBanner($"已添加 {added} 个资源包。");
-        }
+        if (files.Count > 0) _vm.AddResourcePackFilesFromDrop(files.Select(f => f.Path.LocalPath));
     }
 
 }
