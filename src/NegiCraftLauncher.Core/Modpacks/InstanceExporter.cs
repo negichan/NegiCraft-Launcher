@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Globalization;
@@ -36,13 +36,13 @@ public static class InstanceExporter
     {
         "versions", "libraries", "assets", "runtime",
         "logs", "crash-reports", "natives",
-        "saves", "screenshots", "其他启动器",
+        "saves", "screenshots",
     };
 
     private static readonly HashSet<string> InstanceExcludedFolders = new(NameComparer)
     {
         "logs", "crash-reports", "natives",
-        "saves", "screenshots", "其他启动器",
+        "saves", "screenshots",
     };
 
     private static readonly HashSet<string> SharedRootExcludedFiles = new(NameComparer)
