@@ -1,4 +1,4 @@
-using System.Reflection;
+﻿using System.Reflection;
 using System.Diagnostics;
 using System.IO;
 using System.Windows;
@@ -741,7 +741,7 @@ internal static class Program
         Check("drop overlay text follows what is being dropped",
             wpf.Contains("DropOverlayText") && ava.Contains("DropOverlayText"));
 
-        // 其他启动器 式交互：卡片和列表行都是单击设当前、双击启动，行尾/卡片的齿轮进配置。
+        // 卡片和列表行同一套交互：单击设当前、双击启动，行尾/卡片的齿轮进配置。
         Check("cards and rows select on click and launch on double-click",
             Count(wpf, "OnInstanceRowDoubleClick") >= 2 && Count(ava, "OnInstanceRowDoubleTapped") >= 2 &&
             Count(wpf, "DataContext.MakeCurrentInstanceCommand") >= 2 &&
