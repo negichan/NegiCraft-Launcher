@@ -1,4 +1,4 @@
-using System.IO;
+﻿using System.IO;
 
 namespace NegiCraftLauncher.Core;
 
@@ -16,7 +16,7 @@ public sealed record OfficialGameRoot(string Path, string Name);
 /// </summary>
 public static class OfficialMinecraft
 {
-    /// <summary>微软商店版启动器的包族名，目录结构固定（HMCL 等启动器 探的也是它）。</summary>
+    /// <summary>微软商店版启动器的包族名，目录结构固定（别的启动器探的也是它）。</summary>
     private const string StorePackageFamily = "Microsoft.4297127D64EC6_8wekyb3d8bbwe";
 
     public static IReadOnlyList<OfficialGameRoot> LocateGameRoots() =>

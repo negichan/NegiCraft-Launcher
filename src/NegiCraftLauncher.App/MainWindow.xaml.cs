@@ -1,4 +1,4 @@
-using System.ComponentModel;
+﻿using System.ComponentModel;
 using System.Globalization;
 using System.IO;
 using System.Linq;
@@ -272,7 +272,7 @@ public partial class MainWindow : Window
     }
 
     /// <summary>
-    /// 列表行双击 = 直接启动（其他启动器 的肌肉记忆）。第一击已经触发过单击选中，
+    /// 列表行双击 = 直接启动（老玩家的肌肉记忆）。第一击已经触发过单击选中，
     /// 这里只补第二击；启动守卫（运行中禁用）在 VM 的命令里统一拦。
     /// </summary>
     private void OnInstanceRowDoubleClick(object sender, MouseButtonEventArgs e)

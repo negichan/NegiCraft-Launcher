@@ -1,4 +1,4 @@
-<!-- 1180x720 is the *visible* window (Shell); the window itself opens at 1300x840 with
+﻿<!-- 1180x720 is the *visible* window (Shell); the window itself opens at 1300x840 with
      60 on each side as room for the drop shadow. Tailwind's shadow-lg overflows only
      ~12px sideways / ~22px down, so most of that margin is slack — kept anyway, since
      shrinking it would move the window rect for no visible gain.
@@ -563,7 +563,7 @@
                                         </ItemsControl.ItemsPanel>
                                         <ItemsControl.ItemTemplate>
                                             <DataTemplate x:DataType="models:InstanceModel">
-                                                <!-- 和列表行同一套 其他启动器 交互：单击=设为当前，双击=启动，配置走齿轮。 -->
+                                                <!-- 和列表行同一套交互：单击=设为当前，双击=启动，配置走齿轮。 -->
                                                 <Button Classes="InstCard"
                                                         Classes.Current="{Binding IsCurrent}"
                                                         Margin="0,0,12,12"
@@ -684,7 +684,7 @@
                                     <ItemsControl Focusable="False" VerticalAlignment="Top" Margin="0,0,0,56" ItemsSource="{Binding VisibleInstances}">
                                         <ItemsControl.ItemTemplate>
                                             <DataTemplate x:DataType="models:InstanceModel">
-                                                <!-- 其他启动器 式行交互：单击=设为当前（高亮不跳页），双击=直接启动；
+                                                <!-- 行交互：单击=设为当前（高亮不跳页），双击=直接启动；
                                                      进配置页走行尾的齿轮或右键菜单。 -->
                                                 <Button Classes="InstRow"
                                                         Classes.Current="{Binding IsCurrent}"
@@ -921,7 +921,7 @@
                                         </StackPanel>
                                     </Button>
 
-                                    <!-- 设置：隔离 / Java / 内存（其他启动器 的「设置」页同构） -->
+                                    <!-- 设置：隔离 / Java / 内存 -->
                                     <Button Classes="InstNavBtn"
                                             Classes.On="{Binding ConfigTab, Converter={x:Static ObjectConverters.Equal}, ConverterParameter='设置'}"
                                             Command="{Binding SelectConfigTabCommand}" CommandParameter="设置">
@@ -998,7 +998,7 @@
 
                             <!-- Right Content Panels -->
                             <Grid Grid.Column="2">
-                                <!-- 1. 概览：其他启动器 式 —— 头部大图标 + 就地改名，统计卡一眼看全，
+                                <!-- 1. 概览：头部大图标 + 就地改名，统计卡一眼看全，
                                      快捷操作与危险区收在底部。 -->
                                 <ScrollViewer VerticalScrollBarVisibility="Auto"
                                               IsVisible="{Binding ConfigTab, Converter={x:Static ObjectConverters.Equal}, ConverterParameter='概览'}">
@@ -1124,7 +1124,7 @@
                                     </StackPanel>
                                 </ScrollViewer>
 
-                                <!-- 1b. 设置：隔离 / Java / 内存，一行一项（其他启动器 的「设置」页同构）。 -->
+                                <!-- 1b. 设置：隔离 / Java / 内存，一行一项。 -->
                                 <ScrollViewer VerticalScrollBarVisibility="Auto"
                                               IsVisible="{Binding ConfigTab, Converter={x:Static ObjectConverters.Equal}, ConverterParameter='设置'}">
                                     <StackPanel Spacing="16" Margin="0,0,10,0">

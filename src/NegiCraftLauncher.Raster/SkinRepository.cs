@@ -1,4 +1,4 @@
-using System.Collections.Concurrent;
+﻿using System.Collections.Concurrent;
 using System.Net.Http;
 using System.Text.Json;
 
@@ -229,8 +229,8 @@ public static class SkinRepository
     }
 
     /// <summary>
-    /// 离线玩家没有 profile 声明模型，所以用 其他启动器 的 <c>McSkinSex(McLoginLegacyUuid(name))</c>
-    /// 算法挑默认皮肤（Alex = 细手臂，Steve = 宽手臂）。
+    /// 离线玩家没有 profile 声明模型，只能从名字派生：先造一个稳定的离线 UUID，
+    /// 再看它的校验位奇偶决定细手臂还是宽手臂（Alex = 细，Steve = 宽）。
     /// </summary>
     public static bool IsSlimForPlayerName(string name)
     {
@@ -261,7 +261,8 @@ public static class SkinRepository
         return McSkinSex(McLoginLegacyUuid(name)) == "Alex";
     }
 
-    /// <summary>与 其他启动器（MeloongCore.StringExtensions.GetStableHashCode）逐位对齐的稳定哈希。</summary>
+    /// <summary>跨进程稳定的字符串哈希（djb2 变体，再折一个固定常量）。
+    /// 不能用 string.GetHashCode()：.NET 每进程随机加盐，同一个名字每次算出来都不一样。</summary>
     public static ulong GetStableHashCode(string str)
     {
         var result = 5381UL;
@@ -275,7 +276,8 @@ public static class SkinRepository
         return str.Length > length ? str[..length] : str.PadLeft(length, code);
     }
 
-    /// <summary>其他启动器 的离线玩家 UUID 生成（ModLaunch.McLoginLegacyUuid）。</summary>
+    /// <summary>从玩家名派生一个固定的 32 位十六进制离线 UUID：高 16 位是名字长度，
+    /// 低 16 位是稳定哈希，再把版本位写成 3、变体位写成 9。同一个名字每次一样。</summary>
     public static string McLoginLegacyUuid(string name)
     {
         var part1 = EnsureLength(name.Length.ToString("X"), '0', 16);
@@ -284,7 +286,8 @@ public static class SkinRepository
         return fullUuid[..12] + "3" + fullUuid.Substring(13, 3) + "9" + fullUuid[17..];
     }
 
-    /// <summary>其他启动器 的离线皮肤性别判定（ModMinecraft.McSkinSex）。返回 "Alex" 或 "Steve"。</summary>
+    /// <summary>取 UUID 四个校验位（每段末位）的十六进制值异或，奇数判细手臂。
+    /// 返回 "Alex" 或 "Steve"。</summary>
     public static string McSkinSex(string uuid)
     {
         if (uuid.Length != 32) return "Steve";

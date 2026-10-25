@@ -1,4 +1,4 @@
-namespace NegiCraftLauncher.Raster;
+﻿namespace NegiCraftLauncher.Raster;
 
 /// <summary>
 /// 程序化像素画：<b>方块图标的兜底</b>与首页背景场景。纯计算，和 UI 框架无关，
@@ -101,7 +101,7 @@ public static class PixelArt
     /// 总高取满 <paramref name="size"/> 之后，菱形高与侧面高都正好是 size/2，
     /// 水平方向比画布窄一截、左右各留约 6.7% 的空。</para>
     ///
-    /// <para><b>为什么不是 2:1</b>：像素画传统（HMCL 等启动器 的 64×64 方块图）把菱形画成
+    /// <para><b>为什么不是 2:1</b>：像素画传统（社区那批 64×64 方块图）把菱形画成
     /// 宽:高 = 2:1 且宽度吃满，好处是斜边能落在像素网格上，代价是总宽 = 总高 ——
     /// 比真等距宽了 15.5%，整块看着像压扁的盒子。这里宁可损失像素对齐，
     /// 也要那个「立得住」的体积感。</para>

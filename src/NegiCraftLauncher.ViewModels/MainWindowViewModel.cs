@@ -1,4 +1,4 @@
-using System.Collections.ObjectModel;
+﻿using System.Collections.ObjectModel;
 using System.Diagnostics;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -2670,7 +2670,7 @@ public partial class MainWindowViewModel : ViewModelBase
                         ? name[..^9]
                         : name;
 
-                    // 其他启动器 式：名字优先取 jar 清单里的模组名/版本，解析不到再亮文件名。
+                    // 名字优先取 jar 清单里的模组名/版本，解析不到再亮文件名。
                     // .disabled 只是改了名，zip 内容没动，照样能读。
                     var meta = ModMetaReader.Read(file);
                     var model = new ModItemModel(
@@ -3048,7 +3048,7 @@ public partial class MainWindowViewModel : ViewModelBase
             }
         }
 
-        // 装了加载器就挂那个加载器的标志 —— 和 HMCL 等启动器 一个道理：一眼能认出这个实例是
+        // 装了加载器就挂那个加载器的标志 —— 和别的启动器一个道理：一眼能认出这个实例是
         // Forge 还是 Fabric，比给每个实例随机挑个方块有用得多。
         if (LoaderIconName(instance.Loader) is { } logo && BuiltinIcons.Load(logo) is { } bitmap)
         {
@@ -3098,7 +3098,7 @@ public partial class MainWindowViewModel : ViewModelBase
 
     /// <summary>
     /// <see cref="Instance.Loader"/> 的第一段（<c>Fabric 0.16.10</c> → <c>Fabric</c>）
-    /// 映射到<b>内置标志</b>的文件名 —— 装了谁的加载器就挂谁的标志，和 HMCL 等启动器 一个道理：
+    /// 映射到<b>内置标志</b>的文件名 —— 装了谁的加载器就挂谁的标志，和别的启动器一个道理：
     /// 一眼能认出这个实例是 Forge 还是 Fabric，比给每个实例随机挑个方块有用得多。
     ///
     /// <para>Forge 不在这张表里：它改走 <see cref="ForgeBlockType"/>（游戏里的铁砧方块）。
@@ -3174,7 +3174,7 @@ public partial class MainWindowViewModel : ViewModelBase
     /// <list type="bullet">
     /// <item><c>neoforge</c>（默认）：NeoForge 官方那只会点头的狐狸
     /// （<c>neoforged/.github</c> 的 <c>neoforged_icon_16x16.png</c>，Unlicense）。
-    /// 跟 HMCL 等启动器 用的是同一张图，玩家一眼对得上号。</item>
+    /// 默认用官方那张图，玩家一眼对得上号。</item>
     /// <item><c>neoforge_negi</c>：从本项目 <c>app.png</c> 裁出来的橙狐狸。
     /// NeoForge 自己也是狐狸，想统一成自家风格（跟停靠栏、桌宠一套）时换成这个。</item>
     /// </list>

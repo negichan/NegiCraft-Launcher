@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Concurrent;
 using System.IO;
 using System.Net.Http;
@@ -344,7 +344,8 @@ public static class SkinService
     }
 
     /// <summary>
-    /// Computes a stable hash code matching 其他启动器's implementation (MeloongCore.StringExtensions.GetStableHashCode).
+    /// Cross-process stable string hash (a djb2 variant folded with a fixed constant).
+    /// string.GetHashCode() won't do: .NET salts it per process, so a name would hash differently on every run.
     /// </summary>
     public static ulong GetStableHashCode(string str)
     {
@@ -360,7 +361,8 @@ public static class SkinService
     }
 
     /// <summary>
-    /// 其他启动器's offline player UUID generation (ModLaunch.McLoginLegacyUuid).
+    /// Derives a fixed 32-hex offline UUID from the player name: name length in the high
+    /// half, the stable hash in the low half, version nibble 3 and variant nibble 9.
     /// </summary>
     public static string McLoginLegacyUuid(string name)
     {
@@ -371,7 +373,7 @@ public static class SkinService
     }
 
     /// <summary>
-    /// 其他启动器's offline skin gender / model determination (ModMinecraft.McSkinSex).
+    /// XORs the four check nibbles of the UUID; an odd result means the slim model.
     /// Returns "Alex" (slim) or "Steve" (classic).
     /// </summary>
     public static string McSkinSex(string uuid)
@@ -386,7 +388,7 @@ public static class SkinService
 
     /// <summary>
     /// Offline players have no profile property stating the model, so the default skin is
-    /// picked using 其他启动器's McSkinSex(McLoginLegacyUuid(name)) algorithm (Alex = slim/少女, Steve = classic).
+    /// picked from the name itself: derive the offline UUID, then read its check nibbles (Alex = slim, Steve = classic).
     /// </summary>
     public static bool IsSlimForPlayerName(string name)
     {

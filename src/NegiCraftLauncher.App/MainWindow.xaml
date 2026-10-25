@@ -1,4 +1,4 @@
-<!-- 1180x720 是**可见窗口**（Shell）的尺寸；窗口实际开到 1300x840，四周各留 60 给投影。
+﻿<!-- 1180x720 是**可见窗口**（Shell）的尺寸；窗口实际开到 1300x840，四周各留 60 给投影。
      Tailwind 的 shadow-lg 只溢出左右 ~12、下方 ~22，所以这 60 大部分是富余 —— 照样留着，
      缩小它只是白搬一次窗口矩形。无边框 + AllowsTransparency 的窗口没法把阴影画到自己矩形
      外面，只能把窗口开大、让 Shell 缩在里面。alpha=0 的留白是点击穿透的，不会挡住底下的窗口。 -->
@@ -748,7 +748,7 @@
                                     </ItemsControl.ItemsPanel>
                                     <ItemsControl.ItemTemplate>
                                         <DataTemplate>
-                                            <!-- 和列表行同一套 其他启动器 交互：单击=设为当前，双击=启动，配置走齿轮。 -->
+                                            <!-- 和列表行同一套交互：单击=设为当前，双击=启动，配置走齿轮。 -->
                                             <Button Style="{StaticResource InstCardStyle}"
                                                     neg:Negi.Current="{Binding IsCurrent}"
                                                     Margin="0,0,12,12"
@@ -871,7 +871,7 @@
                                                   ItemsSource="{Binding VisibleInstances}">
                                         <ItemsControl.ItemTemplate>
                                             <DataTemplate>
-                                                <!-- 其他启动器 式行交互：单击=设为当前（高亮不跳页），双击=直接启动；
+                                                <!-- 行交互：单击=设为当前（高亮不跳页），双击=直接启动；
                                                      进配置页走行尾的齿轮或右键菜单。 -->
                                                 <Button Style="{StaticResource InstRowStyle}"
                                                         neg:Negi.Current="{Binding IsCurrent}"
@@ -914,7 +914,7 @@
 
                                                     <Grid>
                                                         <!-- 当前行左侧的指示条：贴到行的左沿（负边距探出内边距），
-                             与 其他启动器 选中行同款的一眼可辨。 -->
+                             选中那行要一眼看得出来。 -->
                                                         <Border Width="3" CornerRadius="1.5" Background="#fafafa"
                                                                 HorizontalAlignment="Left" VerticalAlignment="Stretch"
                                                                 Margin="-14,7,0,7"
@@ -1112,7 +1112,7 @@
                                         </neg:NegiStackPanel>
                                     </Button>
 
-                                    <!-- 设置：隔离 / Java / 内存（其他启动器 的「设置」页同构） -->
+                                    <!-- 设置：隔离 / Java / 内存 -->
                                     <Button Style="{StaticResource InstNavBtnStyle}"
                                             neg:Negi.On="{Binding ConfigTab, Converter={StaticResource Equals}, ConverterParameter=设置}"
                                             Command="{Binding SelectConfigTabCommand}" CommandParameter="设置">
@@ -1186,7 +1186,7 @@
 
                             <!-- 右侧设置内容 -->
                             <Grid Grid.Column="2">
-                                <!-- 1. 概览：其他启动器 式 —— 头部大图标 + 就地改名，统计卡一眼看全，
+                                <!-- 1. 概览：头部大图标 + 就地改名，统计卡一眼看全，
                                      设置（隔离 / Java / 内存）合在一张卡里，快捷操作与危险区收在底部。 -->
                                 <ScrollViewer VerticalScrollBarVisibility="Auto"
                                               Visibility="{Binding ConfigTab, Converter={StaticResource Equals}, ConverterParameter=概览}">
@@ -1323,7 +1323,7 @@
                                     </neg:NegiStackPanel>
                                 </ScrollViewer>
 
-                                <!-- 1b. 设置：隔离 / Java / 内存，一行一项（其他启动器 的「设置」页同构）。 -->
+                                <!-- 1b. 设置：隔离 / Java / 内存，一行一项。 -->
                                 <ScrollViewer VerticalScrollBarVisibility="Auto"
                                               Visibility="{Binding ConfigTab, Converter={StaticResource Equals}, ConverterParameter=设置}">
                                     <neg:NegiStackPanel Spacing="16" Margin="0,0,10,0">

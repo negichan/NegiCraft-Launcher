@@ -1,4 +1,4 @@
-# 第三方图标声明 / Third-party icon notice
+﻿# 第三方图标声明 / Third-party icon notice
 
 本目录下的图分三类：
 
@@ -102,7 +102,7 @@ DIP 要乘系统缩放才是物理像素，40 DIP 在 125% 下要 60 个物理�
   再盒式缩到 69×51、居中。**缩到 86% 而不是铺满**，否则头会顶到槽位圆角、看着像被切掉。
 
 **NeoForge 为什么有两张**：NeoForge 的标志是只狐狸，本项目的 launcher 图标
-（`app.png`／`NegiPet`）也是只狐狸。默认用**官方那张**（跟 HMCL 等启动器 一致，玩家一眼
+（`app.png`／`NegiPet`）也是只狐狸。默认用**官方那张**（跟别的启动器一致，玩家一眼
 对得上号）；自家的橙狐狸留在包里，改 `MainWindowViewModel.NeoForgeIcon` 一个常量就能切到
 `neoforge_negi`，让实例列表、停靠栏、桌宠是同一套形象。
 
@@ -143,10 +143,9 @@ LICENSE，严格说等于「保留所有权利」。这里按「指明来源」�
 内容裁齐，于是形状崩坏；80px 下因数值巧合看着还行，160px 一放大就露馅。
 现在改用 ccVaults 的预渲染 `block_anvil.png`，几何由对方保证。
 
-**旁证**：其他启动器 与 HMCL 也都用铁砧当 Forge 图标，而且都是这个形状 ——
-`其他启动器/Images/Blocks/Anvil.png`（64×64）与
-`HMCL/HMCL/src/main/resources/assets/img/forge.png`（32×32）。
-两家的图分别是 LGPL-3.0 与 GPL-3.0，**不能拿来用**。
+**旁证**：社区另外两个主流启动器也都拿铁砧当 Forge 图标，而且都是这个形状
+（一张 32×32、一张 64×64）。它们的图各自在 GPL-3.0 与 LGPL-3.0 的项目里，
+**不能拿来用**，所以这里走 ccVaults 的 CC0 预渲染。
 
 ---
 
