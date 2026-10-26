@@ -33,6 +33,9 @@
 
     <!-- ============ 基础件（必须声明在用到它们的样式之前，StaticResource 是顺序敏感的） ============ -->
 
+    <!-- TextBox 的 PART_ContentHost 用它抵消 TextBoxBase 自动塞进来的那份 Padding（见类注释）。 -->
+    <neg:NegateThicknessConverter x:Key="NegiNegateThickness" />
+
     <!-- 滑动条/滚动条里的填充按钮：Avalonia 版是全透明 -->
     <Style x:Key="NegiFlatRepeatButtonStyle" TargetType="{x:Type RepeatButton}">
         <Setter Property="Background" Value="Transparent" />
@@ -250,7 +253,9 @@
                              Padding 只挂在整行上。左槽（neg:Negi.LeadingIcon，对应 Avalonia 的
                              InnerLeftContent）有内容时文字被布局推开，槽是空的就整列 Collapsed。
                              以前图标是叠在控件外面 + 手调一个 padding-left，于是图标位置和文字
-                             起始位是两条互不相干的数，改一处就得重新量另一处。 -->
+                             起始位是两条互不相干的数，改一处就得重新量另一处。
+                             ⚠️ 文字那格必须用负 Margin 抵消 content host 自带的那份 Padding，
+                             否则文字是「整行 Padding + content host Padding」两份，水印只有一份。 -->
                         <Grid Margin="{TemplateBinding Padding}">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="Auto" />
@@ -272,9 +277,14 @@
                                            IsHitTestVisible="False"
                                            Visibility="Collapsed" />
                                 <!-- WPF 的 TextBox 模板**必须**有一个叫 PART_ContentHost 的
-                                     ScrollViewer 或 AdornerDecorator，否则输入区不显示。 -->
+                                     ScrollViewer 或 AdornerDecorator，否则输入区不显示。
+                                     ⚠️ TextBoxBase 会把 TextBox.Padding 写进这个 ScrollViewer 的 Padding
+                                     （模板里写什么都会被覆盖），所以这里给一个负 Margin 把它抵消，
+                                     让文字和内缩过一格的 Watermark 从同一个 x 开始。 -->
                                 <ScrollViewer x:Name="PART_ContentHost"
                                               Focusable="False"
+                                              Margin="{Binding Padding, RelativeSource={RelativeSource TemplatedParent},
+                                                               Converter={StaticResource NegiNegateThickness}}"
                                               VerticalAlignment="{TemplateBinding VerticalContentAlignment}"
                                               HorizontalScrollBarVisibility="{TemplateBinding ScrollViewer.HorizontalScrollBarVisibility}"
                                               VerticalScrollBarVisibility="{TemplateBinding ScrollViewer.VerticalScrollBarVisibility}" />
