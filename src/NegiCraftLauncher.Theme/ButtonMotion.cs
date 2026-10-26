@@ -66,10 +66,10 @@ public static class ButtonMotion
                 return;
             }
             var pressed = GetPressed(_target);
-            var hovered = GetHovered(_target);
-            var scale = pressed ? 0.965 : hovered ? 1.012 : 1;
-            var y = pressed ? 0.8 : hovered ? -0.5 : 0;
-            var duration = pressed ? Motion.Press : hovered ? Motion.Hover : Motion.Base;
+            // 悬停只换底色，不再把控件放大/上提 —— 整行、整卡跟着缩放会让人以为点错了东西。
+            var scale = pressed ? 0.965 : 1;
+            var y = pressed ? 0.8 : 0;
+            var duration = pressed ? Motion.Press : Motion.Base;
             _scaleX = Retarget(_scaleX, _scale, ScaleTransform.ScaleXProperty, scale, duration);
             _scaleY = Retarget(_scaleY, _scale, ScaleTransform.ScaleYProperty, scale, duration);
             _offsetY = Retarget(_offsetY, _position, TranslateTransform.YProperty, y, duration);
