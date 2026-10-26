@@ -248,12 +248,15 @@ public static class Pop
                 var x = pin switch
                 {
                     "UnderCenter" => triggerAt.X + (trigger.ActualWidth - width) / 2,
-                    "UnderRight" => triggerAt.X + trigger.ActualWidth - width,
+                    "UnderRight" or "AboveRight" => triggerAt.X + trigger.ActualWidth - width,
                     _ => triggerAt.X,
                 };
                 x = Math.Clamp(x, 12, Math.Max(12, host.ActualWidth - width - 12));
                 _pinX = x - popAt.X;
-                _pinY = triggerAt.Y + trigger.ActualHeight + GetPinGap(_target) - popAt.Y;
+                var y = pin.StartsWith("Above", StringComparison.Ordinal)
+                    ? triggerAt.Y - _target.ActualHeight - GetPinGap(_target)
+                    : triggerAt.Y + trigger.ActualHeight + GetPinGap(_target);
+                _pinY = Math.Max(12, y) - popAt.Y;
             }
             catch (InvalidOperationException)
             {

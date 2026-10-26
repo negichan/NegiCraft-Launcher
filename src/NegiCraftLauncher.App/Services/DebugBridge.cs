@@ -197,6 +197,55 @@ public sealed class DebugBridge
                 case "inst-view":
                     await PetDebugMailbox.Ui(() => _vm.InstanceViewMode = arg == "list" ? "list" : "grid");
                     return $"OK {_vm.InstanceViewMode}";
+                // 下载页：筛选、排序、打开安装单。安装单里的加载器版本要联网，脚本等不了，
+                // 所以只负责把面摆出来，图由调用方隔一会儿再抓。
+                case "dl":
+                    return await PetDebugMailbox.Ui(() =>
+                    {
+                        var head = arg.Split(' ', 2);
+                        var value = head.Length > 1 ? head[1] : "";
+                        switch (head[0])
+                        {
+                            case "kind":
+                                _vm.SelectGameKindCommand.Execute(string.IsNullOrEmpty(value) ? "release" : value);
+                                return $"OK kind={_vm.GameKind}";
+                            case "sort":
+                                _vm.SelectGameSortCommand.Execute(string.IsNullOrEmpty(value) ? "date" : value);
+                                return $"OK sort={_vm.GameSort}";
+                            case "sortpop":
+                                _vm.ToggleGameSortPopCommand.Execute(null);
+                                return $"OK sortpop={_vm.IsGameSortPopOpen}";
+                            case "search":
+                                _vm.GameSearch = value;
+                                return $"OK search={_vm.GameSearch}";
+                            case "loader":
+                                var loader = _vm.InstallLoaders.FirstOrDefault(l => l.Kind == value);
+                                if (loader is null) return "ERR no loader " + value;
+                                _vm.SelectInstallLoaderCommand.Execute(loader);
+                                return $"OK loader={loader.Kind}";
+                            case "iconpicker":
+                                _vm.OpenInstallIconPickerCommand.Execute(null);
+                                return "OK";
+                            case "preset":
+                                var preset = _vm.InstallIconPresets.FirstOrDefault(p => p.Key == value || p.Name == value);
+                                if (preset is null) return "ERR no preset " + value;
+                                _vm.SetInstallIconPresetCommand.Execute(preset);
+                                return $"OK preset={preset.Key}";
+                            case "cat":
+                                _vm.SelectResCategoryCommand.Execute(string.IsNullOrEmpty(value) ? "game" : value);
+                                return $"OK cat={_vm.CurrentResCategory}";
+                            case "close":
+                                _vm.CloseInstallSheetCommand.Execute(null);
+                                return "OK";
+                            default:
+                                var target = value.Length > 0
+                                    ? _vm.GameVersions.FirstOrDefault(v => v.Id == value)
+                                    : _vm.GameVersions.FirstOrDefault();
+                                if (target is null) return "ERR no version " + value;
+                                _vm.OpenInstallSheetCommand.Execute(target);
+                                return $"OK install={target.Id}";
+                        }
+                    });
                 // 按序号切目录（脚本不知道用户盘上有哪些路径，序号稳定）。
                 // `folder add:<路径>|<别名>` 走的是"选完目录、点了确认"之后那条真路 ——
                 // 目录选择框本身要人点，脚本不抢鼠标，所以从 OfferNewFolder 之后开始演。

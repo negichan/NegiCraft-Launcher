@@ -8,6 +8,7 @@ using NegiCraftLauncher.Core.Instances;
 using NegiCraftLauncher.Core.Java;
 using NegiCraftLauncher.Core.Launch;
 using NegiCraftLauncher.Core.Modrinth;
+using NegiCraftLauncher.Core.Modpacks;
 using NegiCraftLauncher.Core.Net;
 using NegiCraftLauncher.Core.Versions;
 using NegiCraftLauncher.Core.WallpaperEngine;
@@ -1170,7 +1171,8 @@ public partial class MainWindowViewModel : ViewModelBase
     }
 
     /// <summary>Drives the transparent overlay that closes a popover when the user clicks elsewhere.</summary>
-    public bool HasOpenPopover => IsAccPopOpen || IsInstPopOpen || IsDlPopOpen || IsLoaderPopOpen || IsFolderPopOpen;
+    public bool HasOpenPopover =>
+        IsAccPopOpen || IsInstPopOpen || IsDlPopOpen || IsLoaderPopOpen || IsFolderPopOpen || IsGameSortPopOpen;
 
     partial void OnIsAccPopOpenChanged(bool value) => OnPropertyChanged(nameof(HasOpenPopover));
 
@@ -1282,6 +1284,9 @@ public partial class MainWindowViewModel : ViewModelBase
         IsFolderPopOpen = false;
         IsInstConfigOpen = false;
         IsVolumePopOpen = false;
+        IsGameSortPopOpen = false;
+        IsInstallIconPickerOpen = false;
+        IsInstallSheetOpen = false;
     }
 
     // ==========================================================
@@ -3299,6 +3304,467 @@ public partial class MainWindowViewModel : ViewModelBase
     }
 
     // ==========================================================
+    // Download page — game versions
+    // ==========================================================
+
+    public ObservableCollection<GameVersionModel> GameVersions { get; } = new();
+
+    /// <summary>
+    /// 官方清单里愚人节版本仍是 snapshot —— 这个类型只存在于玩家口径里，所以按根 ID 认。
+    /// 名单是历代官方愚人节快照（2015 起；更早的只是官网玩笑，没有可下载版本）。
+    /// </summary>
+    private static readonly HashSet<string> AprilFoolsIds = new(StringComparer.Ordinal)
+    {
+        "15w14a",
+        "1.RV-Pre1",
+        "3D Shareware v1.34",
+        "20w14infinite",
+        "22w13oneblockatatime",
+        "23w13a_or_b",
+        "24w14potato",
+        "25w14craftmine",
+        "26w14a",
+    };
+
+    private readonly List<GameVersionModel> _allGameVersions = new();
+    private PixelBuffer? _gameIcon;
+    private string? _gameLoadError;
+
+    [ObservableProperty]
+    private string _gameKind = "release";
+
+    [ObservableProperty]
+    private string _gameSort = "date";
+
+    [ObservableProperty]
+    private string _gameSearch = "";
+
+    [ObservableProperty]
+    private bool _isGameLoading;
+
+    [ObservableProperty]
+    private string _gameEmptyText = "正在加载版本列表…";
+
+    [ObservableProperty]
+    private bool _isGameSortPopOpen;
+
+    public bool IsGameTab => CurrentResCategory == "game";
+
+    public bool IsDownloadPlaceholder => !IsGameTab;
+
+    public bool HasGameVersions => GameVersions.Count > 0;
+
+    public bool IsGameEmpty => !HasGameVersions && !IsGameLoading;
+
+    public bool IsGameListVisible => IsGameTab && HasGameVersions;
+
+    public bool IsGameEmptyVisible => IsGameTab && !HasGameVersions;
+
+    public int GameRailCount => _allGameVersions.Count;
+
+    public string GameSortLabel => GameSort switch
+    {
+        "version" => "版本号",
+        "name" => "名称",
+        _ => "最新发布",
+    };
+
+    public string DownloadPlaceholderText => "这个分类还没接到新页面。";
+
+    partial void OnGameKindChanged(string value) => ApplyGameFilter();
+
+    partial void OnGameSortChanged(string value)
+    {
+        OnPropertyChanged(nameof(GameSortLabel));
+        ApplyGameFilter();
+    }
+
+    partial void OnGameSearchChanged(string value) => ApplyGameFilter();
+
+    partial void OnIsGameSortPopOpenChanged(bool value) => OnPropertyChanged(nameof(HasOpenPopover));
+
+    [RelayCommand]
+    private void SelectGameKind(string kind) => GameKind = kind;
+
+    [RelayCommand]
+    private void ToggleGameSortPop() => IsGameSortPopOpen = !IsGameSortPopOpen;
+
+    [RelayCommand]
+    private void SelectGameSort(string sort)
+    {
+        GameSort = sort;
+        IsGameSortPopOpen = false;
+    }
+
+    [RelayCommand]
+    private void RefreshGameVersions() => _ = LoadGameVersionsAsync(force: true);
+
+    private void ApplyGameFilter()
+    {
+        var query = GameSearch.Trim();
+        IEnumerable<GameVersionModel> items = _allGameVersions.Where(v => v.Kind == GameKind);
+
+        if (query.Length > 0)
+        {
+            items = items.Where(v => v.Id.Contains(query, StringComparison.OrdinalIgnoreCase));
+        }
+
+        items = GameSort switch
+        {
+            "name" => items.OrderBy(v => v.Id, StringComparer.OrdinalIgnoreCase),
+            "version" => items.OrderBy(v => v.Id, Comparer<string>.Create(CompareVersionIds)).Reverse(),
+            _ => items.OrderByDescending(v => v.ReleasedAt),
+        };
+
+        GameVersions.Clear();
+        foreach (var version in items) GameVersions.Add(version);
+
+        if (GameVersions.Count == 0)
+        {
+            GameEmptyText = _gameLoadError
+                            ?? (query.Length > 0 ? $"没有和「{query}」匹配的版本" : "这个筛选下没有版本");
+        }
+
+        OnPropertyChanged(nameof(HasGameVersions));
+        OnPropertyChanged(nameof(IsGameEmpty));
+        OnPropertyChanged(nameof(IsGameListVisible));
+        OnPropertyChanged(nameof(IsGameEmptyVisible));
+    }
+
+    /// <summary>1.21.11 &gt; 1.21.2 &gt; 1.9 — plain string ordering puts 1.9 above 1.21.</summary>
+    private static int CompareVersionIds(string? left, string? right)
+    {
+        var a = (left ?? "").Split('.', '-', '_', ' ');
+        var b = (right ?? "").Split('.', '-', '_', ' ');
+
+        for (var i = 0; i < Math.Min(a.Length, b.Length); i++)
+        {
+            var numericA = int.TryParse(a[i], out var numberA);
+            var numericB = int.TryParse(b[i], out var numberB);
+
+            var comparison = numericA && numericB
+                ? numberA.CompareTo(numberB)
+                : string.Compare(a[i], b[i], StringComparison.OrdinalIgnoreCase);
+
+            if (comparison != 0) return comparison;
+        }
+
+        return a.Length.CompareTo(b.Length);
+    }
+
+    // ==========================================================
+    // Install sheet
+    // ==========================================================
+
+    public ObservableCollection<LoaderChoiceModel> InstallLoaders { get; } = new();
+    public ObservableCollection<LoaderVersionModel> InstallLoaderVersions { get; } = new();
+    public ObservableCollection<BlockIconModel> InstallIconPresets { get; } = new();
+
+    [ObservableProperty]
+    private bool _isInstallSheetOpen;
+
+    [ObservableProperty]
+    private string _installName = "";
+
+    [ObservableProperty]
+    private string _installVersionId = "";
+
+    [ObservableProperty]
+    private PixelBuffer? _installIconBitmap;
+
+    [ObservableProperty]
+    private string? _installIconPreset;
+
+    [ObservableProperty]
+    private bool _isInstallIconPickerOpen;
+
+    [ObservableProperty]
+    private LoaderChoiceModel? _installLoader;
+
+    [ObservableProperty]
+    private string _loaderVersionsHint = "未选择加载器";
+
+    [ObservableProperty]
+    private string? _installLoaderVersion;
+
+    [ObservableProperty]
+    private string _installSummary = "";
+
+    public bool HasLoaderVersionsHint => LoaderVersionsHint.Length > 0;
+
+    /// <summary>加载器选着、版本还在读的时候先别让点，点了也装不了。</summary>
+    public bool CanConfirmInstall => InstallLoader is null || !string.IsNullOrWhiteSpace(InstallLoaderVersion);
+
+    partial void OnLoaderVersionsHintChanged(string value) => OnPropertyChanged(nameof(HasLoaderVersionsHint));
+
+    partial void OnInstallLoaderChanged(LoaderChoiceModel? value) => OnPropertyChanged(nameof(CanConfirmInstall));
+
+    partial void OnInstallLoaderVersionChanged(string? value) => OnPropertyChanged(nameof(CanConfirmInstall));
+
+    private GameVersionModel? _installTarget;
+    private CancellationTokenSource? _loaderVersionsLoad;
+
+    private PixelBuffer GameBlockIcon =>
+        _gameIcon ??= BlockAssets.Load("grass") ?? PixelArt.CreateBlockCube("grass", BlockIconSize);
+
+    private void EnsureInstallLoaders()
+    {
+        if (InstallLoaders.Count > 0) return;
+
+        var fallback = GameBlockIcon;
+        InstallLoaders.Add(new LoaderChoiceModel
+        {
+            Kind = "forge",
+            Label = "Forge",
+            Icon = BlockAssets.Load(ForgeBlockType, IconPresetThumbSize) ?? fallback,
+        });
+        InstallLoaders.Add(new LoaderChoiceModel
+        {
+            Kind = "neoforge",
+            Label = "NeoForge",
+            Icon = BuiltinIcons.Load(NeoForgeIcon) ?? fallback,
+        });
+        InstallLoaders.Add(new LoaderChoiceModel
+        {
+            Kind = "fabric",
+            Label = "Fabric",
+            Icon = BuiltinIcons.Load("fabric") ?? fallback,
+        });
+    }
+
+    private void EnsureInstallIconPresets()
+    {
+        if (InstallIconPresets.Count > 0) return;
+
+        EnsureIconPresets();
+        foreach (var preset in IconPresets)
+        {
+            if (preset.Key == LoaderPresetPrefix + "quilt") continue;
+            InstallIconPresets.Add(new BlockIconModel(preset.Key, preset.Name, preset.Bitmap));
+        }
+    }
+
+    [RelayCommand]
+    private void OpenInstallSheet(GameVersionModel? version)
+    {
+        if (version is null) return;
+
+        EnsureInstallLoaders();
+        _installTarget = version;
+        InstallVersionId = version.Id;
+        InstallName = version.Id;
+        InstallIconPreset = null;
+        InstallLoader = null;
+        InstallLoaderVersion = null;
+        InstallLoaderVersions.Clear();
+        LoaderVersionsHint = "未选择加载器";
+        IsGameSortPopOpen = false;
+        IsInstallIconPickerOpen = false;
+        foreach (var loader in InstallLoaders) loader.IsSelected = false;
+
+        UpdateInstallPreview();
+        UpdateInstallSummary();
+        IsInstallSheetOpen = true;
+    }
+
+    [RelayCommand]
+    private void CloseInstallSheet()
+    {
+        IsInstallSheetOpen = false;
+        IsInstallIconPickerOpen = false;
+        _loaderVersionsLoad?.Cancel();
+    }
+
+    [RelayCommand]
+    private void OpenInstallIconPicker()
+    {
+        if (IsInstallIconPickerOpen)
+        {
+            IsInstallIconPickerOpen = false;
+            return;
+        }
+
+        EnsureInstallIconPresets();
+        // 没手动挑过图标时，真正生效的是加载器标志 —— 面板里就把那一格标出来。
+        var active = InstallIconPreset
+                     ?? (InstallLoader is { } loader ? LoaderPresetPrefix + loader.Kind : null);
+        foreach (var preset in InstallIconPresets)
+        {
+            preset.IsSelected = preset.Key == active;
+        }
+
+        IsInstallIconPickerOpen = true;
+    }
+
+    [RelayCommand]
+    private void CloseInstallIconPicker() => IsInstallIconPickerOpen = false;
+
+    [RelayCommand]
+    private void SetInstallIconPreset(BlockIconModel? preset)
+    {
+        if (preset is null) return;
+
+        InstallIconPreset = preset.Key;
+        foreach (var item in InstallIconPresets) item.IsSelected = item.Key == preset.Key;
+        IsInstallIconPickerOpen = false;
+        UpdateInstallPreview();
+    }
+
+    [RelayCommand]
+    private async Task SelectInstallLoaderAsync(LoaderChoiceModel? loader)
+    {
+        if (loader is null) return;
+
+        if (ReferenceEquals(InstallLoader, loader))
+        {
+            loader.IsSelected = false;
+            InstallLoader = null;
+            InstallLoaderVersion = null;
+            InstallLoaderVersions.Clear();
+            LoaderVersionsHint = "未选择加载器";
+            UpdateInstallPreview();
+            UpdateInstallSummary();
+            return;
+        }
+
+        foreach (var item in InstallLoaders) item.IsSelected = ReferenceEquals(item, loader);
+        InstallLoader = loader;
+        InstallLoaderVersion = null;
+        InstallLoaderVersions.Clear();
+        LoaderVersionsHint = "正在读取…";
+        UpdateInstallPreview();
+        UpdateInstallSummary();
+
+        _loaderVersionsLoad?.Cancel();
+        var cts = new CancellationTokenSource();
+        _loaderVersionsLoad = cts;
+
+        try
+        {
+            var source = await _launcher.ResolveSourceAsync(cts.Token);
+            var versions = await LoaderCatalog.ListAsync(loader.Kind, InstallVersionId, source, NclHttp.Shared, cts.Token);
+            if (cts.IsCancellationRequested || !ReferenceEquals(InstallLoader, loader)) return;
+
+            foreach (var version in versions)
+            {
+                InstallLoaderVersions.Add(new LoaderVersionModel { Version = version });
+            }
+
+            LoaderVersionsHint = versions.Count == 0 ? "这个版本没有可用的加载器版本" : "";
+            if (InstallLoaderVersions.Count > 0)
+            {
+                SelectInstallLoaderVersion(InstallLoaderVersions[0]);
+            }
+        }
+        catch (OperationCanceledException)
+        {
+        }
+        catch (Exception ex)
+        {
+            LoaderVersionsHint = $"读取失败：{ex.Message}";
+        }
+    }
+
+    [RelayCommand]
+    private void SelectInstallLoaderVersion(LoaderVersionModel? version)
+    {
+        if (version is null) return;
+
+        foreach (var item in InstallLoaderVersions) item.IsSelected = ReferenceEquals(item, version);
+        InstallLoaderVersion = version.Version;
+        UpdateInstallSummary();
+    }
+
+    private void UpdateInstallPreview()
+    {
+        if (InstallIconPreset is { Length: > 0 } preset)
+        {
+            InstallIconBitmap = preset.StartsWith(LoaderPresetPrefix, StringComparison.Ordinal)
+                ? BuiltinIcons.Load(preset[LoaderPresetPrefix.Length..])
+                : BlockAssets.Load(preset, IconPresetThumbSize);
+            return;
+        }
+
+        InstallIconBitmap = InstallLoader?.Kind switch
+        {
+            "forge" => BlockAssets.Load(ForgeBlockType, IconPresetThumbSize) ?? GameBlockIcon,
+            "neoforge" => BuiltinIcons.Load(NeoForgeIcon) ?? GameBlockIcon,
+            "fabric" => BuiltinIcons.Load("fabric") ?? GameBlockIcon,
+            _ => GameBlockIcon,
+        };
+    }
+
+    private void UpdateInstallSummary()
+    {
+        var loader = InstallLoader is null
+            ? "原版"
+            : $"{InstallLoader.Label} {InstallLoaderVersion}".TrimEnd();
+        InstallSummary = $"Minecraft {InstallVersionId} · {loader}";
+    }
+
+    [RelayCommand]
+    private async Task ConfirmInstallAsync()
+    {
+        if (!IsInstallSheetOpen || _installTarget is not { } version) return;
+
+        var name = InstallName.Trim();
+        if (name.Length == 0) name = version.Id;
+
+        var loader = InstallLoader;
+        var loaderVersion = InstallLoaderVersion;
+        if (loader is not null && string.IsNullOrWhiteSpace(loaderVersion)) return;
+
+        var preset = InstallIconPreset;
+        IsInstallSheetOpen = false;
+        IsInstallIconPickerOpen = false;
+
+        var task = BeginTask($"安装 {name}");
+        task.Retry = ct => RunSheetInstallAsync(version, name, loader, loaderVersion, preset, task, ct);
+        await RunSheetInstallAsync(version, name, loader, loaderVersion, preset, task, task.Cts!.Token);
+    }
+
+    private async Task RunSheetInstallAsync(
+        GameVersionModel version, string name, LoaderChoiceModel? loader, string? loaderVersion,
+        string? iconPreset, DownloadTaskModel task, CancellationToken ct)
+    {
+        try
+        {
+            var instance = await _launcher.CreateInstanceAsync(version.Id, name, Track(task), ct);
+
+            if (loader is not null && !string.IsNullOrWhiteSpace(loaderVersion))
+            {
+                task.Status = $"正在安装 {loader.Label}";
+                task.Detail = loaderVersion;
+
+                var source = await _launcher.ResolveSourceAsync(ct);
+                await LoaderInstaller.InstallAsync(
+                    _launcher.Instances.Repository, instance.Id, version.Id,
+                    new LoaderRequirement(loader.Kind, loaderVersion), source, NclHttp.Shared, ct);
+                _launcher.Instances.Load();
+            }
+
+            var installed = _launcher.Instances.Instances.FirstOrDefault(i => i.Id == instance.Id) ?? instance;
+            if (!string.IsNullOrEmpty(iconPreset))
+            {
+                _launcher.Instances.SetIconPreset(installed, iconPreset);
+            }
+
+            FinishTask(task, "已完成");
+            _launcher.SelectInstance(installed);
+            RefreshInstances();
+            ShowBanner($"「{installed.DisplayName}」已经可以启动了。");
+        }
+        catch (Exception ex)
+        {
+            EndTask(task, ex);
+            if (task.Status is not ("已暂停" or "已取消"))
+            {
+                ShowBanner($"安装 {version.Id} 失败：{ex.Message}");
+            }
+        }
+    }
+
+    // ==========================================================
     // Downloads
     // ==========================================================
 
@@ -3306,7 +3772,13 @@ public partial class MainWindowViewModel : ViewModelBase
 
     public bool HasDownloads => Downloads.Count > 0;
 
-    public void RefreshHasDownloads() => OnPropertyChanged(nameof(HasDownloads));
+    public string DownloadBadgeText => Downloads.Count.ToString();
+
+    public void RefreshHasDownloads()
+    {
+        OnPropertyChanged(nameof(HasDownloads));
+        OnPropertyChanged(nameof(DownloadBadgeText));
+    }
 
     /// <summary>The task list hangs off the download page as a popover instead of owning a page.</summary>
     [ObservableProperty]
@@ -3324,14 +3796,14 @@ public partial class MainWindowViewModel : ViewModelBase
     private void ClearDownloads()
     {
         foreach (var task in Downloads.Where(t => t.IsFinished).ToList()) Downloads.Remove(task);
-        OnPropertyChanged(nameof(HasDownloads));
+        RefreshHasDownloads();
     }
 
     private DownloadTaskModel BeginTask(string name)
     {
         var task = new DownloadTaskModel { Name = name, Cts = new CancellationTokenSource() };
         Downloads.Insert(0, task);
-        OnPropertyChanged(nameof(HasDownloads));
+        RefreshHasDownloads();
         return task;
     }
 
@@ -3443,7 +3915,15 @@ public partial class MainWindowViewModel : ViewModelBase
 
     public bool HasResources => FilteredResources.Count > 0;
 
-    partial void OnCurrentResCategoryChanged(string value) => UpdateFilteredResources();
+    partial void OnCurrentResCategoryChanged(string value)
+    {
+        _resourceLoad?.Cancel();
+        OnPropertyChanged(nameof(IsGameTab));
+        OnPropertyChanged(nameof(IsDownloadPlaceholder));
+        OnPropertyChanged(nameof(IsGameListVisible));
+        OnPropertyChanged(nameof(IsGameEmptyVisible));
+        OnPropertyChanged(nameof(DownloadPlaceholderText));
+    }
 
     partial void OnResourceSearchChanged(string value) => UpdateFilteredResources();
 
@@ -3485,40 +3965,87 @@ public partial class MainWindowViewModel : ViewModelBase
         OnPropertyChanged(nameof(HasResources));
     }
 
-    private async Task LoadGameVersionsAsync()
+    private async Task LoadGameVersionsAsync(bool force = false)
     {
+        IsGameLoading = true;
+        if (_allGameVersions.Count == 0) GameEmptyText = "正在加载版本列表…";
+
         try
         {
             var source = await _launcher.ResolveSourceAsync().ConfigureAwait(true);
-            var manifest = await _launcher.Manifests.GetAsync(source).ConfigureAwait(true);
+            var manifest = await _launcher.Manifests.GetAsync(source, force).ConfigureAwait(true);
 
-            var installed = new HashSet<string>(
-                _launcher.Instances.Instances.Select(i => i.VersionId), StringComparer.OrdinalIgnoreCase);
+            var icon = _gameIcon ??= BlockAssets.Load("grass")
+                                   ?? PixelArt.CreateBlockCube("grass", BlockIconSize);
 
-            var icon = BlockAssets.Load("grass") ?? PixelArt.CreateBlockCube("grass");
-
-            _gameResources.Clear();
-            foreach (var version in manifest.Versions.Where(v => v.IsRelease).Take(200))
+            _gameLoadError = null;
+            _allGameVersions.Clear();
+            foreach (var version in manifest.Versions)
             {
-                var known = installed.Contains(version.Id);
-                _gameResources.Add(new ResourceModel
+                _allGameVersions.Add(new GameVersionModel
                 {
-                    Name = version.Id,
-                    Desc = version.Description,
-                    Category = "game",
-                    VersionId = version.Id,
-                    IconBitmap = icon,
-                    ActionText = known ? "已安装" : "安装",
-                    IsActionEnabled = !known,
+                    Id = version.Id,
+                    Kind = version.Type switch
+                    {
+                        "release" => "release",
+                        "snapshot" when AprilFoolsIds.Contains(version.Id) => "april",
+                        "snapshot" => "snapshot",
+                        _ => "old",
+                    },
+                    KindLabel = version.Type switch
+                    {
+                        "release" => "正式版",
+                        "snapshot" when AprilFoolsIds.Contains(version.Id) => "愚人节",
+                        "snapshot" => "快照",
+                        _ => "远古",
+                    },
+                    ReleasedAt = version.EffectiveDate,
+                    ReleaseText = version.EffectiveDate.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss"),
+                    JavaText = RequiredJavaText(version),
+                    Icon = icon,
+                    IsLatest = version.Id == manifest.Latest.Release,
                 });
             }
         }
         catch (Exception ex)
         {
-            ResourceEmptyText = $"版本列表加载失败：{ex.Message}";
+            _gameLoadError = $"版本列表加载失败：{ex.Message}";
         }
 
-        if (CurrentResCategory == "game") UpdateFilteredResources();
+        IsGameLoading = false;
+        ApplyGameFilter();
+        OnPropertyChanged(nameof(GameRailCount));
+    }
+
+    /// <summary>
+    /// The Java major a version launches with, for the list's tag only — the actual runtime still
+    /// comes from the version JSON. Release numbers are exact; snapshots fall back to the era they
+    /// shipped in, which is what their manifests declared too.
+    /// </summary>
+    private static string RequiredJavaText(VersionSummary version)
+    {
+        if (version.Type == "release" && version.Id.StartsWith("1.", StringComparison.Ordinal))
+        {
+            var parts = version.Id[2..].Split('.');
+            if (parts.Length > 0 && int.TryParse(parts[0], out var minor))
+            {
+                if (minor >= 21) return "Java 21";
+                if (minor == 20 && parts.Length > 1 && int.TryParse(parts[1], out var patch))
+                {
+                    return patch >= 5 ? "Java 21" : "Java 17";
+                }
+
+                if (minor >= 18) return "Java 17";
+                if (minor == 17) return "Java 16";
+                return "Java 8";
+            }
+        }
+
+        var released = version.EffectiveDate.UtcDateTime;
+        if (released >= new DateTime(2024, 4, 1)) return "Java 21";
+        if (released >= new DateTime(2021, 11, 1)) return "Java 17";
+        if (released >= new DateTime(2021, 6, 1)) return "Java 16";
+        return "Java 8";
     }
 
     private async Task LoadModrinthAsync(string category, string query, CancellationToken ct)

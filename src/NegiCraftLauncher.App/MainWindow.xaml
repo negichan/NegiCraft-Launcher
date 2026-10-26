@@ -483,7 +483,7 @@
             </Border>
 
             <!-- ========================================== -->
-            <!-- 5. 内容区（内边距 22 28 22 100）             -->
+            <!-- 5. 内容区（外边距 100 22 28 22）             -->
             <!-- ========================================== -->
             <Grid x:Name="MainContent" Margin="100,22,28,22" Panel.ZIndex="10">
 
@@ -611,15 +611,22 @@
                 <!-- 页 2：实例 -->
                 <Grid x:Name="PageInstances" Style="{StaticResource PageAnimStyle}" Focusable="False" FocusVisualStyle="{x:Null}" KeyboardNavigation.TabNavigation="None" Visibility="{Binding CurrentPage, Converter={StaticResource Equals}, ConverterParameter=instances}">
                     <neg:NegiGrid Rows="Auto Auto *">
-                        <!-- 页头标题：右上角那片（最小化 + 关闭）是窗口操作区，留出安全区。 -->
+                        <!-- 页头标题：右上角那片（最小化 + 关闭）是窗口操作区，留出安全区。
+                             刷新和下载页一样挂在标题旁边：外部装的版本不用等游戏退出或切目录才冒出来。 -->
                         <Grid Grid.Row="0" Height="36" Margin="0,0,96,14">
-                            <TextBlock Text="实例" FontSize="24" Height="32" FontWeight="SemiBold"
-                                       VerticalAlignment="Center" Foreground="#fafafa" />
+                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                <TextBlock Text="实例" FontSize="24" Height="32" FontWeight="SemiBold"
+                                           VerticalAlignment="Center" Foreground="#fafafa" />
+                                <Button Style="{StaticResource IconBtnStyle}" Width="32" Height="32" Margin="6,2,0,0"
+                                        Command="{Binding RefreshInstancesListCommand}" ToolTip="刷新实例列表">
+                                    <materialIcons:MaterialIcon Kind="Refresh" Width="22" Height="22" Foreground="#a1a1aa" />
+                                </Button>
+                            </StackPanel>
                         </Grid>
 
                         <!-- 第二层工具条：统一 32 高。它已经在窗口操作区下面，所以能一直铺到内容列右边缘。
                              搜索框不再吃满整行 —— 右边那排（导入 / 添加目录 / 目录切换 / 视图切换）要地方。 -->
-                        <neg:NegiGrid Grid.Row="1" Columns="Auto Auto Auto Auto * Auto Auto Auto Auto Auto Auto" Height="32" Margin="0,0,0,16">
+                        <neg:NegiGrid Grid.Row="1" Columns="Auto Auto Auto Auto * Auto Auto Auto Auto Auto" Height="32" Margin="0,0,0,16">
                             <!-- 搜索框：统一定义在 Theme/Controls.xaml 中的 SearchBoxStyle，
                                  内含 32 高度、8 圆角、左侧放大镜（防击穿）、右侧动态清空按钮。 -->
                             <TextBox Grid.Column="0" x:Name="SearchBox" Style="{StaticResource SearchBoxStyle}"
@@ -710,12 +717,6 @@
                                     </Button>
                                 </neg:NegiStackPanel>
                             </Border>
-
-                            <!-- 刷新：外部装的版本不用等游戏退出或切目录才冒出来。 -->
-                            <Button Grid.Column="10" Style="{StaticResource BtnSmOutlineStyle}" Height="32" Margin="8,0,0,0"
-                                    Command="{Binding RefreshInstancesListCommand}" ToolTip="刷新实例列表">
-                                <materialIcons:MaterialIcon Kind="Refresh" Width="14" Height="14" />
-                            </Button>
                         </neg:NegiGrid>
 
                         <Grid Grid.Row="2">
@@ -1037,15 +1038,19 @@
                                 </Button>
                             </neg:NegiStackPanel>
 
-                            <!-- 右下角悬浮安装入口：和首页停靠卡同一个内缩。空态已经有两颗主按钮，这颗就不重复出现了。 -->
-                            <Button Style="{StaticResource FabStyle}" HorizontalAlignment="Right" VerticalAlignment="Bottom"
-                                    Margin="0,0,24,24" Panel.ZIndex="40" Command="{Binding NewInstanceCommand}"
-                                    Visibility="{Binding HasInstances, Converter={StaticResource BoolToVis}}">
-                                <neg:NegiStackPanel Orientation="Horizontal" Spacing="8">
-                                    <materialIcons:MaterialIcon Kind="Plus" Width="16" Height="16" />
-                                    <TextBlock Text="安装新版本" VerticalAlignment="Center" />
-                                </neg:NegiStackPanel>
-                            </Button>
+                            <!-- 右下角悬浮新建入口：和首页停靠卡同一个内缩。空态已经有两颗主按钮，这颗就不重复出现了。
+                                 投影是背后单独一个 FloatShadowStyle 块（同首页那两张卡的画法），按钮本体不挂 Effect。 -->
+                            <Grid HorizontalAlignment="Right" VerticalAlignment="Bottom"
+                                  Margin="0,0,24,24" Panel.ZIndex="40"
+                                  Visibility="{Binding HasInstances, Converter={StaticResource BoolToVis}}">
+                                <Border Style="{StaticResource FloatShadowStyle}" />
+                                <Button Style="{StaticResource FabStyle}" Command="{Binding NewInstanceCommand}">
+                                    <neg:NegiStackPanel Orientation="Horizontal" Spacing="8">
+                                        <materialIcons:MaterialIcon Kind="Plus" Width="16" Height="16" />
+                                        <TextBlock Text="新建" VerticalAlignment="Center" />
+                                    </neg:NegiStackPanel>
+                                </Button>
+                            </Grid>
                         </Grid>
                     </neg:NegiGrid>
                 </Grid>
@@ -1445,26 +1450,26 @@
 
                                 <!-- 图标选择浮层。放 Popup 而不是在卡片里往下展开：21 个格子铺开会把
                                      下面每一行都顶下去，而这是个「挑一下就关」的动作，不该占一块常驻位置。
-                                     位置：右边缘对齐铅笔按钮 —— HorizontalOffset = -(316-28)，不这么干
-                                     浮层会从按钮左边往右伸出去、越过窗口右沿。
-                                     316 = 7 格 × 42 步进（38 槽 + 4 间距）+ 左右各 10 内边距 + 2 余量
-                                     （正好整除时浮点误差会让 WrapPanel 少放一格）。3 只加载器标志 +
-                                     18 块方块 = 21 项，正好铺满三行，标志在前、方块在后。
+                                     尺寸不写死：格子 50 + 四周 2 的间距 = 每格 54，UniformGrid 定 7 列，
+                                     面板宽高就是「格数 × 54 + 内边距」，改图标/留白时不用再手算宽度。
+                                     右沿对齐铅笔按钮走 CustomPopupPlacement（见构造函数）：宽度会变，
+                                     HorizontalOffset 那种死数一对不上就伸到窗口外面去。
+                                     3 只加载器标志 + 18 块方块 = 21 项，正好铺满三行，标志在前、方块在后。
                                      都来自程序集，不开放自选图片。
                                      出场动画走 pop:PopupMotion（缩放+淡入，受「界面动画」三档设置管），
                                      不用 PopupAnimation="Fade" —— 那是 WPF 内建的系统动画，绕开调度。 -->
                                 <Popup x:Name="IconPickerPopup"
                                        PlacementTarget="{Binding ElementName=IconPickerAnchor}"
-                                       Placement="Bottom" VerticalOffset="6" HorizontalOffset="-288"
+                                       Placement="Custom"
                                        StaysOpen="False" AllowsTransparency="True"
                                        pop:PopupMotion.Enable="True" pop:PopupMotion.Origin="TopRight"
                                        IsOpen="{Binding IsIconPickerOpen, Mode=TwoWay}">
-                                    <Border Width="316" Background="#18181b" BorderBrush="#26262b" BorderThickness="1"
-                                            CornerRadius="12" Padding="10,8">
+                                    <Border Background="#18181b" BorderBrush="#26262b" BorderThickness="1"
+                                            CornerRadius="12" Padding="8">
                                         <ItemsControl ItemsSource="{Binding IconPresets}">
                                             <ItemsControl.ItemsPanel>
                                                 <ItemsPanelTemplate>
-                                                    <WrapPanel Orientation="Horizontal" />
+                                                    <UniformGrid Columns="7" />
                                                 </ItemsPanelTemplate>
                                             </ItemsControl.ItemsPanel>
                                             <ItemsControl.ItemTemplate>
@@ -1822,103 +1827,301 @@
                     </neg:NegiGrid>
                 </Grid>
 
-                <!-- 页 3：下载（版本/资源浏览器；任务列表是个弹层） -->
-                <Grid x:Name="PageDownload" Style="{StaticResource PageAnimStyle}" Visibility="{Binding CurrentPage, Converter={StaticResource Equals}, ConverterParameter=download}">
+                <!-- 页 3：下载（版本浏览器；右侧是资源类型，任务列表挂在右下角圆钮上） -->
+                <Grid x:Name="PageDownload" Style="{StaticResource PageAnimStyle}" Margin="0,0,0,-10" Visibility="{Binding CurrentPage, Converter={StaticResource Equals}, ConverterParameter=download}">
                     <neg:NegiGrid Rows="Auto *">
-                        <!-- .page-head -->
-                        <neg:NegiGrid Grid.Row="0" Columns="Auto Auto * Auto Auto" Height="36" Margin="0,0,84,16">
-                            <TextBlock Grid.Column="0" Text="下载" FontSize="20" FontWeight="SemiBold" VerticalAlignment="Center" Foreground="#fafafa" Margin="0,0,8,0" />
-                            <!-- .tabs -->
-                            <Border Grid.Column="1" Background="#1c1c21" CornerRadius="10" Padding="3">
-                                <neg:NegiStackPanel Orientation="Horizontal" Spacing="2">
-                                    <Button Style="{StaticResource SegmentBtnStyle}" Content="游戏"
-                                            neg:Negi.On="{Binding CurrentResCategory, Converter={StaticResource Equals}, ConverterParameter=game}"
-                                            Command="{Binding SelectResCategoryCommand}" CommandParameter="game" />
-                                    <Button Style="{StaticResource SegmentBtnStyle}" Content="模组"
+                        <!-- .ph -->
+                        <Grid Grid.Row="0" Height="34" Margin="0,0,84,12">
+                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                <TextBlock Text="下载" FontSize="24" Height="32" FontWeight="SemiBold" Foreground="#fafafa"
+                                           VerticalAlignment="Center" />
+                                <!-- 只挪位置、不放大：32 的按钮里放 22 的图标。
+                                     上边多 2 —— 中文没有下伸部，字面重心比行框中心低 1~2，
+                                     按钮按行框居中时看着会"飘高"；加上这 2 两边留白才一样。
+                                     左边 6，别贴着标题。 -->
+                                <Button Style="{StaticResource IconBtnStyle}" Width="32" Height="32" Margin="6,2,0,0"
+                                        Command="{Binding RefreshGameVersionsCommand}" ToolTip="刷新版本列表"
+                                        Visibility="{Binding IsGameTab, Converter={StaticResource BoolToVis}}">
+                                    <materialIcons:MaterialIcon Kind="Refresh" Width="22" Height="22" Foreground="#a1a1aa" />
+                                </Button>
+                            </StackPanel>
+                        </Grid>
+
+                        <!-- .workspace：左（筛选 + 列表）右（资源类型） -->
+                        <neg:NegiGrid Grid.Row="1" Columns="* 12 176">
+                            <Grid Grid.Column="0">
+                                <neg:NegiGrid Rows="Auto *" Visibility="{Binding IsGameTab, Converter={StaticResource BoolToVis}}">
+                                    <!-- .listhead：类型分段 | 搜索 | 排序 -->
+                                    <neg:NegiGrid Grid.Row="0" Columns="Auto Auto * Auto" Height="32" Margin="0,0,12,10">
+                                        <Border Grid.Column="0" Background="#27272a" BorderBrush="#26262b" BorderThickness="1"
+                                                CornerRadius="9" Padding="2">
+                                            <neg:NegiStackPanel Orientation="Horizontal" Spacing="2">
+                                                <Button Style="{StaticResource DlSegBtnStyle}" Content="正式版"
+                                                        neg:Negi.On="{Binding GameKind, Converter={StaticResource Equals}, ConverterParameter=release}"
+                                                        Command="{Binding SelectGameKindCommand}" CommandParameter="release" />
+                                                <Button Style="{StaticResource DlSegBtnStyle}" Content="快照"
+                                                        neg:Negi.On="{Binding GameKind, Converter={StaticResource Equals}, ConverterParameter=snapshot}"
+                                                        Command="{Binding SelectGameKindCommand}" CommandParameter="snapshot" />
+                                                <Button Style="{StaticResource DlSegBtnStyle}" Content="远古"
+                                                        neg:Negi.On="{Binding GameKind, Converter={StaticResource Equals}, ConverterParameter=old}"
+                                                        Command="{Binding SelectGameKindCommand}" CommandParameter="old" />
+                                                <Button Style="{StaticResource DlSegBtnStyle}" Content="愚人节"
+                                                        neg:Negi.On="{Binding GameKind, Converter={StaticResource Equals}, ConverterParameter=april}"
+                                                        Command="{Binding SelectGameKindCommand}" CommandParameter="april" />
+                                            </neg:NegiStackPanel>
+                                        </Border>
+
+                                        <TextBox Grid.Column="1" Style="{StaticResource SearchBoxStyle}" Width="236"
+                                                 Margin="8,0,0,0"
+                                                 neg:Negi.Placeholder="搜索版本号"
+                                                 Text="{Binding GameSearch, UpdateSourceTrigger=PropertyChanged}" />
+
+                                        <neg:NegiStackPanel Grid.Column="3" Orientation="Horizontal" Spacing="6"
+                                                            VerticalAlignment="Center">
+                                            <TextBlock Text="排序" FontSize="12.5" Foreground="#a1a1aa"
+                                                       VerticalAlignment="Center" />
+                                            <Button x:Name="DlSortBtn" Style="{StaticResource DlSelectStyle}" Width="94"
+                                                    Command="{Binding ToggleGameSortPopCommand}">
+                                                <neg:NegiGrid Columns="* Auto">
+                                                    <TextBlock Text="{Binding GameSortLabel}" FontSize="12.5"
+                                                               VerticalAlignment="Center" />
+                                                    <materialIcons:MaterialIcon Grid.Column="1" Kind="ChevronDown"
+                                                                                Width="13" Height="13" Foreground="#a1a1aa"
+                                                                                VerticalAlignment="Center" />
+                                                </neg:NegiGrid>
+                                            </Button>
+                                        </neg:NegiStackPanel>
+                                    </neg:NegiGrid>
+
+                                    <!-- .vlist：只有这里滚。滚动条挂在卡片外面（和稿子一样一条 4px 细条），
+                                         最后一行下方那条分界线用 -1 外边距塞进卡片描边里。 -->
+                                    <Grid Grid.Row="1"
+                                          Visibility="{Binding IsGameListVisible, Converter={StaticResource BoolToVis}}">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+                                    <Border x:Name="DlListCard" Grid.Column="0" Background="#111114"
+                                            BorderBrush="#26262b" BorderThickness="1" CornerRadius="14"
+                                            ClipToBounds="True" SizeChanged="OnDlListCardSizeChanged">
+                                        <ListBox x:Name="DlListBox" ItemsSource="{Binding GameVersions}" Margin="0,0,0,-1"
+                                                 Background="Transparent" BorderThickness="0" Padding="0"
+                                                 ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                                                 ScrollViewer.VerticalScrollBarVisibility="Hidden"
+                                                 ScrollViewer.CanContentScroll="True"
+                                                 ScrollViewer.ScrollChanged="OnDlListScrollChanged"
+                                                 VirtualizingPanel.IsVirtualizing="True"
+                                                 VirtualizingPanel.VirtualizationMode="Recycling"
+                                                 VirtualizingPanel.ScrollUnit="Pixel">
+                                            <ListBox.ItemContainerStyle>
+                                                <Style TargetType="{x:Type ListBoxItem}">
+                                                    <Setter Property="Padding" Value="0" />
+                                                    <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                                                    <Setter Property="Focusable" Value="False" />
+                                                    <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+                                                    <Setter Property="Template">
+                                                        <Setter.Value>
+                                                            <ControlTemplate TargetType="{x:Type ListBoxItem}">
+                                                                <ContentPresenter
+                                                                    HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}" />
+                                                            </ControlTemplate>
+                                                        </Setter.Value>
+                                                    </Setter>
+                                                </Style>
+                                            </ListBox.ItemContainerStyle>
+                                            <ListBox.ItemTemplate>
+                                                <DataTemplate>
+                                                    <Button Style="{StaticResource DlRowStyle}" ToolTip="安装这个版本"
+                                                            Command="{Binding DataContext.OpenInstallSheetCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                            CommandParameter="{Binding .}">
+                                                        <neg:NegiGrid Columns="Auto * Auto">
+                                                            <Image Grid.Column="0" Width="34" Height="34" Margin="0,0,14,0"
+                                                                   VerticalAlignment="Center"
+                                                                   Source="{Binding Icon, Converter={StaticResource PixelsToBitmap}}"
+                                                                   RenderOptions.BitmapScalingMode="HighQuality" />
+
+                                                            <neg:NegiStackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="4">
+                                                                <neg:NegiStackPanel Orientation="Horizontal" Spacing="7">
+                                                                    <TextBlock Text="{Binding Id}" FontSize="13.5" FontWeight="SemiBold"
+                                                                               Foreground="#fafafa" VerticalAlignment="Center" />
+                                                                    <Border Style="{StaticResource DlTagAccentStyle}"
+                                                                            Visibility="{Binding ShowLatest, Converter={StaticResource BoolToVis}}">
+                                                                        <TextBlock Style="{StaticResource DlTagAccentTextStyle}" Text="最新正式版" />
+                                                                    </Border>
+                                                                    <Border Style="{StaticResource DlKindTagStyle}"
+                                                                            Visibility="{Binding ShowKindTag, Converter={StaticResource BoolToVis}}">
+                                                                        <TextBlock Style="{StaticResource DlKindTagTextStyle}"
+                                                                                   Text="{Binding KindLabel}" />
+                                                                    </Border>
+                                                                    <Border Style="{StaticResource DlTagStyle}"
+                                                                            Visibility="{Binding ShowJava, Converter={StaticResource BoolToVis}}">
+                                                                        <TextBlock Style="{StaticResource DlTagTextStyle}"
+                                                                                   Text="{Binding JavaText}" />
+                                                                    </Border>
+                                                                </neg:NegiStackPanel>
+                                                                <neg:NegiStackPanel Orientation="Horizontal" Spacing="7">
+                                                                    <TextBlock Text="{Binding ReleaseText}" FontSize="11.5"
+                                                                               Foreground="#a1a1aa" VerticalAlignment="Center" />
+                                                                    <Ellipse Width="3" Height="3" Fill="#a1a1aa" Opacity="0.45"
+                                                                             VerticalAlignment="Center"
+                                                                             Visibility="{Binding ShowKindTag, Converter={StaticResource BoolToVis}}" />
+                                                                    <TextBlock Text="{Binding KindLabel}" FontSize="11.5"
+                                                                               Foreground="#a1a1aa" VerticalAlignment="Center"
+                                                                               Visibility="{Binding ShowKindTag, Converter={StaticResource BoolToVis}}" />
+                                                                </neg:NegiStackPanel>
+                                                            </neg:NegiStackPanel>
+
+                                                            <!-- 只为鼠标悬停准备的「下一步」暗示；点整行也是同一件事。 -->
+                                                            <Border Grid.Column="2" Width="30" Height="30" CornerRadius="9"
+                                                                    Background="#111114" BorderBrush="#26262b" BorderThickness="1"
+                                                                    VerticalAlignment="Center">
+                                                                <Border.Style>
+                                                                    <Style TargetType="{x:Type Border}">
+                                                                        <Setter Property="Opacity" Value="0" />
+                                                                        <Style.Triggers>
+                                                                            <DataTrigger Binding="{Binding IsMouseOver, RelativeSource={RelativeSource AncestorType=Button}}"
+                                                                                         Value="True">
+                                                                                <Setter Property="Opacity" Value="1" />
+                                                                            </DataTrigger>
+                                                                        </Style.Triggers>
+                                                                    </Style>
+                                                                </Border.Style>
+                                                                <materialIcons:MaterialIcon Kind="ArrowRight" Width="15" Height="15"
+                                                                                            Foreground="#a1a1aa"
+                                                                                            HorizontalAlignment="Center"
+                                                                                            VerticalAlignment="Center" />
+                                                            </Border>
+                                                        </neg:NegiGrid>
+                                                    </Button>
+                                                </DataTemplate>
+                                            </ListBox.ItemTemplate>
+                                        </ListBox>
+                                    </Border>
+                                        <ScrollBar x:Name="DlListScrollBar" Grid.Column="1" Width="10"
+                                                   Margin="2,0,0,0" Orientation="Vertical"
+                                                   Minimum="0" SmallChange="48" LargeChange="320"
+                                                   ValueChanged="OnDlListScrollBarValueChanged"
+                                                   Visibility="Collapsed" />
+                                    </Grid>
+
+                                    <!-- 空态 / 加载中 -->
+                                    <Grid Grid.Row="1" Margin="0,0,12,0"
+                                          Visibility="{Binding IsGameEmptyVisible, Converter={StaticResource BoolToVis}}">
+                                        <Border Background="#111114" BorderBrush="#26262b" BorderThickness="1"
+                                                CornerRadius="14" Padding="20,64" VerticalAlignment="Top">
+                                            <neg:NegiStackPanel HorizontalAlignment="Center" Spacing="10">
+                                                <ProgressBar IsIndeterminate="True" Width="120" Height="4"
+                                                             neg:Negi.CornerRadius="2"
+                                                             Foreground="#fafafa" Background="#26262b"
+                                                             HorizontalAlignment="Center"
+                                                             Visibility="{Binding IsGameLoading, Converter={StaticResource BoolToVis}}" />
+                                                <TextBlock Text="{Binding GameEmptyText}" FontSize="13" Foreground="#a1a1aa"
+                                                           HorizontalAlignment="Center" TextAlignment="Center"
+                                                           MaxWidth="420" TextWrapping="Wrap" />
+                                            </neg:NegiStackPanel>
+                                        </Border>
+                                    </Grid>
+                                </neg:NegiGrid>
+
+                                <!-- 其余分类还没接上新页面：只留一句话，工具条和列表都不出现。 -->
+                                <TextBlock Text="{Binding DownloadPlaceholderText}" FontSize="13" Foreground="#a1a1aa"
+                                           HorizontalAlignment="Center" VerticalAlignment="Center"
+                                           Visibility="{Binding IsDownloadPlaceholder, Converter={StaticResource BoolToVis}}" />
+                            </Grid>
+
+                            <!-- .catrail -->
+                            <Border Grid.Column="2" Background="#111114" BorderBrush="#26262b" BorderThickness="1"
+                                    CornerRadius="14" Padding="6" VerticalAlignment="Top">
+                                <neg:NegiStackPanel Spacing="2">
+                                    <Button Style="{StaticResource DlRailBtnStyle}"
+                                            neg:Negi.On="{Binding IsGameTab}"
+                                            Command="{Binding SelectResCategoryCommand}" CommandParameter="game">
+                                        <neg:NegiGrid Columns="Auto * Auto">
+                                            <materialIcons:MaterialIcon Kind="CubeOutline" Width="16" Height="16" Opacity="0.8"
+                                                                        Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
+                                                                        VerticalAlignment="Center" />
+                                            <TextBlock Grid.Column="1" Text="游戏版本" Margin="9,0,0,0" VerticalAlignment="Center" />
+                                            <TextBlock Grid.Column="2" Text="{Binding GameRailCount}" FontSize="11"
+                                                       Foreground="#a1a1aa" Opacity="0.65" VerticalAlignment="Center" />
+                                        </neg:NegiGrid>
+                                    </Button>
+                                    <Button Style="{StaticResource DlRailBtnStyle}"
                                             neg:Negi.On="{Binding CurrentResCategory, Converter={StaticResource Equals}, ConverterParameter=mod}"
-                                            Command="{Binding SelectResCategoryCommand}" CommandParameter="mod" />
-                                    <Button Style="{StaticResource SegmentBtnStyle}" Content="整合包"
+                                            Command="{Binding SelectResCategoryCommand}" CommandParameter="mod">
+                                        <neg:NegiGrid Columns="Auto *">
+                                            <materialIcons:MaterialIcon Kind="PuzzleOutline" Width="16" Height="16" Opacity="0.8"
+                                                                        Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
+                                                                        VerticalAlignment="Center" />
+                                            <TextBlock Grid.Column="1" Text="模组" Margin="9,0,0,0" VerticalAlignment="Center" />
+                                        </neg:NegiGrid>
+                                    </Button>
+                                    <Button Style="{StaticResource DlRailBtnStyle}"
                                             neg:Negi.On="{Binding CurrentResCategory, Converter={StaticResource Equals}, ConverterParameter=pack}"
-                                            Command="{Binding SelectResCategoryCommand}" CommandParameter="pack" />
-                                    <Button Style="{StaticResource SegmentBtnStyle}" Content="资源包"
+                                            Command="{Binding SelectResCategoryCommand}" CommandParameter="pack">
+                                        <neg:NegiGrid Columns="Auto *">
+                                            <materialIcons:MaterialIcon Kind="PackageVariantClosed" Width="16" Height="16" Opacity="0.8"
+                                                                        Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
+                                                                        VerticalAlignment="Center" />
+                                            <TextBlock Grid.Column="1" Text="整合包" Margin="9,0,0,0" VerticalAlignment="Center" />
+                                        </neg:NegiGrid>
+                                    </Button>
+                                    <Button Style="{StaticResource DlRailBtnStyle}"
                                             neg:Negi.On="{Binding CurrentResCategory, Converter={StaticResource Equals}, ConverterParameter=rp}"
-                                            Command="{Binding SelectResCategoryCommand}" CommandParameter="rp" />
-                                    <Button Style="{StaticResource SegmentBtnStyle}" Content="光影"
+                                            Command="{Binding SelectResCategoryCommand}" CommandParameter="rp">
+                                        <neg:NegiGrid Columns="Auto *">
+                                            <materialIcons:MaterialIcon Kind="ImageFrame" Width="16" Height="16" Opacity="0.8"
+                                                                        Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
+                                                                        VerticalAlignment="Center" />
+                                            <TextBlock Grid.Column="1" Text="资源包" Margin="9,0,0,0" VerticalAlignment="Center" />
+                                        </neg:NegiGrid>
+                                    </Button>
+                                    <Button Style="{StaticResource DlRailBtnStyle}"
                                             neg:Negi.On="{Binding CurrentResCategory, Converter={StaticResource Equals}, ConverterParameter=shader}"
-                                            Command="{Binding SelectResCategoryCommand}" CommandParameter="shader" />
+                                            Command="{Binding SelectResCategoryCommand}" CommandParameter="shader">
+                                        <neg:NegiGrid Columns="Auto *">
+                                            <materialIcons:MaterialIcon Kind="WeatherSunny" Width="16" Height="16" Opacity="0.8"
+                                                                        Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
+                                                                        VerticalAlignment="Center" />
+                                            <TextBlock Grid.Column="1" Text="光影" Margin="9,0,0,0" VerticalAlignment="Center" />
+                                        </neg:NegiGrid>
+                                    </Button>
                                 </neg:NegiStackPanel>
                             </Border>
-
-                            <!-- 任务列表弹层触发器 -->
-                            <Button Grid.Column="3" x:Name="DlPopBtn" Style="{StaticResource BtnSmOutlineStyle}"
-                                    Content="下载任务" Command="{Binding ToggleDlPopCommand}"
-                                    Margin="0,0,8,0" VerticalAlignment="Center" />
-
-                            <!-- 搜索 -->
-                            <TextBox Grid.Column="4" Style="{StaticResource SearchBoxStyle}" Width="240"
-                                     neg:Negi.Placeholder="搜索"
-                                     Text="{Binding ResourceSearch, UpdateSourceTrigger=PropertyChanged}" />
                         </neg:NegiGrid>
-
-                        <!-- .list -->
-                        <ScrollViewer Grid.Row="1" Visibility="{Binding HasResources, Converter={StaticResource BoolToVis}}">
-                            <Border Background="#111114" BorderBrush="#26262b" BorderThickness="1" CornerRadius="14" ClipToBounds="True" VerticalAlignment="Top">
-                                <ItemsControl ItemsSource="{Binding FilteredResources}">
-                                    <ItemsControl.ItemTemplate>
-                                        <DataTemplate>
-                                            <!-- .list-item -->
-                                            <Border BorderBrush="#26262b" BorderThickness="0,0,0,1" Padding="16,12">
-                                                <neg:NegiGrid Columns="Auto * Auto Auto">
-                                                    <!-- 36x36 像素图标 -->
-                                                    <Border Grid.Column="0" Width="36" Height="36" CornerRadius="8" ClipToBounds="True" Margin="0,0,14,0">
-                                                        <Image Source="{Binding IconBitmap, Converter={StaticResource PixelsToBitmap}}"
-                                                               Width="36" Height="36"
-                                                               RenderOptions.BitmapScalingMode="HighQuality" />
-                                                    </Border>
-
-                                                    <!-- .grow：名字 + 说明 -->
-                                                    <neg:NegiStackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
-                                                        <TextBlock Text="{Binding Name}" FontWeight="Bold" FontSize="13" Foreground="#fafafa" />
-                                                        <TextBlock Text="{Binding Desc}" FontSize="12" Foreground="#a1a1aa" TextTrimming="CharacterEllipsis" />
-                                                    </neg:NegiStackPanel>
-
-                                                    <!-- .stat -->
-                                                    <TextBlock Grid.Column="2" Text="{Binding Stat}"
-                                                               FontSize="12" Foreground="#a1a1aa"
-                                                               VerticalAlignment="Center" Margin="16,0,16,0" />
-
-                                                    <!-- .btn .btn-outline .btn-sm -->
-                                                    <Button Grid.Column="3" Style="{StaticResource BtnSmOutlineStyle}"
-                                                            Content="{Binding ActionText}"
-                                                            IsEnabled="{Binding IsActionEnabled}"
-                                                            Command="{Binding DataContext.InstallResourceCommand, RelativeSource={RelativeSource AncestorType=Window}}"
-                                                            CommandParameter="{Binding .}" />
-                                                </neg:NegiGrid>
-                                            </Border>
-                                        </DataTemplate>
-                                    </ItemsControl.ItemTemplate>
-                                </ItemsControl>
-                            </Border>
-                        </ScrollViewer>
-
-                        <neg:NegiStackPanel Grid.Row="1" Visibility="{Binding HasResources, Converter={StaticResource BoolToVis}, ConverterParameter=invert}"
-                                            HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="12">
-                            <ProgressBar IsIndeterminate="True" Width="120" Height="4" neg:Negi.CornerRadius="2"
-                                         Foreground="#fafafa" Background="#26262b"
-                                         HorizontalAlignment="Center"
-                                         Visibility="{Binding IsLoadingResources, Converter={StaticResource BoolToVis}}" />
-                            <TextBlock Text="{Binding ResourceEmptyText}" FontSize="13" Foreground="#a1a1aa"
-                                       HorizontalAlignment="Center" TextAlignment="Center" MaxWidth="420"
-                                       TextWrapping="Wrap" />
-                        </neg:NegiStackPanel>
                     </neg:NegiGrid>
+
+                    <!-- 下载任务：窗口右下角的圆钮 + 计数（和稿子一样落在侧栏那一列底下）。
+                         投影单独一层模糊，按钮本体不挂 Effect。 -->
+                    <Grid HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="0,0,0,16"
+                          Panel.ZIndex="55">
+                        <Border Width="40" Height="40" CornerRadius="20" Background="#B0000000"
+                                IsHitTestVisible="False">
+                            <Border.Effect>
+                                <BlurEffect Radius="20" />
+                            </Border.Effect>
+                        </Border>
+                        <Button x:Name="DlTaskFab" Style="{StaticResource DlFabStyle}"
+                                HorizontalAlignment="Right" VerticalAlignment="Bottom"
+                                Command="{Binding ToggleDlPopCommand}" ToolTip="下载任务">
+                            <materialIcons:MaterialIcon Kind="Download" Width="17" Height="17"
+                                                        Foreground="#18181b" />
+                        </Button>
+                        <Border MinWidth="17" Height="17" Padding="4,0" CornerRadius="8.5"
+                                Background="#18181b" BorderBrush="#09090b" BorderThickness="1"
+                                HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,-5,-5,0"
+                                IsHitTestVisible="False"
+                                Visibility="{Binding HasDownloads, Converter={StaticResource BoolToVis}}">
+                            <TextBlock Text="{Binding DownloadBadgeText}" FontSize="10" FontWeight="SemiBold"
+                                       Foreground="#fafafa" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                        </Border>
+                    </Grid>
                 </Grid>
 
                 <!-- 设置页：整页模式，导航与卡片都用同一套设置模板。 -->
                 <Grid x:Name="PageSettings" Style="{StaticResource PageAnimStyle}"
                       Visibility="{Binding CurrentPage, Converter={StaticResource Equals}, ConverterParameter=settings}">
                     <neg:NegiGrid Rows="Auto *">
-                        <TextBlock Text="设置" FontSize="20" FontWeight="SemiBold" Height="36"
+                        <TextBlock Text="设置" FontSize="24" FontWeight="SemiBold" Height="32"
                                    VerticalAlignment="Center" Foreground="#fafafa" Margin="0,0,0,16" />
                         <neg:NegiGrid Grid.Row="1" Columns="160 24 *">
                             <ContentControl x:Name="PageSettingsNavHost" HorizontalContentAlignment="Stretch"
@@ -2276,15 +2479,17 @@
             </Grid>
 
             <!-- ========================================== -->
-            <!-- 7b. 下载任务弹层（挂在下载页的「下载任务」按钮上） -->
+            <!-- 7b. 下载任务弹层（挂在下载页右下角的圆钮上）   -->
             <!-- ========================================== -->
-            <Grid HorizontalAlignment="Right" VerticalAlignment="Top"
-                    Margin="0,64,112,0" Width="440"
+            <Grid HorizontalAlignment="Right" VerticalAlignment="Bottom"
+                    Margin="0,0,28,0" Width="440"
                     Style="{StaticResource PopoverStyle}"
-                    pop:Pop.Anchor="TopRight"
-                    pop:Pop.Trigger="{Binding ElementName=DlPopBtn}"
+                    pop:Pop.Anchor="BottomRight"
+                    pop:Pop.Pin="AboveRight"
+                    pop:Pop.PinGap="14"
+                    pop:Pop.Trigger="{Binding ElementName=DlTaskFab}"
                     pop:Pop.IsOpen="{Binding IsDlPopOpen}"
-                    Panel.ZIndex="50">
+                    Panel.ZIndex="60">
                 <Border Background="#111114" BorderBrush="#26262b" BorderThickness="1"
                         CornerRadius="14" Padding="4" ClipToBounds="True" Effect="{StaticResource ShadowLg}">
                 <neg:NegiGrid Rows="Auto *">
@@ -2305,6 +2510,34 @@
                                FontSize="13" Foreground="#a1a1aa"
                                HorizontalAlignment="Center" VerticalAlignment="Center" Margin="0,28,0,28" />
                 </neg:NegiGrid>
+                </Border>
+            </Grid>
+
+            <!-- ========================================== -->
+            <!-- 7c. 排序下拉（挂在下载页的排序按钮上）        -->
+            <!-- ========================================== -->
+            <!-- 不用原生 Popup：它会另开一个 HWND，跟着页面缩放/裁圆角的动效对不上；
+                 用同一层叠在窗口里，点外面由通用遮罩收掉。 -->
+            <Grid HorizontalAlignment="Left" VerticalAlignment="Top" Width="160"
+                    Style="{StaticResource PopoverStyle}"
+                    pop:Pop.Anchor="TopRight"
+                    pop:Pop.Pin="UnderRight"
+                    pop:Pop.Trigger="{Binding ElementName=DlSortBtn}"
+                    pop:Pop.IsOpen="{Binding IsGameSortPopOpen}"
+                    Panel.ZIndex="60">
+                <Border Background="#111114" BorderBrush="#26262b" BorderThickness="1"
+                        CornerRadius="12" Padding="4" Effect="{StaticResource ShadowLg}">
+                    <neg:NegiStackPanel Spacing="2">
+                        <Button Style="{StaticResource DlSortItemStyle}" Content="最新发布"
+                                neg:Negi.On="{Binding GameSort, Converter={StaticResource Equals}, ConverterParameter=date}"
+                                Command="{Binding SelectGameSortCommand}" CommandParameter="date" />
+                        <Button Style="{StaticResource DlSortItemStyle}" Content="版本号"
+                                neg:Negi.On="{Binding GameSort, Converter={StaticResource Equals}, ConverterParameter=version}"
+                                Command="{Binding SelectGameSortCommand}" CommandParameter="version" />
+                        <Button Style="{StaticResource DlSortItemStyle}" Content="名称"
+                                neg:Negi.On="{Binding GameSort, Converter={StaticResource Equals}, ConverterParameter=name}"
+                                Command="{Binding SelectGameSortCommand}" CommandParameter="name" />
+                    </neg:NegiStackPanel>
                 </Border>
             </Grid>
 
@@ -2622,6 +2855,164 @@
                                     Command="{Binding ConfirmAddFolderCommand}" />
                         </neg:NegiStackPanel>
                     </neg:NegiStackPanel>
+                    </Border>
+                </Grid>
+            </Grid>
+
+            <!-- ========================================== -->
+            <!-- 10.5 安装游戏：一屏搞定加载器、名字和图标      -->
+            <!-- ========================================== -->
+            <!-- 入口是下载列表里的整行。左半边挑加载器，右半边挑加载器版本；
+                 图标跟着加载器走，点一下可以换成任意预设（复用配置页那套方块）。 -->
+            <Grid Panel.ZIndex="76" Visibility="{Binding IsInstallSheetOpen, Converter={StaticResource BoolToVis}}">
+                <Border Background="#9E000000" MouseLeftButtonDown="OnInstallBackdropMouseDown" />
+
+                <Grid HorizontalAlignment="Center" VerticalAlignment="Center" Width="680" MaxHeight="660"
+                        Style="{StaticResource PopoverStyle}"
+                        pop:Pop.Anchor="Center"
+                        pop:Pop.IsOpen="{Binding IsInstallSheetOpen}">
+                    <Border Background="#111114" BorderBrush="#26262b" BorderThickness="1"
+                            CornerRadius="18" Effect="{StaticResource ShadowLg}" ClipToBounds="True">
+                        <Grid>
+                        <neg:NegiGrid Rows="Auto * Auto">
+                            <!-- 头部：图标 + 「安装 名字」，名字就地可改 -->
+                            <Border Grid.Row="0" BorderBrush="#26262b" BorderThickness="0,0,0,1" Padding="16,14">
+                                <neg:NegiGrid Columns="Auto * Auto">
+                                    <Button x:Name="InstallIconBtn" Grid.Column="0" Style="{StaticResource DlIconBtnStyle}"
+                                            Command="{Binding OpenInstallIconPickerCommand}" ToolTip="更换图标">
+                                        <Image Source="{Binding InstallIconBitmap, Converter={StaticResource PixelsToBitmap}}"
+                                               Width="34" Height="34"
+                                               RenderOptions.BitmapScalingMode="HighQuality" />
+                                    </Button>
+                                    <neg:NegiGrid Grid.Column="1" Columns="Auto *" Margin="13,0,10,0"
+                                                  VerticalAlignment="Center">
+                                        <TextBlock Text="安装" FontSize="14" Foreground="#a1a1aa"
+                                                   VerticalAlignment="Center" />
+                                        <TextBox Grid.Column="1" Style="{StaticResource DlNameBoxStyle}"
+                                                 Text="{Binding InstallName, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+                                    </neg:NegiGrid>
+                                    <Button Grid.Column="2" Style="{StaticResource WinCtrlStyle}" Width="26" Height="26"
+                                            neg:Negi.CornerRadius="7" VerticalAlignment="Center"
+                                            Command="{Binding CloseInstallSheetCommand}" ToolTip="关闭">
+                                        <materialIcons:MaterialIcon Kind="Close" Width="14" Height="14" />
+                                    </Button>
+                                </neg:NegiGrid>
+                            </Border>
+
+                            <!-- 身体：左加载器 / 右加载器版本 -->
+                            <Grid Grid.Row="1" Margin="18,16,18,18" MinHeight="252">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="220" />
+                                </Grid.ColumnDefinitions>
+
+                                <neg:NegiStackPanel Grid.Column="0" Margin="0,0,18,0">
+                                    <TextBlock Text="加载器" FontSize="12" FontWeight="Medium" Foreground="#a1a1aa"
+                                               Margin="0,0,0,8" />
+                                    <ItemsControl ItemsSource="{Binding InstallLoaders}" Margin="0,2,0,0">
+                                        <ItemsControl.ItemsPanel>
+                                            <ItemsPanelTemplate>
+                                                <UniformGrid Columns="2" />
+                                            </ItemsPanelTemplate>
+                                        </ItemsControl.ItemsPanel>
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate>
+                                                <Button Style="{StaticResource DlLoaderTileStyle}"
+                                                        Margin="0,0,10,10" neg:Negi.On="{Binding IsSelected}"
+                                                        Command="{Binding DataContext.SelectInstallLoaderCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                        CommandParameter="{Binding .}">
+                                                    <neg:NegiGrid Columns="Auto *">
+                                                        <Image Grid.Column="0" Width="30" Height="30" Margin="0,0,10,0"
+                                                               VerticalAlignment="Center"
+                                                               Source="{Binding Icon, Converter={StaticResource PixelsToBitmap}}"
+                                                               RenderOptions.BitmapScalingMode="HighQuality" />
+                                                        <TextBlock Grid.Column="1" Text="{Binding Label}" FontSize="13"
+                                                                   FontWeight="SemiBold" Foreground="#fafafa"
+                                                                   VerticalAlignment="Center" />
+                                                    </neg:NegiGrid>
+                                                </Button>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+                                </neg:NegiStackPanel>
+
+                                <Border Grid.Column="1" BorderBrush="#26262b" BorderThickness="1,0,0,0" Padding="18,0,0,0">
+                                    <neg:NegiGrid Rows="Auto Auto *">
+                                        <TextBlock Grid.Row="0" Text="加载器版本" FontSize="12" FontWeight="Medium"
+                                                   Foreground="#a1a1aa" />
+                                        <TextBlock Grid.Row="1" Text="{Binding LoaderVersionsHint}" FontSize="12"
+                                                   Foreground="#a1a1aa" Margin="0,6,0,0" TextWrapping="Wrap"
+                                                   Visibility="{Binding HasLoaderVersionsHint, Converter={StaticResource BoolToVis}}" />
+                                        <ScrollViewer Grid.Row="2" Margin="0,6,0,0" MaxHeight="280"
+                                                      VerticalScrollBarVisibility="Auto">
+                                            <ItemsControl ItemsSource="{Binding InstallLoaderVersions}">
+                                                <ItemsControl.ItemsPanel>
+                                                    <ItemsPanelTemplate>
+                                                        <neg:NegiStackPanel Spacing="2" />
+                                                    </ItemsPanelTemplate>
+                                                </ItemsControl.ItemsPanel>
+                                                <ItemsControl.ItemTemplate>
+                                                    <DataTemplate>
+                                                        <Button Style="{StaticResource DlLoaderVerBtnStyle}"
+                                                                Content="{Binding Version}"
+                                                                neg:Negi.On="{Binding IsSelected}"
+                                                                Command="{Binding DataContext.SelectInstallLoaderVersionCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                                CommandParameter="{Binding .}" />
+                                                    </DataTemplate>
+                                                </ItemsControl.ItemTemplate>
+                                            </ItemsControl>
+                                        </ScrollViewer>
+                                    </neg:NegiGrid>
+                                </Border>
+                            </Grid>
+
+                            <!-- 底部：一句话说清装到哪、装什么 -->
+                            <Border Grid.Row="2" BorderBrush="#26262b" BorderThickness="0,1,0,0" Padding="18,12">
+                                <neg:NegiGrid Columns="* Auto">
+                                    <TextBlock Grid.Column="0" Text="{Binding InstallSummary}" FontSize="11.5"
+                                               Foreground="#a1a1aa" VerticalAlignment="Center"
+                                               TextTrimming="CharacterEllipsis" Margin="0,0,12,0" />
+                                    <Button Grid.Column="1" Style="{StaticResource BtnSmPrimaryStyle}" Height="34"
+                                            Padding="16,0" Content="开始安装"
+                                            IsEnabled="{Binding CanConfirmInstall}"
+                                            Command="{Binding ConfirmInstallCommand}" />
+                                </neg:NegiGrid>
+                            </Border>
+                        </neg:NegiGrid>
+
+                        <!-- 图标选择：和实例配置里那颗铅笔开的是同一块面板（50 的方块槽、7 列、
+                             无文字标签），只是挂在安装单的图标下面。宽高由格子自己撑开。点面板外面就收。 -->
+                        <Border Panel.ZIndex="1" Background="Transparent"
+                                MouseLeftButtonDown="OnInstallIconBackdropMouseDown"
+                                Visibility="{Binding IsInstallIconPickerOpen, Converter={StaticResource BoolToVis}}" />
+                        <Border Panel.ZIndex="2" Background="#18181b"
+                                BorderBrush="#26262b" BorderThickness="1"
+                                CornerRadius="12" Padding="8"
+                                HorizontalAlignment="Left" VerticalAlignment="Top" Margin="16,80,0,0"
+                                Effect="{StaticResource ShadowLg}"
+                                Visibility="{Binding IsInstallIconPickerOpen, Converter={StaticResource BoolToVis}}">
+                            <ItemsControl ItemsSource="{Binding InstallIconPresets}">
+                                <ItemsControl.ItemsPanel>
+                                    <ItemsPanelTemplate>
+                                        <UniformGrid Columns="7" />
+                                    </ItemsPanelTemplate>
+                                </ItemsControl.ItemsPanel>
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <Button Style="{StaticResource IconTileStyle}"
+                                                ToolTip="{Binding Name}"
+                                                neg:Negi.On="{Binding IsSelected}"
+                                                Command="{Binding DataContext.SetInstallIconPresetCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                CommandParameter="{Binding .}">
+                                            <Image Source="{Binding Bitmap, Converter={StaticResource PixelsToBitmap}}"
+                                                   Width="34" Height="34"
+                                                   RenderOptions.BitmapScalingMode="HighQuality" />
+                                        </Button>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </Border>
+                        </Grid>
                     </Border>
                 </Grid>
             </Grid>

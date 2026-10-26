@@ -489,20 +489,18 @@
         </Style.Triggers>
     </Style>
 
-    <!-- 「实例图标」那排预设方块：每块一个 38x38 的槽（+4 间距 = 步进 42）。
-         步进是量着定的：配置页可用宽约 789 DIP，18 块 × 42 = 756 刚好排成一行；
-         再大一点就掉到第二行只剩铁砧一个，很难看。窗口拉窄时仍然会自动换行，不算错。
-         选中态（neg:Negi.On）只换描边不换底 —— 18 个格子全上底色会喧宾夺主，
-         方块自己就是内容，槽位只负责告诉人"点到哪一块"。 -->
+    <!-- 「实例图标」那排预设方块：每块一个 50x50 的槽，槽外再留 2（相邻槽共 4 的间距），
+         34 的图标居中 —— 选中时那圈描边离图标有 8 的留白，不会贴着方块。
+         面板不写死宽度：UniformGrid 定 7 列，宽高由这一套尺寸自己撑开（见 MainWindow 注释）。 -->
     <Style x:Key="IconTileStyle" TargetType="{x:Type Button}" BasedOn="{StaticResource {x:Type Button}}">
-        <Setter Property="Width" Value="38" />
-        <Setter Property="Height" Value="38" />
+        <Setter Property="Width" Value="50" />
+        <Setter Property="Height" Value="50" />
         <Setter Property="Padding" Value="0" />
-        <Setter Property="Margin" Value="0,0,4,4" />
+        <Setter Property="Margin" Value="2" />
         <Setter Property="Background" Value="Transparent" />
         <Setter Property="BorderBrush" Value="Transparent" />
         <Setter Property="BorderThickness" Value="1" />
-        <Setter Property="neg:Negi.CornerRadius" Value="9" />
+        <Setter Property="neg:Negi.CornerRadius" Value="12" />
         <Setter Property="Cursor" Value="Hand" />
         <Setter Property="FocusVisualStyle" Value="{x:Null}" />
         <Setter Property="Focusable" Value="False" />
@@ -729,20 +727,17 @@
         </Style.Triggers>
     </Style>
 
-    <!-- 右下角悬浮「新建」：高 36、半圆角 18、紧凑现代药丸设计 -->
+    <!-- 右下角悬浮「新建」：高 36、半圆角 18、紧凑现代药丸设计。
+         刻意不挂 Effect：稿子那条 float 阴影变量带 spread -12，而 DropShadowEffect 没有 spread ⇒
+         等于拿整颗药丸的轮廓去投影，下缘糊出一道和底色对不上的硬暗带。
+         投影改由宿主里单独一个 FloatShadowStyle 块承担（见 MainWindow 的 FAB 那段），
+         与 Avalonia 端 Border.FabPill 的 BoxShadow="0 10 30 -12 #B0000000" 同一套参数。 -->
     <Style x:Key="FabStyle" TargetType="{x:Type Button}" BasedOn="{StaticResource BtnSmPrimaryStyle}">
         <Setter Property="Height" Value="36" />
         <Setter Property="Padding" Value="14,0" />
         <Setter Property="neg:Negi.CornerRadius" Value="18" />
         <Setter Property="FontSize" Value="13" />
         <Setter Property="FontWeight" Value="SemiBold" />
-        <Setter Property="Effect" Value="{StaticResource ShadowLg}" />
-        <!-- 同上：挂 Effect 的常驻元素必须缓存，否则每帧重算阴影。 -->
-        <Setter Property="CacheMode">
-            <Setter.Value>
-                <BitmapCache />
-            </Setter.Value>
-        </Setter>
     </Style>
 
     <!-- 卡片底行那颗「启动」：当前实例是主色实心，其余是灰图标。
@@ -899,6 +894,303 @@
                 </MultiTrigger.Conditions>
                 <Setter Property="BorderBrush" Value="#3DFFFFFF" />
             </MultiTrigger>
+        </Style.Triggers>
+    </Style>
+
+    <!-- ================= 下载页 ================= -->
+
+    <!-- 右侧资源类型导航：36 高、圆角 9，选中与 hover 同用 accent 底，
+         选中那格再加一档字重 —— 这里没有别的地方需要区分两者。 -->
+    <Style x:Key="DlRailBtnStyle" TargetType="{x:Type Button}" BasedOn="{StaticResource {x:Type Button}}">
+        <Setter Property="Height" Value="36" />
+        <Setter Property="Padding" Value="10,0" />
+        <Setter Property="neg:Negi.CornerRadius" Value="9" />
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="Foreground" Value="#a1a1aa" />
+        <Setter Property="FontSize" Value="13" />
+        <Setter Property="FontWeight" Value="Medium" />
+        <Setter Property="Cursor" Value="Hand" />
+        <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+        <Setter Property="Focusable" Value="False" />
+        <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+        <Setter Property="VerticalContentAlignment" Value="Center" />
+        <Style.Triggers>
+            <Trigger Property="IsMouseOver" Value="True">
+                <Setter Property="Background" Value="#1c1c21" />
+                <Setter Property="Foreground" Value="#fafafa" />
+            </Trigger>
+            <Trigger Property="neg:Negi.On" Value="True">
+                <Setter Property="Background" Value="#1c1c21" />
+                <Setter Property="Foreground" Value="#fafafa" />
+                <Setter Property="FontWeight" Value="SemiBold" />
+            </Trigger>
+        </Style.Triggers>
+    </Style>
+
+    <!-- 类型分段（正式版 / 快照 / 远古）：容器是 muted，选中那段落回卡底。 -->
+    <Style x:Key="DlSegBtnStyle" TargetType="{x:Type Button}" BasedOn="{StaticResource {x:Type Button}}">
+        <Setter Property="Height" Value="26" />
+        <Setter Property="Padding" Value="10,0" />
+        <Setter Property="neg:Negi.CornerRadius" Value="7" />
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="Foreground" Value="#a1a1aa" />
+        <Setter Property="FontSize" Value="12" />
+        <Setter Property="FontWeight" Value="Medium" />
+        <Setter Property="Cursor" Value="Hand" />
+        <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+        <Setter Property="Focusable" Value="False" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+        <Style.Triggers>
+            <Trigger Property="IsMouseOver" Value="True">
+                <Setter Property="Foreground" Value="#fafafa" />
+            </Trigger>
+            <Trigger Property="neg:Negi.On" Value="True">
+                <Setter Property="Background" Value="#111114" />
+                <Setter Property="Foreground" Value="#fafafa" />
+            </Trigger>
+        </Style.Triggers>
+    </Style>
+
+    <!-- 下拉触发器（排序）：固定宽度，字数变了也不跳。 -->
+    <Style x:Key="DlSelectStyle" TargetType="{x:Type Button}" BasedOn="{StaticResource {x:Type Button}}">
+        <Setter Property="Height" Value="32" />
+        <Setter Property="Padding" Value="10,0,8,0" />
+        <Setter Property="neg:Negi.CornerRadius" Value="9" />
+        <Setter Property="Background" Value="#111114" />
+        <Setter Property="BorderBrush" Value="#26262b" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="Foreground" Value="#fafafa" />
+        <Setter Property="FontSize" Value="12.5" />
+        <Setter Property="Cursor" Value="Hand" />
+        <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+        <Setter Property="Focusable" Value="False" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+        <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+        <Style.Triggers>
+            <Trigger Property="IsMouseOver" Value="True">
+                <Setter Property="Background" Value="#1c1c21" />
+                <Setter Property="BorderBrush" Value="#52525b" />
+            </Trigger>
+        </Style.Triggers>
+    </Style>
+
+    <!-- 下拉里的选项：选中态是常驻高亮（不再摆对勾）。 -->
+    <Style x:Key="DlSortItemStyle" TargetType="{x:Type Button}" BasedOn="{StaticResource {x:Type Button}}">
+        <Setter Property="Height" Value="32" />
+        <Setter Property="Padding" Value="10,0" />
+        <Setter Property="neg:Negi.CornerRadius" Value="8" />
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="Foreground" Value="#fafafa" />
+        <Setter Property="FontSize" Value="13" />
+        <Setter Property="Cursor" Value="Hand" />
+        <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+        <Setter Property="Focusable" Value="False" />
+        <Setter Property="HorizontalContentAlignment" Value="Left" />
+        <Style.Triggers>
+            <Trigger Property="IsMouseOver" Value="True">
+                <Setter Property="Background" Value="#1c1c21" />
+            </Trigger>
+            <Trigger Property="neg:Negi.On" Value="True">
+                <Setter Property="Background" Value="#1c1c21" />
+                <Setter Property="FontWeight" Value="SemiBold" />
+            </Trigger>
+        </Style.Triggers>
+    </Style>
+
+    <!-- 版本行。刻意不用基础模板：那个模板带 ButtonMotion，整行会跟着 hover 缩一下；
+         这里只需要换底色 + 把右侧箭头露出来。 -->
+    <Style x:Key="DlRowStyle" TargetType="{x:Type Button}">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderBrush" Value="#26262b" />
+        <Setter Property="BorderThickness" Value="0,0,0,1" />
+        <Setter Property="Padding" Value="14,10" />
+        <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+        <Setter Property="VerticalContentAlignment" Value="Center" />
+        <Setter Property="Cursor" Value="Hand" />
+        <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+        <Setter Property="Focusable" Value="False" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="{x:Type Button}">
+                    <Border Background="{TemplateBinding Background}"
+                            BorderBrush="{TemplateBinding BorderBrush}"
+                            BorderThickness="{TemplateBinding BorderThickness}"
+                            Padding="{TemplateBinding Padding}">
+                        <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                          VerticalAlignment="{TemplateBinding VerticalContentAlignment}" />
+                    </Border>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+        <Style.Triggers>
+            <Trigger Property="IsMouseOver" Value="True">
+                <Setter Property="Background" Value="#1c1c21" />
+            </Trigger>
+        </Style.Triggers>
+    </Style>
+
+    <!-- 行内 tag：高 19、圆角 5、描边框。 -->
+    <Style x:Key="DlTagStyle" TargetType="{x:Type Border}">
+        <Setter Property="Height" Value="19" />
+        <Setter Property="Padding" Value="7,0" />
+        <Setter Property="CornerRadius" Value="5" />
+        <Setter Property="Background" Value="#08FFFFFF" />
+        <Setter Property="BorderBrush" Value="#26262b" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+    <Style x:Key="DlTagAccentStyle" TargetType="{x:Type Border}" BasedOn="{StaticResource DlTagStyle}">
+        <Setter Property="Background" Value="#0FFFFFFF" />
+        <Setter Property="BorderBrush" Value="#29FFFFFF" />
+    </Style>
+    <Style x:Key="DlTagTextStyle" TargetType="{x:Type TextBlock}">
+        <Setter Property="FontSize" Value="10.5" />
+        <Setter Property="Foreground" Value="#a1a1aa" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+    <Style x:Key="DlTagAccentTextStyle" TargetType="{x:Type TextBlock}" BasedOn="{StaticResource DlTagTextStyle}">
+        <Setter Property="Foreground" Value="#fafafa" />
+    </Style>
+    <!-- 快照 tag 是暖色、愚人节是粉色；远古沿用默认灰，读起来更像"年代久远"而不是另一类内容。 -->
+    <Style x:Key="DlKindTagStyle" TargetType="{x:Type Border}" BasedOn="{StaticResource DlTagStyle}">
+        <Style.Triggers>
+            <DataTrigger Binding="{Binding Kind}" Value="snapshot">
+                <Setter Property="Background" Value="#14FBBF24" />
+                <Setter Property="BorderBrush" Value="#52FBBF24" />
+            </DataTrigger>
+            <DataTrigger Binding="{Binding Kind}" Value="april">
+                <Setter Property="Background" Value="#14F472B6" />
+                <Setter Property="BorderBrush" Value="#52F472B6" />
+            </DataTrigger>
+        </Style.Triggers>
+    </Style>
+    <Style x:Key="DlKindTagTextStyle" TargetType="{x:Type TextBlock}" BasedOn="{StaticResource DlTagTextStyle}">
+        <Style.Triggers>
+            <DataTrigger Binding="{Binding Kind}" Value="snapshot">
+                <Setter Property="Foreground" Value="#fbbf24" />
+            </DataTrigger>
+            <DataTrigger Binding="{Binding Kind}" Value="april">
+                <Setter Property="Foreground" Value="#f472b6" />
+            </DataTrigger>
+        </Style.Triggers>
+    </Style>
+
+    <!-- 右下角下载任务：40 的圆，图标是深色。投影由宿主里单独一层模糊承担。 -->
+    <Style x:Key="DlFabStyle" TargetType="{x:Type Button}" BasedOn="{StaticResource {x:Type Button}}">
+        <Setter Property="Width" Value="40" />
+        <Setter Property="Height" Value="40" />
+        <Setter Property="Padding" Value="0" />
+        <Setter Property="Background" Value="#fafafa" />
+        <Setter Property="Foreground" Value="#18181b" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="neg:Negi.CornerRadius" Value="20" />
+        <Setter Property="Cursor" Value="Hand" />
+        <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+        <Setter Property="Focusable" Value="False" />
+        <Setter Property="HorizontalContentAlignment" Value="Center" />
+        <Setter Property="VerticalContentAlignment" Value="Center" />
+        <Style.Triggers>
+            <Trigger Property="IsMouseOver" Value="True">
+                <Setter Property="Opacity" Value="0.92" />
+            </Trigger>
+        </Style.Triggers>
+    </Style>
+
+    <!-- 安装弹窗：左上角那颗可点的图标、加载器格子、右侧版本行。
+         图标本身不套边框/底壳（方块就是方块）；只有鼠标悬上去时给一层淡底，说明它能点。 -->
+    <Style x:Key="DlIconBtnStyle" TargetType="{x:Type Button}" BasedOn="{StaticResource {x:Type Button}}">
+        <Setter Property="Width" Value="46" />
+        <Setter Property="Height" Value="46" />
+        <Setter Property="Padding" Value="0" />
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="neg:Negi.CornerRadius" Value="12" />
+        <Setter Property="Cursor" Value="Hand" />
+        <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+        <Setter Property="Focusable" Value="False" />
+        <Setter Property="HorizontalContentAlignment" Value="Center" />
+        <Setter Property="VerticalContentAlignment" Value="Center" />
+        <Style.Triggers>
+            <Trigger Property="IsMouseOver" Value="True">
+                <Setter Property="Background" Value="#14FFFFFF" />
+            </Trigger>
+        </Style.Triggers>
+    </Style>
+
+    <Style x:Key="DlNameBoxStyle" TargetType="{x:Type TextBox}" BasedOn="{StaticResource {x:Type TextBox}}">
+        <Setter Property="Height" Value="28" />
+        <Setter Property="MinHeight" Value="28" />
+        <Setter Property="Padding" Value="6,0" />
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderBrush" Value="Transparent" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="Foreground" Value="#fafafa" />
+        <Setter Property="FontSize" Value="15" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+        <Setter Property="neg:Negi.CornerRadius" Value="6" />
+        <Setter Property="VerticalContentAlignment" Value="Center" />
+        <Style.Triggers>
+            <Trigger Property="IsMouseOver" Value="True">
+                <Setter Property="Background" Value="#0DFFFFFF" />
+            </Trigger>
+            <Trigger Property="IsKeyboardFocusWithin" Value="True">
+                <Setter Property="Background" Value="#0FFFFFFF" />
+                <Setter Property="BorderBrush" Value="#52525b" />
+            </Trigger>
+        </Style.Triggers>
+    </Style>
+
+    <Style x:Key="DlLoaderTileStyle" TargetType="{x:Type Button}" BasedOn="{StaticResource {x:Type Button}}">
+        <Setter Property="Height" Value="64" />
+        <Setter Property="Padding" Value="12,0" />
+        <Setter Property="neg:Negi.CornerRadius" Value="11" />
+        <Setter Property="Background" Value="#09090b" />
+        <Setter Property="BorderBrush" Value="#26262b" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="Foreground" Value="#fafafa" />
+        <Setter Property="Cursor" Value="Hand" />
+        <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+        <Setter Property="Focusable" Value="False" />
+        <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+        <Setter Property="VerticalContentAlignment" Value="Center" />
+        <Style.Triggers>
+            <Trigger Property="IsMouseOver" Value="True">
+                <Setter Property="Background" Value="#1c1c21" />
+                <Setter Property="BorderBrush" Value="#52525b" />
+            </Trigger>
+            <Trigger Property="neg:Negi.On" Value="True">
+                <Setter Property="Background" Value="#1c1c21" />
+                <Setter Property="BorderBrush" Value="#8DFAFAFA" />
+            </Trigger>
+        </Style.Triggers>
+    </Style>
+
+    <Style x:Key="DlLoaderVerBtnStyle" TargetType="{x:Type Button}" BasedOn="{StaticResource {x:Type Button}}">
+        <Setter Property="Height" Value="32" />
+        <Setter Property="Padding" Value="9,0" />
+        <Setter Property="neg:Negi.CornerRadius" Value="8" />
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="Foreground" Value="#a1a1aa" />
+        <Setter Property="FontSize" Value="12.5" />
+        <Setter Property="Cursor" Value="Hand" />
+        <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+        <Setter Property="Focusable" Value="False" />
+        <Setter Property="HorizontalAlignment" Value="Stretch" />
+        <Setter Property="HorizontalContentAlignment" Value="Left" />
+        <Style.Triggers>
+            <Trigger Property="IsMouseOver" Value="True">
+                <Setter Property="Background" Value="#1c1c21" />
+                <Setter Property="Foreground" Value="#fafafa" />
+            </Trigger>
+            <Trigger Property="neg:Negi.On" Value="True">
+                <Setter Property="Background" Value="#1c1c21" />
+                <Setter Property="Foreground" Value="#fafafa" />
+                <Setter Property="FontWeight" Value="SemiBold" />
+            </Trigger>
         </Style.Triggers>
     </Style>
 

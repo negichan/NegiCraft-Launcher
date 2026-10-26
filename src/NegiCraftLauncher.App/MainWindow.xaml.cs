@@ -69,6 +69,15 @@ public partial class MainWindow : Window
         SetupTrayIcon();
         DataContextChanged += OnDataContextChangedHandler;
 
+        // 图标浮层的宽高由格子自己撑开，没法再写死 HorizontalOffset；回调里拿到的
+        // popupSize 就是当前内容的实际尺寸，右沿对齐铅笔按钮、往下让 6。
+        IconPickerPopup.CustomPopupPlacementCallback = (popupSize, targetSize, _) => new[]
+        {
+            new CustomPopupPlacement(
+                new Point(targetSize.Width - popupSize.Width, targetSize.Height + 6),
+                PopupPrimaryAxis.Horizontal),
+        };
+
         // 自选壁纸与视频同构：一个 brush 挂两处元素，取景只改 brush（见 ApplyBackgroundFraming）。
         BgCustomImage.Fill = _customBackground;
         SidebarCustomImage.Fill = _customBackground;
@@ -158,6 +167,48 @@ public partial class MainWindow : Window
     {
         SidebarBackdrop.Clip = new RectangleGeometry(new Rect(0, 0, e.NewSize.Width, e.NewSize.Height), 18, 18);
         ApplyBackgroundFraming();
+    }
+
+    /// <summary>
+    /// 下载列表卡片同理：行的 hover 底色是满幅矩形，不裁圆角就会在卡片四角顶出直角。
+    /// 半径和 XAML 里的 <c>CornerRadius="14"</c> 一致。
+    /// </summary>
+    private void OnDlListCardSizeChanged(object sender, SizeChangedEventArgs e)
+    {
+        if (sender is Border card)
+            card.Clip = new RectangleGeometry(new Rect(0, 0, e.NewSize.Width, e.NewSize.Height), 14, 14);
+    }
+
+    // ==========================================================
+    // 下载列表：卡片外面那根 4px 滚动条
+    // ==========================================================
+
+    private ScrollViewer? _dlListViewer;
+    private bool _dlScrollSyncing;
+
+    /// <summary>
+    /// ListBox 自己的滚动条藏在卡片里，稿子要的是卡片外面一根独立的细条。
+    /// 这里把内部 ScrollViewer 的四个数抄给外面那根 ScrollBar；条要不要露头由可滚高度决定。
+    /// </summary>
+    private void OnDlListScrollChanged(object sender, ScrollChangedEventArgs e)
+    {
+        if (e.OriginalSource is ScrollViewer viewer) _dlListViewer = viewer;
+        if (DlListScrollBar is null) return;
+
+        _dlScrollSyncing = true;
+        DlListScrollBar.Maximum = Math.Max(0, e.ExtentHeight - e.ViewportHeight);
+        DlListScrollBar.ViewportSize = e.ViewportHeight;
+        DlListScrollBar.Value = e.VerticalOffset;
+        DlListScrollBar.Visibility = e.ExtentHeight > e.ViewportHeight + 0.5
+            ? Visibility.Visible
+            : Visibility.Collapsed;
+        _dlScrollSyncing = false;
+    }
+
+    private void OnDlListScrollBarValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
+    {
+        if (_dlScrollSyncing) return;
+        _dlListViewer?.ScrollToVerticalOffset(e.NewValue);
     }
 
     // ==========================================================
@@ -546,6 +597,12 @@ public partial class MainWindow : Window
         // 点外面是取消而不是确认，对话框就不可能被误提交。
         _vm?.CancelDialogCommand.Execute(null);
 
+    private void OnInstallBackdropMouseDown(object sender, MouseButtonEventArgs e) =>
+        _vm?.CloseInstallSheetCommand.Execute(null);
+
+    private void OnInstallIconBackdropMouseDown(object sender, MouseButtonEventArgs e) =>
+        _vm?.CloseInstallIconPickerCommand.Execute(null);
+
     private void OnInstConfigBackdropMouseDown(object sender, MouseButtonEventArgs e) =>
         _vm?.CloseInstanceConfigCommand.Execute(null);
 
@@ -573,7 +630,17 @@ public partial class MainWindow : Window
         // 对话框开着时不动 —— 它有自己的 Esc（取消），这里抢了反而把确认流程打断。
         if (e.Key == Key.Escape && _vm is { IsDialogOpen: false } vm)
         {
-            if (vm.IsIconPickerOpen || vm.IsInstJavaChooserOpen)
+            if (vm.IsInstallIconPickerOpen)
+            {
+                vm.IsInstallIconPickerOpen = false;
+                e.Handled = true;
+            }
+            else if (vm.IsInstallSheetOpen)
+            {
+                vm.CloseInstallSheetCommand.Execute(null);
+                e.Handled = true;
+            }
+            else if (vm.IsIconPickerOpen || vm.IsInstJavaChooserOpen)
             {
                 vm.IsIconPickerOpen = false;
                 vm.IsInstJavaChooserOpen = false;

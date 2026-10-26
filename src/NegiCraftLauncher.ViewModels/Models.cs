@@ -350,3 +350,54 @@ public partial class WorldItemModel : ObservableObject
     [ObservableProperty]
     private string _sizeText = "";
 }
+
+/// <summary>下载页「游戏版本」列表里的一行，数据直接来自 Mojang 版本清单。</summary>
+public sealed class GameVersionModel
+{
+    public required string Id { get; init; }
+
+    /// <summary>release / snapshot / old —— 页面的类型筛选与 tag 都吃这个值。</summary>
+    public required string Kind { get; init; }
+
+    public required string KindLabel { get; init; }
+
+    public required DateTimeOffset ReleasedAt { get; init; }
+
+    /// <summary>精确到秒的发布时间。</summary>
+    public required string ReleaseText { get; init; }
+
+    /// <summary>启动这个版本需要的 Java 主版本；旧版本或认不出来时为空。</summary>
+    public required string JavaText { get; init; }
+
+    public required PixelBuffer Icon { get; init; }
+
+    public bool IsLatest { get; init; }
+
+    public bool ShowLatest => IsLatest;
+
+    public bool ShowKindTag => Kind != "release";
+
+    public bool ShowJava => JavaText.Length > 0;
+}
+
+/// <summary>安装弹窗左侧的一个加载器格子。</summary>
+public partial class LoaderChoiceModel : ObservableObject
+{
+    public required string Kind { get; init; }
+
+    public required string Label { get; init; }
+
+    public required PixelBuffer Icon { get; init; }
+
+    [ObservableProperty]
+    private bool _isSelected;
+}
+
+/// <summary>安装弹窗右侧列表里的一个加载器版本。</summary>
+public partial class LoaderVersionModel : ObservableObject
+{
+    public required string Version { get; init; }
+
+    [ObservableProperty]
+    private bool _isSelected;
+}
