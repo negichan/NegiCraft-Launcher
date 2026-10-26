@@ -847,13 +847,13 @@
                                 </Button>
                             </StackPanel>
 
-                            <!-- 右下角悬浮安装入口：和首页停靠卡同一个内缩。空态已经有两颗主按钮，这颗就不重复出现了。 -->
+                            <!-- 右下角悬浮新建入口：和首页停靠卡同一个内缩。空态已经有两颗主按钮，这颗就不重复出现了。 -->
                             <Border Classes="FabPill" HorizontalAlignment="Right" VerticalAlignment="Bottom"
                                     Margin="0,0,24,24" ZIndex="40" IsVisible="{Binding HasInstances}">
                                 <Button Classes="Fab" Command="{Binding NewInstanceCommand}">
                                     <StackPanel Orientation="Horizontal" Spacing="8">
                                         <materialIcons:MaterialIcon Kind="Plus" Width="16" Height="16"/>
-                                        <TextBlock Text="安装新版本" VerticalAlignment="Center"/>
+                                        <TextBlock Text="新建" VerticalAlignment="Center"/>
                                     </StackPanel>
                                 </Button>
                             </Border>
