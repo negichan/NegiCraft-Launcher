@@ -9,20 +9,8 @@ namespace NegiCraftLauncher.App.Media;
 /// <summary>
 /// 视频背景在 WPF 侧的实现。
 ///
-/// <para><b>为什么不用 <see cref="System.Windows.Controls.MediaElement"/></b>：主窗口是
-/// <c>AllowsTransparency=True</c> 的分层窗，而 <c>MediaElement</c> 是<b>独立的子 HWND</b> ——
-/// 它裁不进外壳的 22px 圆角，吃不到 <c>BlurEffect</c>，还会盖在侧栏上面。改用
-/// <c>MediaPlayer</c> + <c>VideoDrawing</c> + <c>DrawingBrush</c>：视频变成普通的绘制内容，
-/// 能被裁剪、能被 Effect、能正常参与合成。</para>
-///
-/// <para><b>为什么是控制器而不是控件</b>：同一段视频要画在两个地方 —— 主背景层（跟随用户调的模糊）
-/// 和侧栏磨砂背板（固定模糊 18）。两处必须共用同一个 <see cref="Brush"/>，才能只解码一份、
-/// 且画面严格对齐；所以这里把画刷暴露出去，由 <c>MainWindow</c> 分别挂到两个元素上。</para>
-///
-/// <para><b>性能</b>（本机实测，1180x720 窗口、软件渲染、<c>CompositionTarget.Rendering</c> 次数/秒）：
-/// 720p 无模糊 81–94、720p 模糊 40 58–73、4K 66Mbps 无模糊 75–91、4K 66Mbps 模糊 40 65–71；
-/// UI 线程回调延迟全程 &lt;2ms。分层窗里 <c>MediaPlayer</c> 这条路是够用的，不需要自己拿
-/// Media Foundation 解码。</para>
+/// One decoder and one drawing serve the main view, a cropped sidebar and the framing preview.
+/// Playback copies are prepared separately by <see cref="BackgroundVideoCache"/>.
 /// </summary>
 internal sealed class VideoBackgroundController : IDisposable
 {
@@ -79,9 +67,25 @@ internal sealed class VideoBackgroundController : IDisposable
             ViewportUnits = BrushMappingMode.Absolute,
             Viewbox = _drawing.Rect,
         };
+        _sidebarBrush = new DrawingBrush(_drawing)
+        {
+            Stretch = Stretch.Fill,
+            ViewboxUnits = BrushMappingMode.Absolute,
+            ViewportUnits = BrushMappingMode.Absolute,
+        };
     }
 
     private readonly DrawingBrush _pipBrush;
+    private readonly DrawingBrush _sidebarBrush;
+    public Brush SidebarBrush => _sidebarBrush;
+    private double _sidebarWidth, _sidebarHeight;
+
+    public void SetSidebarViewport(double width, double height)
+    {
+        _sidebarWidth = width;
+        _sidebarHeight = height;
+        ApplyFrame();
+    }
 
     /// <summary>
     /// 画中画用的画刷。调用方把 <see cref="SetPipViewport" /> 设成格子里那块图片矩形即可，
@@ -132,6 +136,15 @@ internal sealed class VideoBackgroundController : IDisposable
         // 取景框与元素同宽高比 ⇒ Stretch=Fill 拉过去也不会变形；Viewport 就是壳矩形。
         _brush.Viewport = new Rect(0, 0, _frameWidth, _frameHeight);
         _brush.Viewbox = new Rect(box.X, box.Y, box.Width, box.Height);
+        if (_sidebarWidth > 0 && _sidebarHeight > 0)
+        {
+            _sidebarBrush.Viewport = new Rect(0, 0, _sidebarWidth, _sidebarHeight);
+            _sidebarBrush.Viewbox = new Rect(
+                box.X + 12 / _frameWidth * box.Width,
+                box.Y + 12 / _frameHeight * box.Height,
+                _sidebarWidth / _frameWidth * box.Width,
+                _sidebarHeight / _frameHeight * box.Height);
+        }
     }
 
     /// <summary>
@@ -256,9 +269,7 @@ internal sealed class VideoBackgroundController : IDisposable
 
         try
         {
-            // 拖动期间（<see cref="_frozen" />）任何"该播"的指令都只记下意图，不真去 Play：
-            // 不然一个 600ms 的属性变化就能把刚按停的画面又放开。
-            if (active && !_frozen) _player.Play();
+            if (active) _player.Play();
             else _player.Pause();
         }
         catch (Exception)
@@ -267,46 +278,6 @@ internal sealed class VideoBackgroundController : IDisposable
     }
 
     private bool _wanted = true;
-    private bool _frozen;
-
-    /// <summary>
-    /// 拖动窗口时把播放器按停。移动窗口不脏化可视树，所以"没有新帧"就等于"这块不再重画"——
-    /// 连带压在它上面的两层 <c>BlurEffect</c> 也不再每帧跑。
-    ///
-    /// <para>没有做"当前帧快照"那一步：那要重新对齐几何（<c>Viewbox</c> 是按帧原生尺寸算的）
-    /// 还要一次性分配整幅 RTB，而按停已经让 WPF 根本不重绘这块。<c>ScrubbingEnabled=true</c>
-    /// 保证暂停时最后那一帧仍然在屏上。</para>
-    /// </summary>
-    public void FreezeForDrag()
-    {
-        if (_frozen || _disposed || _path is null) return;
-
-        _frozen = true;
-        try
-        {
-            _player.Pause();
-        }
-        catch (Exception)
-        {
-        }
-    }
-
-    /// <summary>松手恢复。只有按停前"该播"才真播回去。</summary>
-    public void ResumeAfterDrag()
-    {
-        if (!_frozen) return;
-
-        _frozen = false;
-        if (_disposed || _path is null) return;
-
-        try
-        {
-            if (_wanted) _player.Play();
-        }
-        catch (Exception)
-        {
-        }
-    }
 
     private void OnMediaOpened(object? sender, EventArgs e)
     {
@@ -325,7 +296,7 @@ internal sealed class VideoBackgroundController : IDisposable
         // 防御性再落一遍：成本为零，且不依赖"DP 值一定全程有效"这种假设。
         ApplySound();
 
-        // 首播也走 SetActive：不然一次 MediaOpened 会绕过"窗口收进托盘"和"正在拖动"两道门。
+        // Respect visibility even if the asynchronous open completes after minimizing.
         SetActive(_wanted);
     }
 
@@ -333,6 +304,8 @@ internal sealed class VideoBackgroundController : IDisposable
     {
         var message = e.ErrorException?.Message ?? "未知原因";
         _path = null;
+        try { _player.Close(); }
+        catch (Exception) { }
         Failed?.Invoke($"视频播放失败：{message}");
     }
 
@@ -344,8 +317,7 @@ internal sealed class VideoBackgroundController : IDisposable
         try
         {
             _player.Position = TimeSpan.Zero;
-            // 循环重启也不能绕过那两道门（收进托盘 / 正在拖动）。松手时 ResumeAfterDrag 会从 0 接着播。
-            if (_wanted && !_frozen) _player.Play();
+            if (_wanted) _player.Play();
         }
         catch (Exception)
         {

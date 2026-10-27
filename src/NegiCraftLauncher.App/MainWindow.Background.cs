@@ -34,23 +34,85 @@ public partial class MainWindow
 
     /// <summary>
     /// 把 VM 里的视频路径落到画面上。VM 只存路径（它不能持有 WPF 的播放器），
-    /// 播放器和画刷都在这里建，然后同一个画刷挂给两处元素。
+    /// Playback preparation and cancellation stay outside the shared view model.
     /// </summary>
-    private void ApplyVideoBackground()
+    private readonly Media.BackgroundVideoCache _backgroundVideoCache = new();
+    private CancellationTokenSource? _backgroundVideoPreparation;
+
+    private async void ApplyVideoBackground()
     {
-        // 先定音量再换片：Load 内部会在 Open 之后按当前值再断言一次，顺序反了会白做一次。
-        _videoBackground.Volume = _vm?.VideoBackgroundVolume ?? 0;
-        _videoBackground.Load(_vm?.VideoBackgroundPath);
-
-        var brush = _videoBackground.HasVideo ? _videoBackground.Brush : null;
-        BgVideo.Fill = brush;
-        SidebarVideo.Fill = brush;
-
-        UpdateVideoPlayback();
-        InvalidateWindowButtonTone();
+        _backgroundVideoPreparation?.Cancel();
+        var request = new CancellationTokenSource();
+        _backgroundVideoPreparation = request;
+        var vm = _vm;
+        var path = vm?.VideoBackgroundPath;
+        _videoBackground.Load(null);
+        BgVideo.Fill = null;
+        SidebarVideo.Fill = null;
+        if (vm is null)
+        {
+            _backgroundVideoPreparation = null;
+            request.Dispose();
+            return;
+        }
+        vm.IsPreparingBackgroundVideo = path is not null;
+        vm.BackgroundVideoProgress = 0;
+        vm.HasBackgroundVideoError = false;
+        vm.BackgroundVideoStatus = path is null ? "" : "正在准备视频…";
         SyncToneSampling();
+        try
+        {
+            if (path is null) return;
+            var quality = vm.BackgroundVideoQuality;
+            var progress = new Progress<double>(value =>
+            {
+                if (request.IsCancellationRequested || !ReferenceEquals(request, _backgroundVideoPreparation)) return;
+                vm.BackgroundVideoProgress = value;
+                vm.BackgroundVideoStatus = $"正在优化视频 · {value:0}%";
+            });
+            var prepared = await _backgroundVideoCache.PrepareAsync(path, quality, progress, request.Token);
+            if (request.IsCancellationRequested || !ReferenceEquals(vm, _vm)) return;
+
+            _videoBackground.Volume = vm.VideoBackgroundVolume;
+            _videoBackground.Load(prepared);
+            if (!_videoBackground.HasVideo) return;
+            BgVideo.Fill = _videoBackground.HasVideo ? _videoBackground.Brush : null;
+            SidebarVideo.Fill = _videoBackground.HasVideo ? _videoBackground.SidebarBrush : null;
+            vm.BackgroundVideoStatus = quality switch
+            {
+                "original" => "原画播放",
+                "clear" => "清晰播放 · 最高 1080p / 30 帧",
+                _ => "省资源播放 · 最高 720p / 30 帧",
+            };
+            ApplyBackgroundFraming();
+            UpdateVideoPlayback();
+        }
+        catch (OperationCanceledException) when (request.IsCancellationRequested) { }
+        catch (Exception ex)
+        {
+            if (!ReferenceEquals(request, _backgroundVideoPreparation)) return;
+            vm.HasBackgroundVideoError = true;
+            vm.BackgroundVideoStatus = $"视频准备失败：{ex.Message}";
+        }
+        finally
+        {
+            if (ReferenceEquals(request, _backgroundVideoPreparation))
+            {
+                _backgroundVideoPreparation = null;
+                vm.IsPreparingBackgroundVideo = false;
+            }
+            request.Dispose();
+        }
     }
 
+    private async void OnBackgroundVideoRemoved(string path)
+    {
+        try { await _backgroundVideoCache.RemoveAsync(path); }
+        catch (IOException) { }
+        catch (UnauthorizedAccessException) { }
+    }
+
+    internal void RetryBackgroundVideo() => ApplyVideoBackground();
     // ==========================================================
     // 背景取景（平移 + 缩放）
     // ==========================================================
@@ -67,6 +129,19 @@ public partial class MainWindow
 
     /// <summary>复用视图那个转换器，像素格式（Pbgra32 + 冻结）的约定就只有一处实现。</summary>
     private static readonly Converters.PixelBufferToBitmapConverter ToBitmap = new();
+
+    private void ApplyBackgroundBlur()
+    {
+        var radius = _vm?.BgBlur ?? 0;
+        if (radius <= 0) { BgLayer.Effect = null; return; }
+        var effect = new System.Windows.Media.Effects.BlurEffect
+        {
+            Radius = radius,
+            RenderingBias = System.Windows.Media.Effects.RenderingBias.Performance,
+        };
+        effect.Freeze();
+        BgLayer.Effect = effect;
+    }
 
     /// <summary>
     /// 把取景参数落到三处：主层、侧栏背板，以及视频那条共享画刷。
@@ -93,6 +168,7 @@ public partial class MainWindow
         }
 
         _videoBackground.SetFrame(shellW, shellH, vm.BgPanX, vm.BgPanY, vm.BgZoom);
+        _videoBackground.SetSidebarViewport(SidebarBackdrop.ActualWidth, SidebarBackdrop.ActualHeight);
         UpdateBackgroundShot();
         InvalidateWindowButtonTone();
     }
@@ -108,7 +184,12 @@ public partial class MainWindow
     private void UpdateBackgroundShot()
     {
         var vm = _vm;
-        if (vm is null) return;
+        if (vm?.IsFramingVisible != true)
+        {
+            BgShotImage.Fill = null;
+            _shotBrush.ImageSource = null;
+            return;
+        }
 
         // 视频也画：它没有解码缓冲，所以只画几何（整张画面的矩形 + 窗口看得见的那一块）。
         var nat = PanContentSize();
@@ -306,9 +387,7 @@ public partial class MainWindow
     private double ShellInset => _performanceMode ? 0 : 60;
 
     /// <summary>
-    /// 让调节窗的可见状态严格跟着 <c>IsBgTuningOpen</c>：只有这一处 Show / Hide。
-    /// 调节窗自己关窗口会留下"标志说开着、窗却没了"的假状态，所以它的关闭按钮走
-    /// <c>CloseBgTuningCommand</c> 改标志，绕回来由这里收掉。
+    /// Closing destroys the owned HWND so Windows cannot reshow a hidden tuning window on activation.
     /// </summary>
     private void SyncBackgroundTuningWindow()
     {
@@ -317,7 +396,9 @@ public partial class MainWindow
 
         if (!vm.IsBgTuningOpen)
         {
-            if (_bgTuning is { IsVisible: true }) _bgTuning.Hide();
+            var closed = _bgTuning;
+            _bgTuning = null;
+            closed?.Close();
             return;
         }
 
@@ -333,11 +414,19 @@ public partial class MainWindow
                 vm.BgTuningY = y;
                 vm.BgTuningLeft = x + win.Width / 2 < Left + Width / 2;
             };
-            // 用户从任务管理器之类把它关掉时丢掉引用，下次开重新建一个。
-            win.Closed += (_, _) => _bgTuning = null;
+            win.Closed += (_, _) =>
+            {
+                if (ReferenceEquals(_bgTuning, win)) _bgTuning = null;
+                vm.IsBgTuningOpen = false;
+            };
+            win.SizeChanged += (_, e) =>
+            {
+                if (e.HeightChanged && win.IsVisible) PlaceBackgroundTuningWindow(win);
+            };
             _bgTuning = win;
         }
 
+        _bgTuning.Measure(new Size(_bgTuning.Width, double.PositiveInfinity));
         PlaceBackgroundTuningWindow(_bgTuning);
         _bgTuning.Show();
     }
@@ -347,16 +436,18 @@ public partial class MainWindow
     {
         var area = SystemParameters.WorkArea;
         const double gap = 8;
+        var height = win.ActualHeight > 0 ? win.ActualHeight :
+            double.IsFinite(win.Height) ? win.Height : win.DesiredSize.Height;
 
         if (_vm?.BgTuningX is { } savedX && _vm.BgTuningY is { } savedY)
         {
             // 用户拖过就回老地方，但显示器可能变了 —— 夹回工作区，别让窗口落在不存在的屏幕上。
             win.Left = Math.Clamp(savedX, area.Left, Math.Max(area.Left, area.Right - win.Width));
-            win.Top = Math.Clamp(savedY, area.Top, Math.Max(area.Top, area.Bottom - win.Height));
+            win.Top = Math.Clamp(savedY, area.Top, Math.Max(area.Top, area.Bottom - height));
             return;
         }
 
-        win.Top = Math.Clamp(Top + ShellInset, area.Top, Math.Max(area.Top, area.Bottom - win.Height));
+        win.Top = Math.Clamp(Top + ShellInset, area.Top, Math.Max(area.Top, area.Bottom - height));
 
         var right = Left + Width - ShellInset + gap;
         if (right + win.Width <= area.Right)

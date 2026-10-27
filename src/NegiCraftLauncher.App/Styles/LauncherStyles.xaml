@@ -1319,6 +1319,67 @@
                     Command="{Binding SelectSettingsTabCommand}" CommandParameter="关于" />
         </neg:NegiStackPanel>
     </DataTemplate>
+    <DataTemplate x:Key="BackgroundPosterTemplate">
+        <Grid Background="#202024">
+            <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center"
+                        Visibility="{Binding HasThumbnail, ElementName=Poster, Converter={StaticResource BoolToVis}, ConverterParameter=invert}">
+                <materialIcons:MaterialIcon Kind="{Binding IconKind}" Width="22" Height="22" Foreground="#71717a"
+                                            Visibility="{Binding IsLoading, ElementName=Poster, Converter={StaticResource BoolToVis}, ConverterParameter=invert}" />
+                <materialIcons:MaterialIcon Kind="Refresh" Style="{StaticResource DlLoaderSpinnerStyle}"
+                                            Visibility="{Binding IsLoading, ElementName=Poster, Converter={StaticResource BoolToVis}}" />
+                <TextBlock FontSize="11" Foreground="#a1a1aa" Margin="0,6,0,0" HorizontalAlignment="Center">
+                    <TextBlock.Style>
+                        <Style TargetType="TextBlock">
+                            <Setter Property="Text" Value="预览不可用" />
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding IsLoading, ElementName=Poster}" Value="True">
+                                    <Setter Property="Text" Value="正在加载预览" />
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </TextBlock.Style>
+                </TextBlock>
+            </StackPanel>
+            <controls:BackgroundThumbnail x:Name="Poster" Path="{Binding Path}" IsVideo="{Binding IsVideo}" Stretch="UniformToFill" />
+            <Border Background="#CC111114" CornerRadius="3" Padding="6,2" Margin="6"
+                    HorizontalAlignment="Left" VerticalAlignment="Bottom">
+                <TextBlock Text="{Binding KindLabel}" Foreground="#fafafa" FontSize="10" />
+            </Border>
+        </Grid>
+    </DataTemplate>
+
+    <Style x:Key="BackgroundTileStyle" TargetType="{x:Type Button}">
+        <Setter Property="Background" Value="#202024" />
+        <Setter Property="BorderBrush" Value="#3f3f46" />
+        <Setter Property="BorderThickness" Value="2" />
+        <Setter Property="Padding" Value="2" />
+        <Setter Property="Cursor" Value="Hand" />
+        <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+        <Setter Property="VerticalContentAlignment" Value="Stretch" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="{x:Type Button}">
+                    <Border Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}"
+                            BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="4" Padding="{TemplateBinding Padding}">
+                        <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                          VerticalAlignment="{TemplateBinding VerticalContentAlignment}" />
+                    </Border>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+        <Style.Triggers>
+            <Trigger Property="IsMouseOver" Value="True">
+                <Setter Property="BorderBrush" Value="#a1a1aa" />
+            </Trigger>
+            <Trigger Property="IsKeyboardFocused" Value="True">
+                <Setter Property="BorderBrush" Value="#fafafa" />
+            </Trigger>
+            <DataTrigger Binding="{Binding IsSelected}" Value="True">
+                <Setter Property="BorderBrush" Value="#86efac" />
+            </DataTrigger>
+        </Style.Triggers>
+    </Style>
+
     <DataTemplate x:Key="SettingsCardsTemplate">
         <Grid VerticalAlignment="Top" Margin="0,0,6,0">
 
@@ -1629,55 +1690,88 @@
                         </neg:NegiGrid>
                     </Border>
 
-                    <Border MinHeight="76" Padding="0,14">
-                        <neg:NegiStackPanel Spacing="12">
-                            <TextBlock Text="背景" FontWeight="Medium" VerticalAlignment="Center" Foreground="#fafafa" />
-                            <WrapPanel>
-                                <!-- 当前背景，一眼能认出选的是哪张 -->
-                                <Border Width="52" Height="34" CornerRadius="8" ClipToBounds="True" Margin="0,0,8,8"
-                                        BorderBrush="#26262b" BorderThickness="1"
-                                        Visibility="{Binding IsCustomBackground, Converter={StaticResource BoolToVis}}">
-                                    <Grid>
-                                        <!-- 缩略位不参与取景：50x32 上裁切差看不出东西，
-                                             绑尺寸反而多一条布局依赖。 -->
-                                        <Image Source="{Binding BgCustomArt, Converter={StaticResource PixelsToBitmap}}"
-                                               Stretch="UniformToFill" />
-                                        <Border Background="#ffffff" Opacity="{Binding BgLightOpacity}" />
-                                        <Border Background="#000000" Opacity="{Binding BgDarkOpacity}" />
-                                    </Grid>
-                                </Border>
-                                <!-- 视频壁纸的缩略位：不另开一个播放器去抽首帧（那要多一份解码），
-                                     只放个胶片图标表示"这里挂的是视频"。 -->
-                                <Border Width="52" Height="34" CornerRadius="8" Margin="0,0,8,8"
-                                        Background="#18181b" BorderBrush="#26262b" BorderThickness="1"
-                                        Visibility="{Binding IsVideoBackground, Converter={StaticResource BoolToVis}}">
-                                    <materialIcons:MaterialIcon Kind="VideoFilm" Width="18" Height="18"
-                                                                HorizontalAlignment="Center" VerticalAlignment="Center"
-                                                                Foreground="#a1a1aa" />
-                                </Border>
-                                <Button Style="{StaticResource BtnSmOutlineStyle}" Content="调整" Margin="0,0,8,8"
-                                        Command="{Binding OpenBgTuningCommand}"
-                                        Visibility="{Binding HasCustomBackground, Converter={StaticResource BoolToVis}}" />
-                                <!-- 这颗是"换回默认壁纸"（连背景一起清掉）。
-                                     调节窗里那颗同名的只归零参数、不动壁纸 —— 两件事，
-                                     所以文案必须分开写清楚。 -->
-                                <Button Style="{StaticResource BtnSmOutlineStyle}" Content="恢复默认壁纸" Margin="0,0,8,8"
-                                        Command="{Binding ResetBackgroundCommand}"
-                                        Visibility="{Binding HasCustomBackground, Converter={StaticResource BoolToVis}}" />
+                    <Border x:Name="BackgroundSection" MinHeight="76" Padding="0,18,0,6">
+                        <neg:NegiStackPanel Spacing="16">
+                            <TextBlock Text="背景" FontWeight="SemiBold" Foreground="#fafafa" />
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="208" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <Grid Height="117" VerticalAlignment="Top">
+                                    <Image Source="{Binding BgArt, Converter={StaticResource PixelsToBitmap}}" Stretch="UniformToFill"
+                                           Visibility="{Binding HasCustomBackground, Converter={StaticResource BoolToVis}, ConverterParameter=invert}" />
+                                    <ContentControl Content="{Binding CurrentBackground}" ContentTemplate="{StaticResource BackgroundPosterTemplate}"
+                                                    HorizontalContentAlignment="Stretch" VerticalContentAlignment="Stretch"
+                                                    Visibility="{Binding HasCustomBackground, Converter={StaticResource BoolToVis}}" />
+                                </Grid>
+                                <neg:NegiStackPanel Grid.Column="1" Spacing="8" Margin="18,0,0,0" VerticalAlignment="Center">
+                                    <TextBlock Text="当前背景" FontSize="12" Foreground="#a1a1aa" />
+                                    <TextBlock Text="{Binding CurrentBackground.Name, TargetNullValue=默认壁纸, FallbackValue=默认壁纸}"
+                                               ToolTip="{Binding CurrentBackground.Path}" FontSize="14" FontWeight="Medium"
+                                               Foreground="#fafafa" TextTrimming="CharacterEllipsis" />
+                                    <WrapPanel Margin="0,4,0,-8">
+                                        <Button Style="{StaticResource BtnSmOutlineStyle}" Margin="0,0,8,8"
+                                                Command="{Binding OpenBgTuningCommand}"
+                                                Visibility="{Binding HasCustomBackground, Converter={StaticResource BoolToVis}}">
+                                            <neg:NegiStackPanel Orientation="Horizontal" Spacing="6">
+                                                <materialIcons:MaterialIcon Kind="Tune" Width="14" Height="14" />
+                                                <TextBlock Text="调整背景" />
+                                            </neg:NegiStackPanel>
+                                        </Button>
+                                        <Button Style="{StaticResource BtnSmOutlineStyle}" Content="恢复默认壁纸" Margin="0,0,0,8"
+                                                Command="{Binding ResetBackgroundCommand}"
+                                                Visibility="{Binding HasCustomBackground, Converter={StaticResource BoolToVis}}" />
+                                    </WrapPanel>
+                                </neg:NegiStackPanel>
+                            </Grid>
+                            <neg:NegiStackPanel Spacing="8"
+                                               Visibility="{Binding IsVideoBackground, Converter={StaticResource BoolToVis}}">
+                                <neg:NegiGrid Columns="Auto *">
+                                    <TextBlock Text="视频画质" FontSize="12" Foreground="#a1a1aa" VerticalAlignment="Center" Margin="0,0,16,0" />
+                                    <Border Grid.Column="1" HorizontalAlignment="Left" Background="#27272a" CornerRadius="6" Padding="3">
+                                        <UniformGrid Columns="3" Width="252">
+                                            <Button Style="{StaticResource SortTabStyle}" Content="省资源" ToolTip="最高 720p，30 帧"
+                                                    neg:Negi.On="{Binding BackgroundVideoQuality, Converter={StaticResource Equals}, ConverterParameter=efficient}"
+                                                    Command="{Binding SetBackgroundVideoQualityCommand}" CommandParameter="efficient" />
+                                            <Button Style="{StaticResource SortTabStyle}" Content="清晰" ToolTip="最高 1080p，30 帧"
+                                                    neg:Negi.On="{Binding BackgroundVideoQuality, Converter={StaticResource Equals}, ConverterParameter=clear}"
+                                                    Command="{Binding SetBackgroundVideoQualityCommand}" CommandParameter="clear" />
+                                            <Button Style="{StaticResource SortTabStyle}" Content="原画" ToolTip="使用原始分辨率和帧率"
+                                                    neg:Negi.On="{Binding BackgroundVideoQuality, Converter={StaticResource Equals}, ConverterParameter=original}"
+                                                    Command="{Binding SetBackgroundVideoQualityCommand}" CommandParameter="original" />
+                                        </UniformGrid>
+                                    </Border>
+                                </neg:NegiGrid>
+                                <neg:NegiGrid Columns="Auto * Auto">
+                                    <materialIcons:MaterialIcon Kind="Refresh" Style="{StaticResource DlLoaderSpinnerStyle}" Margin="0,0,8,0"
+                                                                Visibility="{Binding IsPreparingBackgroundVideo, Converter={StaticResource BoolToVis}}" />
+                                    <TextBlock Grid.Column="1" Text="{Binding BackgroundVideoStatus}" TextWrapping="Wrap"
+                                               Foreground="#a1a1aa" FontSize="12" VerticalAlignment="Center" />
+                                    <Button Grid.Column="2" Style="{StaticResource BtnSmOutlineStyle}" Width="32" Padding="0"
+                                            Click="OnRetryBackgroundVideoClick" ToolTip="重试视频"
+                                            Visibility="{Binding HasBackgroundVideoError, Converter={StaticResource BoolToVis}}">
+                                        <materialIcons:MaterialIcon Kind="Refresh" Width="15" Height="15" />
+                                    </Button>
+                                </neg:NegiGrid>
+                                <ProgressBar Minimum="0" Maximum="100" Height="3" Value="{Binding BackgroundVideoProgress}"
+                                             Visibility="{Binding IsPreparingBackgroundVideo, Converter={StaticResource BoolToVis}}" />
+                            </neg:NegiStackPanel>
+                            <Border Height="1" Background="#26262b" />
+                            <TextBlock Text="壁纸库" FontWeight="Medium" Foreground="#fafafa" />
+                            <WrapPanel Margin="0,-6,0,-8">
                                 <Button Style="{StaticResource BtnSmOutlineStyle}" Click="OnPickBackgroundClick" Margin="0,0,8,8">
                                     <neg:NegiStackPanel Orientation="Horizontal" Spacing="6">
                                         <materialIcons:MaterialIcon Kind="ImageFrame" Width="14" Height="14" />
-                                        <TextBlock Text="选择图片" VerticalAlignment="Center" />
+                                        <TextBlock Text="添加图片" VerticalAlignment="Center" />
                                     </neg:NegiStackPanel>
                                 </Button>
                                 <Button Style="{StaticResource BtnSmOutlineStyle}" Click="OnPickVideoBackgroundClick" Margin="0,0,8,8">
                                     <neg:NegiStackPanel Orientation="Horizontal" Spacing="6">
                                         <materialIcons:MaterialIcon Kind="VideoFilm" Width="14" Height="14" />
-                                        <TextBlock Text="选择视频" VerticalAlignment="Center" />
+                                        <TextBlock Text="添加视频" VerticalAlignment="Center" />
                                     </neg:NegiStackPanel>
                                 </Button>
-                                <!-- 一键搬 Wallpaper Engine 当前壁纸：只搬视频壁纸，
-                                     场景 / 网页 / 应用只提示类型、不动背景 -->
                                 <Button Style="{StaticResource BtnSmOutlineStyle}" Click="OnSyncWallpaperEngineClick" Margin="0,0,8,8">
                                     <neg:NegiStackPanel Orientation="Horizontal" Spacing="6">
                                         <materialIcons:MaterialIcon Kind="Wallpaper" Width="14" Height="14" />
@@ -1685,6 +1779,62 @@
                                     </neg:NegiStackPanel>
                                 </Button>
                             </WrapPanel>
+                            <TextBlock Text="暂无壁纸" FontSize="12" Foreground="#71717a"
+                                       Visibility="{Binding BackgroundLibrary.Count, Converter={StaticResource Equals}, ConverterParameter=0}" />
+                            <ItemsControl x:Name="BackgroundLibraryItems" ItemsSource="{Binding BackgroundLibrary}" HorizontalContentAlignment="Stretch">
+                                <ItemsControl.ItemsPanel>
+                                    <ItemsPanelTemplate>
+                                        <WrapPanel />
+                                    </ItemsPanelTemplate>
+                                </ItemsControl.ItemsPanel>
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate>
+                                            <StackPanel Width="184" Margin="0,0,12,12">
+                                                <Button x:Name="ApplyBackgroundTile" Style="{StaticResource BackgroundTileStyle}" Height="107"
+                                                        ToolTip="{Binding Path}" AutomationProperties.Name="{Binding Name}"
+                                                        Command="{Binding DataContext.UseSavedBackgroundCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                                        CommandParameter="{Binding}">
+                                                    <ContentControl Content="{Binding}" ContentTemplate="{StaticResource BackgroundPosterTemplate}"
+                                                                    HorizontalContentAlignment="Stretch" VerticalContentAlignment="Stretch" />
+                                                </Button>
+                                                <Grid Margin="0,6,0,0">
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="*" />
+                                                        <ColumnDefinition Width="30" />
+                                                    </Grid.ColumnDefinitions>
+                                                <StackPanel VerticalAlignment="Center" Margin="0,0,6,0" ToolTip="{Binding Path}">
+                                                    <TextBlock Text="{Binding Name}" Foreground="#fafafa" FontSize="12" TextTrimming="CharacterEllipsis"
+                                                               TextWrapping="Wrap" Height="34" LineHeight="17" LineStackingStrategy="BlockLineHeight" />
+                                                    <TextBlock FontSize="11" MinHeight="15" Margin="0,3,0,0">
+                                                        <TextBlock.Style>
+                                                            <Style TargetType="TextBlock">
+                                                                <Setter Property="Text" Value="" />
+                                                                <Setter Property="Foreground" Value="#71717a" />
+                                                                <Style.Triggers>
+                                                                    <DataTrigger Binding="{Binding IsSelected}" Value="True">
+                                                                        <Setter Property="Text" Value="当前背景" />
+                                                                        <Setter Property="Foreground" Value="#86efac" />
+                                                                    </DataTrigger>
+                                                                    <DataTrigger Binding="{Binding IsAvailable}" Value="False">
+                                                                        <Setter Property="Text" Value="文件不存在" />
+                                                                        <Setter Property="Foreground" Value="#f87171" />
+                                                                    </DataTrigger>
+                                                                </Style.Triggers>
+                                                            </Style>
+                                                        </TextBlock.Style>
+                                                    </TextBlock>
+                                                </StackPanel>
+                                                <Button x:Name="RemoveBackgroundTile" Grid.Column="1" Style="{StaticResource BtnSmOutlineStyle}" Width="28" Height="28" Padding="0"
+                                                        ToolTip="从壁纸库移除（保留原文件）" AutomationProperties.Name="从壁纸库移除" VerticalAlignment="Center"
+                                                        Command="{Binding DataContext.RemoveSavedBackgroundCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                                        CommandParameter="{Binding}">
+                                                    <materialIcons:MaterialIcon Kind="Close" Width="14" Height="14" />
+                                                </Button>
+                                                </Grid>
+                                            </StackPanel>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                            </ItemsControl>
                         </neg:NegiStackPanel>
                     </Border>
                 </neg:NegiStackPanel>

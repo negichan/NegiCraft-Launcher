@@ -193,8 +193,8 @@ public partial class MainWindow
 
         // 真正退出才释放：收进托盘那条路只是 Hide，窗口还要复用。
         // 不 Close 掉 MediaPlayer 会留一个解码线程不放。
+        _backgroundVideoPreparation?.Cancel();
         _videoBackground.Dispose();
-        _bgToneTimer.Stop();
         HoverReveal.SetSuspended(VolumePanel, true);
 
         base.OnClosing(e);

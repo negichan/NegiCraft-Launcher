@@ -178,8 +178,7 @@ internal static class UiPerformance
                 Background = vm.IsVideoBackground ? "video" : vm.IsCustomBackground ? "image" : "pixel-art",
                 MotionEnabled = MotionEngine.Enabled,
                 DiagnosticOptions = args.Where(arg => arg.StartsWith("--no-") || arg == "--force-motion").ToArray(),
-                StaticBackgroundToneTimerRunning = ((DispatcherTimer)typeof(MainWindow)
-                    .GetField("_bgToneTimer", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(window)!).IsEnabled,
+                VideoToneReadbackEnabled = false,
                 Note = "Render callbacks measure UI frame pacing, not independently measured displayed FPS.",
                 Scenarios = results,
                 PageSwitchMs = pageSwitchTimes.Select(s => new { s.Page, Ms = Math.Round(s.Ms, 1) }).ToArray(),

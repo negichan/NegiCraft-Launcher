@@ -26,6 +26,7 @@
     <Project Path="tools/NegiThemes/NegiThemes.csproj" />
   </Folder>
   <Folder Name="/tests/">
+    <Project Path="tests/BackgroundUiChecks/BackgroundUiChecks.csproj" />
     <Project Path="tests/LoaderCatalogChecks/LoaderCatalogChecks.csproj" />
     <Project Path="tests/LoaderUiChecks/LoaderUiChecks.csproj" />
     <Project Path="tests/ThemeGenChecks/ThemeGenChecks.csproj" />

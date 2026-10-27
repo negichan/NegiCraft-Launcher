@@ -23,6 +23,8 @@ public partial class LauncherStyles : ResourceDictionary
 
     private void OnPickVideoBackgroundClick(object sender, RoutedEventArgs e) => ShellOf(sender)?.PickVideo();
 
+    private void OnRetryBackgroundVideoClick(object sender, RoutedEventArgs e) => ShellOf(sender)?.RetryBackgroundVideo();
+
     private void OnSyncWallpaperEngineClick(object sender, RoutedEventArgs e) => ShellOf(sender)?.SyncWallpaperEngineFromTuning();
 
     private void OnPickJavaClick(object sender, RoutedEventArgs e) => ShellOf(sender)?.PickJava();

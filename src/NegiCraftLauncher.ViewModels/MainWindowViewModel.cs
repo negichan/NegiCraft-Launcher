@@ -275,6 +275,7 @@ public partial class MainWindowViewModel : ViewModelBase
         OnPropertyChanged(nameof(IsCustomBackground));
         OnPropertyChanged(nameof(HasCustomBackground));
         RaiseFramingVisibility();
+        RememberBackground(value, video: false);
         PersistSettings();
 
         // 自选壁纸的像素由共享层持有（解码 + 调色都在那儿做），这里只是通知它"图换了"。
@@ -302,6 +303,7 @@ public partial class MainWindowViewModel : ViewModelBase
         RaiseFramingVisibility();
         // 视频没了，喇叭和它底下那条都该消失 —— 按钮的显隐走绑定，浮层得自己收。
         if (value is null) IsVolumePopOpen = false;
+        RememberBackground(value, video: true);
         PersistSettings();
     }
 
@@ -593,6 +595,7 @@ public partial class MainWindowViewModel : ViewModelBase
         {
             BackgroundDecodeState = "cleared";
             _bgSource = null;
+            _bgOut = null;
             PublishGraded(null);
             return;
         }
@@ -719,27 +722,22 @@ public partial class MainWindowViewModel : ViewModelBase
             return;
         }
 
-        CustomBackgroundPath = path;
+        CustomBackgroundPath = Path.GetFullPath(path);
 
-        // The art only shows on home, so jump there and open the tuning popup.
-        CurrentPage = "home";
+        // Keep the settings page in place; the framing overlay also works here.
         IsBgTuningOpen = true;
     }
 
     /// <summary>
-    /// The picker filter only checks the extension. PNGs (the only format the shared layer can
-    /// decode) are validated up front; other formats are accepted on the file being readable,
-    /// and the view falls back to the generated art if it cannot decode them.
+    /// Check readability here; image decoding belongs to the asynchronous decoder.
     /// </summary>
     private static bool IsReadableImage(string path)
     {
         try
         {
-            var bytes = File.ReadAllBytes(path);
-            if (bytes.Length == 0) return false;
-            if (!PngCodec.LooksLikePng(bytes)) return true;
-            PngCodec.Decode(bytes);
-            return true;
+            // Full decoding already runs on the background worker.
+            using var stream = File.OpenRead(path);
+            return stream.Length > 0;
         }
         catch
         {
@@ -763,10 +761,8 @@ public partial class MainWindowViewModel : ViewModelBase
             return;
         }
 
-        VideoBackgroundPath = path;
+        VideoBackgroundPath = Path.GetFullPath(path);
 
-        // 和选图片一样：背景只在首页可见，跳过去并把调节浮层打开。
-        CurrentPage = "home";
         IsBgTuningOpen = true;
     }
 
@@ -830,8 +826,6 @@ public partial class MainWindowViewModel : ViewModelBase
     [RelayCommand]
     private void OpenBgTuning()
     {
-        // 调节的是首页那层背景，所以开窗前先把人带回首页（弹层时代同一条规矩）。
-        CurrentPage = "home";
         IsBgTuningOpen = true;
     }
 
@@ -870,7 +864,7 @@ public partial class MainWindowViewModel : ViewModelBase
         BgContrast = 0;
         BgSaturation = 0;
         BgHue = 0;
-        // 不关窗：恢复默认之后用户要看见"回到原样了"，窗口正好就是那面镜子。
+        IsBgTuningOpen = false;
     }
 
     // ==========================================================
@@ -4667,6 +4661,7 @@ public partial class MainWindowViewModel : ViewModelBase
         _applyingSettings = true;
         try
         {
+            RestoreBackgroundLibrary(settings);
             MaxMemoryGb = Math.Clamp(settings.MaxMemoryMb / 1024, 1, 32);
             VersionIsolation = settings.VersionIsolation;
             HideOnLaunch = settings.HideOnLaunch;
@@ -4749,6 +4744,9 @@ public partial class MainWindowViewModel : ViewModelBase
         settings.PerformanceMode = PerformanceMode;
         settings.MotionPreference = MotionPreference.ToStorage();
         settings.CustomBackgroundPath = CustomBackgroundPath;
+        settings.BackgroundLibrary = BackgroundLibrary.Select(item =>
+            new NegiCraftLauncher.Core.Settings.BackgroundAsset { Path = item.Path, IsVideo = item.IsVideo }).ToList();
+        settings.BackgroundVideoQuality = BackgroundVideoQuality;
         settings.VideoBackgroundPath = VideoBackgroundPath;
         settings.BackgroundBlur = BgBlur;
         settings.BackgroundBrightness = BgBrightness;

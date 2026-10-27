@@ -65,18 +65,18 @@
             BorderBrush="#26262b" BorderThickness="1" Effect="{StaticResource ShadowLg}">
         <neg:NegiStackPanel Spacing="0">
 
-            <!-- 标题栏：整条可拖（DragMove），右边一个关闭。它同时是这扇窗"是个窗口"的证据。
-                 拖拽和 Padding 都挂在外层 Border 上 —— NegiGrid 是 Grid 的子类，没有 Padding。 -->
-            <Border Background="Transparent" Cursor="SizeAll" Padding="14,11,10,11"
-                    MouseLeftButtonDown="OnTitleBarMouseDown">
-                <neg:NegiGrid Columns="Auto * Auto">
-                    <materialIcons:MaterialIcon Kind="DotsGrid" Width="14" Height="14"
-                                                Foreground="#52525b" VerticalAlignment="Center" />
-                    <TextBlock Grid.Column="1" Text="背景调节" FontWeight="SemiBold" FontSize="13"
-                               Foreground="#fafafa" Margin="8,0,0,0" VerticalAlignment="Center" />
-                    <!-- 关闭走 VM 而不是 Window.Close：这扇窗的可见性由 IsBgTuningOpen 一处说了算，
-                         自己关掉会让那个标志停在 true，下次主窗口以为它还开着。 -->
-                    <Button Grid.Column="2" Width="28" Height="26" Background="Transparent"
+            <!-- The drag handle and close button have separate hit regions. -->
+            <Border Background="Transparent" Padding="14,11,10,11">
+                <neg:NegiGrid Columns="* Auto">
+                    <Border Background="Transparent" Cursor="SizeAll" MouseLeftButtonDown="OnTitleBarMouseDown">
+                        <neg:NegiStackPanel Orientation="Horizontal" Spacing="8">
+                            <materialIcons:MaterialIcon Kind="DotsGrid" Width="14" Height="14"
+                                                        Foreground="#52525b" VerticalAlignment="Center" />
+                            <TextBlock Text="背景调节" FontWeight="SemiBold" FontSize="13"
+                                       Foreground="#fafafa" VerticalAlignment="Center" />
+                        </neg:NegiStackPanel>
+                    </Border>
+                    <Button x:Name="CloseTuningButton" Grid.Column="1" Width="28" Height="26" Background="Transparent" Padding="0"
                             BorderThickness="0" Foreground="#a1a1aa" Cursor="Hand"
                             Command="{Binding CloseBgTuningCommand}" ToolTip="关闭">
                         <materialIcons:MaterialIcon Kind="Close" Width="15" Height="15" />
@@ -90,6 +90,11 @@
 
                 <neg:NegiStackPanel Spacing="12">
                     <TextBlock Text="背景" Style="{StaticResource SectionHead}" />
+                    <StackPanel Visibility="{Binding IsPreparingBackgroundVideo, Converter={StaticResource BoolToVis}}">
+                        <TextBlock Text="{Binding BackgroundVideoStatus}" FontSize="12" Foreground="#a1a1aa" TextWrapping="Wrap" />
+                        <ProgressBar Height="3" Margin="0,8,0,0" Minimum="0" Maximum="100"
+                                     Value="{Binding BackgroundVideoProgress}" IsIndeterminate="False" />
+                    </StackPanel>
 
                     <neg:NegiStackPanel Spacing="0">
                         <neg:NegiGrid Columns="* Auto">
@@ -199,14 +204,14 @@
                          恢复默认带图标、完成不带；而且它只归零参数，不动用户选的那张背景 ——
                          "换回默认壁纸"在设置页的「背景」那一行。 -->
                     <neg:NegiGrid Columns="* *" Margin="0,2,0,0">
-                        <Button Style="{StaticResource BtnSmOutlineStyle}" Command="{Binding ResetBackgroundTuningCommand}"
+                        <Button x:Name="ResetTuningButton" Style="{StaticResource BtnSmOutlineStyle}" Command="{Binding ResetBackgroundTuningCommand}"
                                 HorizontalAlignment="Stretch">
                             <neg:NegiStackPanel Orientation="Horizontal" Spacing="6">
                                 <materialIcons:MaterialIcon Kind="Restore" Width="14" Height="14" />
                                 <TextBlock Text="恢复默认" VerticalAlignment="Center" />
                             </neg:NegiStackPanel>
                         </Button>
-                        <Button Grid.Column="1" Style="{StaticResource BtnSmPrimaryStyle}" Content="完成"
+                        <Button x:Name="DoneTuningButton" Grid.Column="1" Style="{StaticResource BtnSmPrimaryStyle}" Content="完成"
                                 Margin="8,0,0,0" HorizontalAlignment="Stretch"
                                 Command="{Binding CloseBgTuningCommand}" />
                     </neg:NegiGrid>
