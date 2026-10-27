@@ -154,20 +154,6 @@
                          Radius=0 省下的只是模糊运算，省不掉那张面。而视频每来一帧都会脏化这一层
                          ⇒ 面每帧重跑，同批的其它 Effect（手绘阴影块）就有机会呈上未模糊的版本 ——
                          就是"拖完一下黑闪一下"和"右下角固定位置冒出一块黑"的现场。 -->
-                    <Grid.Style>
-                        <Style TargetType="{x:Type Grid}">
-                            <Setter Property="Effect">
-                                <Setter.Value>
-                                    <BlurEffect Radius="{Binding BgBlur}" />
-                                </Setter.Value>
-                            </Setter>
-                            <Style.Triggers>
-                                <DataTrigger Binding="{Binding BgBlur}" Value="0">
-                                    <Setter Property="Effect" Value="{x:Null}" />
-                                </DataTrigger>
-                            </Style.Triggers>
-                        </Style>
-                    </Grid.Style>
                     <Image Source="{Binding BgArt, Converter={StaticResource PixelsToBitmap}}"
                            Stretch="Fill"
                            RenderOptions.BitmapScalingMode="NearestNeighbor"
@@ -238,6 +224,15 @@
                                 Orientation="Horizontal" Spacing="4"
                                 HorizontalAlignment="Right" VerticalAlignment="Top"
                                 Margin="0,12,14,0" Panel.ZIndex="30">
+                <neg:NegiStackPanel.Style>
+                    <Style TargetType="{x:Type neg:NegiStackPanel}">
+                        <Style.Triggers>
+                            <DataTrigger Binding="{Binding IsVideoBackground}" Value="True">
+                                <Setter Property="Background" Value="#B009090B" />
+                            </DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </neg:NegiStackPanel.Style>
                 <!-- 喇叭本体。图标看的就是"音量是不是 0"（VideoBackgroundSound 现在就是那个别名）：
                      0 → VolumeOff，非 0 → VolumeHigh。音量在它下面那条竖排浮层里调，点图标 = 归 0 / 回上一格。
                      ⚠️ 刻意**不给 ToolTip**：悬停时音量浮层会出现在正下方，再弹一个提示气泡
@@ -369,15 +364,12 @@
                             <BlurEffect Radius="18" />
                         </Rectangle.Effect>
                     </Rectangle>
-                    <!-- 视频壁纸也要在这里再画一遍，否则玻璃后面还是旧静态背景，一眼假。
-                         和上面两张图同样的对齐手法（Margin -12,-12 + 壳尺寸）。
-                         Fill 与 BgVideo 共用同一个 DrawingBrush（MainWindow 挂上去）。 -->
+                    <!-- Crop before applying blur so only the sidebar-sized surface is processed. -->
                     <Rectangle x:Name="SidebarVideo"
                                Stretch="Fill"
                                HorizontalAlignment="Left" VerticalAlignment="Top"
-                               Margin="-12,-12,0,0"
-                               Width="{Binding ActualWidth, ElementName=Shell}"
-                               Height="{Binding ActualHeight, ElementName=Shell}"
+                               Width="{Binding ActualWidth, ElementName=SidebarBackdrop}"
+                               Height="{Binding ActualHeight, ElementName=SidebarBackdrop}"
                                Visibility="{Binding IsVideoBackground, Converter={StaticResource BoolToVis}}">
                         <Rectangle.Effect>
                             <BlurEffect Radius="18" />

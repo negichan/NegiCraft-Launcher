@@ -58,11 +58,13 @@ public partial class MainWindow
 
     private void SyncToneSampling()
     {
-        if (_bgToneTimer is null) return;
-        if (CanSampleTone && _vm?.IsVideoBackground == true)
-            _bgToneTimer.Start();
-        else
-            _bgToneTimer.Stop();
+        if (_vm?.IsVideoBackground == true)
+        {
+            // Video uses a fixed contrast backing instead of synchronous GPU readback.
+            SetWindowButtonTone(false);
+            _bgToneDirty = false;
+            return;
+        }
         QueueWindowButtonTone();
     }
 
@@ -79,6 +81,12 @@ public partial class MainWindow
 
     private void UpdateWindowButtonTone()
     {
+        if (_vm?.IsVideoBackground == true)
+        {
+            SetWindowButtonTone(false);
+            _bgToneDirty = false;
+            return;
+        }
         // 窗口收进了托盘、或者还没量出尺寸 ⇒ 一律按深色算。背景现在每页都在，
         // 所以这里不再问"在不在首页"。
         if (!IsVisible || BgRoot.ActualWidth < 1)
@@ -598,18 +606,11 @@ public partial class MainWindow
     }
 
     /// <summary>
-    /// 拖动这一段的"每帧重画"按住不动：视频来一帧 ⇒ 压在它上面的两层 BlurEffect 跟着跑
-    /// ⇒ 分层窗口整面重呈现。所以掐三个源头——播放器、亮度采样（它自己会用 VisualBrush
-    /// 把整棵 BgRoot 再渲染一遍）、音量悬停轮询（这时鼠标被 DragMove 捕获，问不出东西）。
-    ///
-    /// <para>拆成两个方法是为了让调试桥能走**同一对调用**：脚本不能真去按鼠标拖窗口，
-    /// 而"暂停中那一帧还在不在屏上"恰恰只有看图能判。</para>
+    /// Suspend pointer-dependent work during a native window drag; video keeps playing.
     /// </summary>
     public void BeginDragPerfHold()
     {
         _dragPerfHold = true;
-        _videoBackground.FreezeForDrag();
-        _bgToneTimer.Stop();
         HoverReveal.SetSuspended(VolumePanel, true);
 
         // 拖动中别去更新头的朝向：窗口的可视变换在移动过程中是旧的，而光标位置是新的，
@@ -618,10 +619,7 @@ public partial class MainWindow
     }
 
     /// <summary>
-    /// 松手恢复。刻意不在这里同步补采一次亮度：整段拖动里上屏的一直是同一帧，
-    /// 图标色不可能变；而补采要用 <c>VisualBrush</c> 把整棵 <c>BgRoot</c>（含视频）
-    /// 离屏再渲染一遍 —— 在松手那一刻做一次视频面的重新获取，正是"背景黑一下"的现场。
-    /// 600ms 的轮询本来就会跟上，晚一拍没有任何代价。
+    /// Restore pointer interaction without restarting the decoder or invalidating its surfaces.
     /// </summary>
     public void EndDragPerfHold()
     {
@@ -629,9 +627,6 @@ public partial class MainWindow
         SkinPreview.SuspendPointerLook = false;
         SyncToneSampling();
         HoverReveal.SetSuspended(VolumePanel, false);
-
-        // 恢复播放也推到本轮渲染之后：松手那一帧不该还有别的事做。
-        Dispatcher.BeginInvoke(_videoBackground.ResumeAfterDrag, DispatcherPriority.Background);
     }
 
     private void OnMinimizeClick(object sender, RoutedEventArgs e) => WindowState = WindowState.Minimized;

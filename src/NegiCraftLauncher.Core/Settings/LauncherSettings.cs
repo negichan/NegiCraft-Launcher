@@ -120,6 +120,8 @@ public sealed class LauncherSettings
     public string MotionPreference { get; set; } = "system";
 
     public string? CustomBackgroundPath { get; set; }
+    public List<BackgroundAsset> BackgroundLibrary { get; set; } = new();
+    public string BackgroundVideoQuality { get; set; } = "efficient";
     public double BackgroundBlur { get; set; }
     public double BackgroundBrightness { get; set; }
 
@@ -457,6 +459,12 @@ public sealed class LauncherSettings
     private void Clamp()
     {
         NormalizeFolders();
+        BackgroundVideoQuality = BackgroundVideoQuality is "clear" or "original"
+            ? BackgroundVideoQuality : "efficient";
+        BackgroundLibrary ??= new();
+        var seenBackgrounds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        BackgroundLibrary.RemoveAll(asset => asset is null || string.IsNullOrWhiteSpace(asset.Path) ||
+            !seenBackgrounds.Add(asset.Path));
         InstanceViewMode = InstanceViewMode == "list" ? "list" : "grid";
         MaxMemoryMb = Math.Clamp(MaxMemoryMb, 512, 65536);
         DownloadThreads = Math.Clamp(DownloadThreads, 1, 64);

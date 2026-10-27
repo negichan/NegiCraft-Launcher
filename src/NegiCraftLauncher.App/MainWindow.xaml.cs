@@ -45,12 +45,6 @@ public partial class MainWindow : Window
     /// </summary>
     private readonly Media.VideoBackgroundController _videoBackground = new();
 
-    /// <summary>
-    /// 右上角图标色的采样节拍。600ms 是权衡：视频会一直变，所以不能只在换背景时采一次；
-    /// 但每次采样都要让 WPF 把那块背景重渲一遍，所以也不能跟着每帧走。
-    /// 优先级压到 <c>Background</c>，永远不跟渲染抢。
-    /// </summary>
-    private readonly DispatcherTimer _bgToneTimer;
     private bool _bgToneDirty = true;
     private bool _bgToneQueued;
     private bool _dragPerfHold;
@@ -90,6 +84,7 @@ public partial class MainWindow : Window
             InvalidateWindowButtonTone();
         };
         IsVisibleChanged += (_, _) => UpdateVideoPlayback();
+        StateChanged += (_, _) => UpdateVideoPlayback();
 
         // 音量浮层是"喇叭中心 − 浮层宽/2"算出来的，窗口一改尺寸那个中心就变了。
         // 只在鼠标进喇叭时算一次的话，改过窗口宽度后再悬停，箭头会指到别处去。
@@ -110,19 +105,9 @@ public partial class MainWindow : Window
         StateChanged += (_, _) => SyncBackgroundTuningVisibility();
         LocationChanged += (_, _) => FollowMainWindowIfNotPlaced();
 
-        // 只有视频壁纸才需要这个轮询（静态背景走 InvalidateWindowButtonTone 按需采）。
-        // 2s 一次而不是 600ms：单次采样实测 43ms（≈丢 2~3 帧），因为它要让 WPF 把整窗
-        // 背景重新栅格化一遍 —— VisualBrush 不会只渲染 Viewbox 那一小块，采样区写多小
-        // 都一样。视频壁纸的取色本来就是"看起来差不多就行"，没必要为此每秒抖两次。
-        _bgToneTimer = new DispatcherTimer(DispatcherPriority.Background)
-        {
-            Interval = TimeSpan.FromMilliseconds(2000),
-        };
-        _bgToneTimer.Tick += (_, _) => UpdateWindowButtonTone();
+        // Static backgrounds are sampled on changes; video uses a fixed contrast backing.
         IsVisibleChanged += (_, _) => SyncToneSampling();
         StateChanged += (_, _) => SyncToneSampling();
-        // 窗口在后台时没人看那几个图标，别让那 43ms 按时打断（视频还照样在放）。
-        // 切回来时先标脏再恢复轮询：在后台这段时间背景可能已经变了。
         Deactivated += (_, _) => SyncToneSampling();
         Activated += (_, _) =>
         {
@@ -350,11 +335,15 @@ public partial class MainWindow : Window
     /// </summary>
     private void UpdateVideoPlayback()
     {
-        _videoBackground.SetActive(IsVisible);
+        _videoBackground.SetActive(IsVisible && WindowState != WindowState.Minimized);
     }
 
-    private void OnVideoBackgroundFailed(string message) =>
-        _vm?.ReportVideoBackgroundFailure(message);
+    private void OnVideoBackgroundFailed(string message)
+    {
+        if (_vm is not { } vm) return;
+        vm.HasBackgroundVideoError = true;
+        vm.BackgroundVideoStatus = message;
+    }
 
     /// <summary>
     /// 换 DataContext 时把上一份 VM 的事件全摘掉再挂新的。
@@ -371,6 +360,7 @@ public partial class MainWindow : Window
             _vm.OpenPetRequested -= OnOpenPetRequested;
             _vm.RecallPetRequested -= ClosePetWindow;
             _vm.PropertyChanged -= OnViewModelPropertyChanged;
+            _vm.BackgroundVideoRemoved -= OnBackgroundVideoRemoved;
             _vm.ThemeChanged -= OnThemeChanged;
             _vm.MotionPreferenceChanged -= ApplyMotionPreference;
             _vm.BackgroundFramingChanged -= ApplyBackgroundFraming;
@@ -389,6 +379,7 @@ public partial class MainWindow : Window
             _vm.OpenPetRequested += OnOpenPetRequested;
             _vm.RecallPetRequested += ClosePetWindow;
             _vm.PropertyChanged += OnViewModelPropertyChanged;
+            _vm.BackgroundVideoRemoved += OnBackgroundVideoRemoved;
             _vm.ThemeChanged += OnThemeChanged;
             _vm.MotionPreferenceChanged += ApplyMotionPreference;
 
@@ -408,6 +399,7 @@ public partial class MainWindow : Window
             // 解码可能在窗口订阅之前就完成了（VM 是先建好再挂 DataContext 的），
             // 所以这里主动取一次，不能只等 PropertyChanged。
             ApplyCustomBackgroundImage();
+            ApplyBackgroundBlur();
             ApplyBackgroundFraming();
         }
 
@@ -439,6 +431,7 @@ public partial class MainWindow : Window
 
     private void OnViewModelPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
+        if (e.PropertyName == nameof(MainWindowViewModel.BgBlur)) ApplyBackgroundBlur();
         if (e.PropertyName == nameof(MainWindowViewModel.CurrentSettingsTab))
         {
             PageSettingsScroll.ScrollToTop();
@@ -462,7 +455,8 @@ public partial class MainWindow : Window
         }
 
         // 换片 / 清空视频：重建画刷并挂到两个元素上。
-        if (e.PropertyName == nameof(MainWindowViewModel.VideoBackgroundPath))
+        if (e.PropertyName is nameof(MainWindowViewModel.VideoBackgroundPath)
+            or nameof(MainWindowViewModel.BackgroundVideoQuality))
         {
             ApplyVideoBackground();
             return;
