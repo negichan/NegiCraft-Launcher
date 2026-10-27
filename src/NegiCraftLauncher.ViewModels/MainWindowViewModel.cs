@@ -3457,7 +3457,8 @@ public partial class MainWindowViewModel : ViewModelBase
     // ==========================================================
 
     public ObservableCollection<LoaderChoiceModel> InstallLoaders { get; } = new();
-    public ObservableCollection<LoaderVersionModel> InstallLoaderVersions { get; } = new();
+    [ObservableProperty]
+    private IReadOnlyList<LoaderVersionModel> _installLoaderVersions = Array.Empty<LoaderVersionModel>();
     public ObservableCollection<BlockIconModel> InstallIconPresets { get; } = new();
 
     [ObservableProperty]
@@ -3485,6 +3486,12 @@ public partial class MainWindowViewModel : ViewModelBase
     private string _loaderVersionsHint = "未选择加载器";
 
     [ObservableProperty]
+    private bool _isLoadingLoaderVersions;
+
+    [ObservableProperty]
+    private bool _hasLoaderVersionsError;
+
+    [ObservableProperty]
     private string? _installLoaderVersion;
 
     [ObservableProperty]
@@ -3503,6 +3510,7 @@ public partial class MainWindowViewModel : ViewModelBase
 
     private GameVersionModel? _installTarget;
     private CancellationTokenSource? _loaderVersionsLoad;
+    private LoaderVersionModel? _selectedInstallLoaderVersion;
 
     private PixelBuffer GameBlockIcon =>
         _gameIcon ??= BlockAssets.Load("grass") ?? PixelArt.CreateBlockCube("grass", BlockIconSize);
@@ -3549,6 +3557,7 @@ public partial class MainWindowViewModel : ViewModelBase
     {
         if (version is null) return;
 
+        CancelLoaderVersionsLoad();
         EnsureInstallLoaders();
         _installTarget = version;
         InstallVersionId = version.Id;
@@ -3556,7 +3565,9 @@ public partial class MainWindowViewModel : ViewModelBase
         InstallIconPreset = null;
         InstallLoader = null;
         InstallLoaderVersion = null;
-        InstallLoaderVersions.Clear();
+        InstallLoaderVersions = Array.Empty<LoaderVersionModel>();
+        _selectedInstallLoaderVersion = null;
+        HasLoaderVersionsError = false;
         LoaderVersionsHint = "未选择加载器";
         IsGameSortPopOpen = false;
         IsInstallIconPickerOpen = false;
@@ -3565,6 +3576,7 @@ public partial class MainWindowViewModel : ViewModelBase
         UpdateInstallPreview();
         UpdateInstallSummary();
         IsInstallSheetOpen = true;
+        _ = WarmInstallLoadersAsync(version.Id);
     }
 
     [RelayCommand]
@@ -3572,7 +3584,7 @@ public partial class MainWindowViewModel : ViewModelBase
     {
         IsInstallSheetOpen = false;
         IsInstallIconPickerOpen = false;
-        _loaderVersionsLoad?.Cancel();
+        CancelLoaderVersionsLoad();
     }
 
     [RelayCommand]
@@ -3610,17 +3622,20 @@ public partial class MainWindowViewModel : ViewModelBase
         UpdateInstallPreview();
     }
 
-    [RelayCommand]
+    [RelayCommand(AllowConcurrentExecutions = true)]
     private async Task SelectInstallLoaderAsync(LoaderChoiceModel? loader)
     {
-        if (loader is null) return;
+        if (loader is null || !IsInstallSheetOpen) return;
 
+        CancelLoaderVersionsLoad();
+        HasLoaderVersionsError = false;
         if (ReferenceEquals(InstallLoader, loader))
         {
             loader.IsSelected = false;
             InstallLoader = null;
             InstallLoaderVersion = null;
-            InstallLoaderVersions.Clear();
+            InstallLoaderVersions = Array.Empty<LoaderVersionModel>();
+            _selectedInstallLoaderVersion = null;
             LoaderVersionsHint = "未选择加载器";
             UpdateInstallPreview();
             UpdateInstallSummary();
@@ -3629,27 +3644,66 @@ public partial class MainWindowViewModel : ViewModelBase
 
         foreach (var item in InstallLoaders) item.IsSelected = ReferenceEquals(item, loader);
         InstallLoader = loader;
-        InstallLoaderVersion = null;
-        InstallLoaderVersions.Clear();
-        LoaderVersionsHint = "正在读取…";
         UpdateInstallPreview();
+        await LoadInstallLoaderVersionsAsync(loader);
+    }
+
+    private async Task WarmInstallLoadersAsync(string minecraftVersion)
+    {
+        try
+        {
+            var source = await _launcher.ResolveSourceAsync();
+            await Task.WhenAll(new[] { "forge", "neoforge", "fabric" }.Select(kind =>
+                LoaderCatalog.ListAsync(kind, minecraftVersion, source, NclHttp.Shared))).ConfigureAwait(false);
+        }
+        catch
+        {
+            // Prefetch is optional; selecting a loader reports failures and allows retrying.
+        }
+    }
+
+    private void CancelLoaderVersionsLoad()
+    {
+        var previous = _loaderVersionsLoad;
+        _loaderVersionsLoad = null;
+        previous?.Cancel();
+        IsLoadingLoaderVersions = false;
+    }
+
+    [RelayCommand(AllowConcurrentExecutions = true)]
+    private async Task RetryInstallLoaderVersionsAsync()
+    {
+        if (IsInstallSheetOpen && InstallLoader is { } loader)
+        {
+            CancelLoaderVersionsLoad();
+            await LoadInstallLoaderVersionsAsync(loader);
+        }
+    }
+
+    private async Task LoadInstallLoaderVersionsAsync(LoaderChoiceModel loader)
+    {
+        var minecraftVersion = InstallVersionId;
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(25));
+        _loaderVersionsLoad = cts;
+        InstallLoaderVersion = null;
+        InstallLoaderVersions = Array.Empty<LoaderVersionModel>();
+        _selectedInstallLoaderVersion = null;
+        HasLoaderVersionsError = false;
+        IsLoadingLoaderVersions = true;
+        LoaderVersionsHint = $"正在获取 {loader.Label} 版本…";
         UpdateInstallSummary();
 
-        _loaderVersionsLoad?.Cancel();
-        var cts = new CancellationTokenSource();
-        _loaderVersionsLoad = cts;
+        bool IsCurrent() => ReferenceEquals(_loaderVersionsLoad, cts) &&
+                            IsInstallSheetOpen && InstallVersionId == minecraftVersion &&
+                            ReferenceEquals(InstallLoader, loader);
 
         try
         {
             var source = await _launcher.ResolveSourceAsync(cts.Token);
-            var versions = await LoaderCatalog.ListAsync(loader.Kind, InstallVersionId, source, NclHttp.Shared, cts.Token);
-            if (cts.IsCancellationRequested || !ReferenceEquals(InstallLoader, loader)) return;
+            var versions = await LoaderCatalog.ListAsync(loader.Kind, minecraftVersion, source, NclHttp.Shared, cts.Token);
+            if (!IsCurrent() || cts.IsCancellationRequested) return;
 
-            foreach (var version in versions)
-            {
-                InstallLoaderVersions.Add(new LoaderVersionModel { Version = version });
-            }
-
+            InstallLoaderVersions = versions.Select(version => new LoaderVersionModel { Version = version }).ToArray();
             LoaderVersionsHint = versions.Count == 0 ? "这个版本没有可用的加载器版本" : "";
             if (InstallLoaderVersions.Count > 0)
             {
@@ -3658,19 +3712,39 @@ public partial class MainWindowViewModel : ViewModelBase
         }
         catch (OperationCanceledException)
         {
+            if (IsCurrent())
+            {
+                LoaderVersionsHint = "请求超时，请重试";
+                HasLoaderVersionsError = true;
+            }
         }
         catch (Exception ex)
         {
-            LoaderVersionsHint = $"读取失败：{ex.Message}";
+            if (IsCurrent())
+            {
+                LoaderVersionsHint = "暂时无法获取版本，请重试";
+                HasLoaderVersionsError = true;
+                Debug.WriteLine($"Loader catalog: {ex}");
+            }
+        }
+        finally
+        {
+            if (ReferenceEquals(_loaderVersionsLoad, cts))
+            {
+                _loaderVersionsLoad = null;
+                IsLoadingLoaderVersions = false;
+            }
         }
     }
 
     [RelayCommand]
     private void SelectInstallLoaderVersion(LoaderVersionModel? version)
     {
-        if (version is null) return;
+        if (version is null || !InstallLoaderVersions.Contains(version)) return;
 
-        foreach (var item in InstallLoaderVersions) item.IsSelected = ReferenceEquals(item, version);
+        if (_selectedInstallLoaderVersion is { } previous) previous.IsSelected = false;
+        _selectedInstallLoaderVersion = version;
+        version.IsSelected = true;
         InstallLoaderVersion = version.Version;
         UpdateInstallSummary();
     }
@@ -3685,13 +3759,7 @@ public partial class MainWindowViewModel : ViewModelBase
             return;
         }
 
-        InstallIconBitmap = InstallLoader?.Kind switch
-        {
-            "forge" => BlockAssets.Load(ForgeBlockType, IconPresetThumbSize) ?? GameBlockIcon,
-            "neoforge" => BuiltinIcons.Load(NeoForgeIcon) ?? GameBlockIcon,
-            "fabric" => BuiltinIcons.Load("fabric") ?? GameBlockIcon,
-            _ => GameBlockIcon,
-        };
+        InstallIconBitmap = InstallLoader?.Icon ?? GameBlockIcon;
     }
 
     private void UpdateInstallSummary()

@@ -2940,18 +2940,51 @@
                                     <neg:NegiGrid Rows="Auto Auto *">
                                         <TextBlock Grid.Row="0" Text="加载器版本" FontSize="12" FontWeight="Medium"
                                                    Foreground="#a1a1aa" />
-                                        <TextBlock Grid.Row="1" Text="{Binding LoaderVersionsHint}" FontSize="12"
-                                                   Foreground="#a1a1aa" Margin="0,6,0,0" TextWrapping="Wrap"
-                                                   Visibility="{Binding HasLoaderVersionsHint, Converter={StaticResource BoolToVis}}" />
-                                        <ScrollViewer Grid.Row="2" Margin="0,6,0,0" MaxHeight="280"
-                                                      VerticalScrollBarVisibility="Auto">
-                                            <ItemsControl ItemsSource="{Binding InstallLoaderVersions}">
-                                                <ItemsControl.ItemsPanel>
+                                        <neg:NegiGrid Grid.Row="1" Columns="Auto * Auto" MinHeight="36" Margin="0,4,0,0">
+                                            <materialIcons:MaterialIcon x:Name="LoaderVersionsSpinner" Kind="Refresh"
+                                                Style="{StaticResource DlLoaderSpinnerStyle}" Margin="0,0,7,0"
+                                                VerticalAlignment="Center"
+                                                Visibility="{Binding IsLoadingLoaderVersions, Converter={StaticResource BoolToVis}}" />
+                                            <TextBlock Grid.Column="1" Text="{Binding LoaderVersionsHint}" FontSize="12"
+                                                       Foreground="#a1a1aa" TextWrapping="Wrap" VerticalAlignment="Center"
+                                                       Visibility="{Binding HasLoaderVersionsHint, Converter={StaticResource BoolToVis}}" />
+                                            <Button Grid.Column="2" Style="{StaticResource WinCtrlStyle}" Width="26" Height="26"
+                                                    Command="{Binding RetryInstallLoaderVersionsCommand}" ToolTip="重试"
+                                                    Visibility="{Binding HasLoaderVersionsError, Converter={StaticResource BoolToVis}}">
+                                                <materialIcons:MaterialIcon Kind="Refresh" Width="14" Height="14" />
+                                            </Button>
+                                        </neg:NegiGrid>
+                                        <Grid Grid.Row="2" Height="252">
+                                            <ListBox x:Name="InstallLoaderVersionList"
+                                                     ItemsSource="{Binding InstallLoaderVersions}"
+                                                     Background="Transparent" BorderThickness="0" Padding="0"
+                                                     ScrollViewer.VerticalScrollBarVisibility="Auto"
+                                                     ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                                                     ScrollViewer.CanContentScroll="True"
+                                                     VirtualizingPanel.IsVirtualizing="True"
+                                                     VirtualizingPanel.VirtualizationMode="Recycling"
+                                                     VirtualizingPanel.ScrollUnit="Pixel">
+                                                <ListBox.ItemsPanel>
                                                     <ItemsPanelTemplate>
-                                                        <neg:NegiStackPanel Spacing="2" />
+                                                        <VirtualizingStackPanel />
                                                     </ItemsPanelTemplate>
-                                                </ItemsControl.ItemsPanel>
-                                                <ItemsControl.ItemTemplate>
+                                                </ListBox.ItemsPanel>
+                                                <ListBox.ItemContainerStyle>
+                                                    <Style TargetType="{x:Type ListBoxItem}">
+                                                        <Setter Property="Padding" Value="0" />
+                                                        <Setter Property="Margin" Value="0,0,0,2" />
+                                                        <Setter Property="Focusable" Value="False" />
+                                                        <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                                                        <Setter Property="Template">
+                                                            <Setter.Value>
+                                                                <ControlTemplate TargetType="{x:Type ListBoxItem}">
+                                                                    <ContentPresenter />
+                                                                </ControlTemplate>
+                                                            </Setter.Value>
+                                                        </Setter>
+                                                    </Style>
+                                                </ListBox.ItemContainerStyle>
+                                                <ListBox.ItemTemplate>
                                                     <DataTemplate>
                                                         <Button Style="{StaticResource DlLoaderVerBtnStyle}"
                                                                 Content="{Binding Version}"
@@ -2959,9 +2992,19 @@
                                                                 Command="{Binding DataContext.SelectInstallLoaderVersionCommand, RelativeSource={RelativeSource AncestorType=Window}}"
                                                                 CommandParameter="{Binding .}" />
                                                     </DataTemplate>
-                                                </ItemsControl.ItemTemplate>
-                                            </ItemsControl>
-                                        </ScrollViewer>
+                                                </ListBox.ItemTemplate>
+                                            </ListBox>
+                                            <StackPanel x:Name="LoaderVersionsSkeleton" IsHitTestVisible="False"
+                                                        Style="{StaticResource DlLoaderSkeletonStyle}"
+                                                        Visibility="{Binding IsLoadingLoaderVersions, Converter={StaticResource BoolToVis}}">
+                                                <Border Style="{StaticResource DlLoaderSkeletonLineStyle}" Width="120" />
+                                                <Border Style="{StaticResource DlLoaderSkeletonLineStyle}" Width="88" />
+                                                <Border Style="{StaticResource DlLoaderSkeletonLineStyle}" Width="108" />
+                                                <Border Style="{StaticResource DlLoaderSkeletonLineStyle}" Width="96" />
+                                                <Border Style="{StaticResource DlLoaderSkeletonLineStyle}" Width="116" />
+                                                <Border Style="{StaticResource DlLoaderSkeletonLineStyle}" Width="80" />
+                                            </StackPanel>
+                                        </Grid>
                                     </neg:NegiGrid>
                                 </Border>
                             </Grid>

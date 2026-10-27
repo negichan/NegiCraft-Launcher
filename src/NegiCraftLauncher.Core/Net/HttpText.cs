@@ -16,7 +16,7 @@ namespace NegiCraftLauncher.Core.Net;
 public static class HttpText
 {
     public static async Task<string> FetchAsync(HttpClient http, IReadOnlyList<string> urls,
-        CancellationToken ct = default)
+        CancellationToken ct = default, TimeSpan? attemptTimeout = null)
     {
         Exception? last = null;
         foreach (var url in urls)
@@ -26,9 +26,13 @@ public static class HttpText
                 ct.ThrowIfCancellationRequested();
                 try
                 {
-                    using var response = await http.GetAsync(url, ct).ConfigureAwait(false);
+                    using var timeout = attemptTimeout is not null
+                        ? CancellationTokenSource.CreateLinkedTokenSource(ct) : null;
+                    if (attemptTimeout is { } limit) timeout!.CancelAfter(limit);
+                    var attemptToken = timeout?.Token ?? ct;
+                    using var response = await http.GetAsync(url, attemptToken).ConfigureAwait(false);
                     response.EnsureSuccessStatusCode();
-                    var bytes = await response.Content.ReadAsByteArrayAsync(ct).ConfigureAwait(false);
+                    var bytes = await response.Content.ReadAsByteArrayAsync(attemptToken).ConfigureAwait(false);
                     return Encoding.UTF8.GetString(bytes);
                 }
                 catch (OperationCanceledException) when (ct.IsCancellationRequested)
