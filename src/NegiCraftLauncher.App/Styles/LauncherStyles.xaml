@@ -1194,6 +1194,60 @@
         </Style.Triggers>
     </Style>
 
+    <Style x:Key="DlLoaderSpinnerStyle" TargetType="{x:Type materialIcons:MaterialIcon}">
+        <Setter Property="Width" Value="15" />
+        <Setter Property="Height" Value="15" />
+        <Setter Property="Foreground" Value="#d4d4d8" />
+        <Setter Property="RenderTransformOrigin" Value="0.5,0.5" />
+        <Setter Property="RenderTransform">
+            <Setter.Value>
+                <RotateTransform />
+            </Setter.Value>
+        </Setter>
+        <Style.Triggers>
+            <Trigger Property="IsVisible" Value="True">
+                <Trigger.EnterActions>
+                    <BeginStoryboard x:Name="LoaderSpinnerStoryboard">
+                        <Storyboard RepeatBehavior="Forever">
+                            <DoubleAnimation Storyboard.TargetProperty="(UIElement.RenderTransform).(RotateTransform.Angle)"
+                                             From="0" To="360" Duration="0:0:0.9" />
+                        </Storyboard>
+                    </BeginStoryboard>
+                </Trigger.EnterActions>
+                <Trigger.ExitActions>
+                    <RemoveStoryboard BeginStoryboardName="LoaderSpinnerStoryboard" />
+                </Trigger.ExitActions>
+            </Trigger>
+        </Style.Triggers>
+    </Style>
+
+    <Style x:Key="DlLoaderSkeletonStyle" TargetType="{x:Type StackPanel}">
+        <Setter Property="Opacity" Value="0.55" />
+        <Style.Triggers>
+            <Trigger Property="IsVisible" Value="True">
+                <Trigger.EnterActions>
+                    <BeginStoryboard x:Name="LoaderSkeletonStoryboard">
+                        <Storyboard RepeatBehavior="Forever" AutoReverse="True">
+                            <DoubleAnimation Storyboard.TargetProperty="Opacity"
+                                             From="0.35" To="0.85" Duration="0:0:0.7" />
+                        </Storyboard>
+                    </BeginStoryboard>
+                </Trigger.EnterActions>
+                <Trigger.ExitActions>
+                    <RemoveStoryboard BeginStoryboardName="LoaderSkeletonStoryboard" />
+                </Trigger.ExitActions>
+            </Trigger>
+        </Style.Triggers>
+    </Style>
+
+    <Style x:Key="DlLoaderSkeletonLineStyle" TargetType="{x:Type Border}">
+        <Setter Property="Height" Value="12" />
+        <Setter Property="CornerRadius" Value="3" />
+        <Setter Property="Background" Value="#3f3f46" />
+        <Setter Property="HorizontalAlignment" Value="Left" />
+        <Setter Property="Margin" Value="9,10,0,10" />
+    </Style>
+
     <!-- 一行下载任务，弹层与设置里的「下载中心」共用。
          行内的按钮要够到窗口级 VM，因为行自己的类型是 DownloadTaskModel。
 
